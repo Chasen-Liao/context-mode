@@ -263,7 +263,7 @@ test("hook path imports contracts + adapters only: no DB, no network, no spawn (
     const src = readFileSync(join(ROOT, f), "utf8");
     for (const b of banned) assert.equal(src.includes(b), false, f + " contains " + b);
     for (const line of src.split("\n").filter((l) => l.startsWith("import "))) {
-      const spec = line.slice(line.lastIndexOf(" from ") + 7).trim();
+      const spec = line.slice(line.lastIndexOf(" from ") + 6).trim();
       assert.ok(spec.includes("/core/contracts/") || spec.includes("/adapters/") || spec.startsWith('"./'), f + ": " + line);
     }
   }
