@@ -35,7 +35,7 @@ Most v2 requirements (B rows in the issue map) are contract breaks at a process 
 
 **Two runners coexist**, not one. The 131 KEEP-PASS files run on vitest+TS (`TEST-TRIAGE-r2.md`); GP1–GP11 run on `node:test` against the built artifacts. The "no npm for v2" rule (ADR-0002, ADR-0013) covers the shipped release tree only: CI/dev tooling keeps its own `package.json` and lockfile outside that tree, and that is where vitest runs. The release tree itself ships with no `package.json` and no vitest.
 
-**v2.0 exit gate:** every KEEP-PASS test passes, AND GP1–GP11 pass, AND every row of `tickets/v2-issue-map.md` carries a `GPn` column (or TECH-SPEC carries a reverse table naming the GP case per B row). A direct count on 2026-10-15 found 13 of 125 B-row issue numbers covered by a GP case, not the 53-of-124 figure earlier passes carried forward. The gate blocks on 100% B-row coverage, not only on GP1–GP11 passing. `/release` runs layer 1, then layer 2, then layer 3, and stops on the first failure in any layer.
+**v2.0 exit gate:** every KEEP-PASS test passes, AND GP1–GP11 pass, AND every row of `tickets/v2-issue-map.md` carries a `GPn` column (or TECH-SPEC carries a reverse table naming the GP case per B row). Status 2026-10-17: every one of the 351 rows carries a verdict in the `v2 test` column (GP 170, LIVE 2, REMOVED 110, N/A 69; 0 empty). Every B-class row has a GP or LIVE case. The 147 new cases are listed with Given/When/Then in `docs/v2/impl/14a-issue-cases.md`. The gate blocks until each named case exists and passes, not only on GP1–GP11 passing. `/release` runs layer 1, then layer 2, then layer 3, and stops on the first failure in any layer.
 
 ## Consequences
 
@@ -52,6 +52,7 @@ Most v2 requirements (B rows in the issue map) are contract breaks at a process 
 
 ## Changes
 
+- 2026-10-17: issue map fully tagged (351/351); gate now names the cases in impl/14a.
 - 2026-10-14 (r2, owner): superseded the original "delete all unit tests at the start" decision. Added the KEEP-PASS/PORT/RETIRED triage (`TEST-TRIAGE-r2.md`) and the two-runner split.
 - r4: named the actual B-row-to-GP coverage count (13/125) and made it an exit-gate condition (B51, B73); stated that vitest and `node:test` coexist as two runners for two layers (B52); scoped the no-npm rule to the release tree only, since CI/dev tooling needs its own `package.json` to run vitest (B74).
 - 2026-10-15: status set to Accepted; folded the r2 addendum into the body above and removed the standalone r2 section.

@@ -382,7 +382,8 @@ These are narrower than a GP case — one function or one invariant each — but
 
 - `tickets/v2-test-ledger.md` has 221 rows: 164 closed issues, 46 merged PRs, 7 closed PRs, 1 open issue (#45), 3 non-issues.
 - Suggested buckets by title keywords (review needed): REMOVED 56 · GP4 44 · UNASSIGNED 22 · GP8 21 · GP3 19 · GP1 17 · GP9 16 · GP6 13 · GP5 7 · GP7 3 · not an issue 3.
-- Each row gets exactly one verdict: `GPn/<case>`, `REMOVED:<ADR|G|E id>`, or `N/A`.
+- Each row gets exactly one verdict: `GPn/<case>`, `LIVE:<id>`, `REMOVED:<ADR|G|E id>`, or `N/A:<reason>`.
+- Done 2026-10-17 for `tickets/v2-issue-map.md`: 351/351 rows (GP 170, LIVE 2, REMOVED 110, N/A 69). New cases: `docs/v2/impl/14a-issue-cases.md`. Source: `tickets/gp-gap/verdicts.json`.
 - v1 `tests/` (210 files, 81,072 lines; 136 import `../src/`; 64 start processes) is deleted in one commit, only when no row is empty and GS1 holds.
 
 ### 6.9 Live E2E: a keyless harness, not a CI job with keys (ADR-0012)

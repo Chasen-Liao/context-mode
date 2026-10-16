@@ -23,6 +23,7 @@ Every link in this file and in each module file is relative to the file it is wr
 | `12-plugins.md` | plugins | Pi and OpenCode 2 in-process entries |
 | `13-build-release.md` | build-release | esbuild, manifests, CI, `release.yml`, `/release` skill |
 | `14-tests.md` | tests | `e2e/` harness, GP1–GP11, live cases, KEEP-PASS runner |
+| `14a-issue-cases.md` | tests | 147 issue-row cases (Given/When/Then) that close the ADR-0003 exit gate |
 | `15-v1-transition.md` | v1-transition | R1–R8 of ADR-0017, removed-file check, README upgrade section |
 
 ## How to use them
@@ -39,4 +40,5 @@ Every link in this file and in each module file is relative to the file it is wr
 
 ## Changes
 
+- 2026-10-17: added 14a-issue-cases.md.
 - 2026-10-16 (DECISIONS-r9, S8): silent-doc rule now says stop, ask the Lead, record the answer as a new Assumptions row (G3); added the relative-links rule (G2); named the M0 step command (G5).

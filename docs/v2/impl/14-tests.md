@@ -223,4 +223,5 @@ Every function in every other module's `impl/NN-*.md` file must name, in its own
 
 ## Changes
 
+- 2026-10-17: issue-row cases moved to 14a-issue-cases.md (147 cases); every issue-map row now has a verdict.
 - r9 (2026-10-16, `docs/v2/review/DECISIONS-r9.md`, role S7): §6 adds the DECISIONS-r9 T-spec id-to-filename map (T-GS6, T-F1, T-F5, T-F3, T-ROUTE, T-PAR, T-SUB); §7 adds the exact G5 M0 command `npx vitest run --config tests/vitest.config.ts`; §9 adds a trace-id row for the same T-spec set; Assumptions A6 answers the GP3 fixture-recorder question — 0 of 40 fixtures exist, all must be captured live before any GP3 case runs; §4 GP3 row adds the E1-E5 v1-carve-out golden cases, the P4 parser-coverage golden cases (closes task item 8: `[[`/`((`/function-body/`case`/process-substitution/here-string/`VAR=` deny-or-allow cases), the V8 offline 25-fixture GP3 set, and the V17 `Read` glob-deny set; §4 GP5 row adds V23 (zod non-negative int rejection) and V24 (FTS5 diacritics-folding); §4 GP8 row adds V22 (project-cleanup PID/age case); §4 GP9 row adds V20 (idle-stdin CPU case); §4 GP10 row adds V18 (zero-call stats) and V19 (per-tool sum-to-total).
