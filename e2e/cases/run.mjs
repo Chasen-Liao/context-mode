@@ -1,0 +1,86 @@
+#!/usr/bin/env node
+// e2e/cases/run.mjs
+// Runs the GP1..GP11 node:test suites in one process. Spec:
+// docs/v2/impl/14-tests.md §5. Milestone filter per DEVIATIONS D-M0-2.
+import { readdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { run } from "node:test";
+import { tap } from "node:test/reporters";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function gpNumber(filename) {
+  const m = /^GP(\d+)-/.exec(filename);
+  return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
+}
+
+function parseMilestoneArg(argv) {
+  const i = argv.indexOf("--milestone");
+  return i >= 0 ? argv[i + 1] : undefined;
+}
+
+// [M0]..[Mn] tag prefix match: a test named "[M0] foo" is included for
+// --milestone M0..Mn where n >= 0 (DEVIATIONS D-M0-2).
+export function milestoneAtOrBelow(testName, milestone) {
+  const m = /^\[M(\d+)\]/.exec(testName);
+  if (!m) return false;
+  const target = /^M(\d+)$/.exec(milestone);
+  if (!target) return false;
+  return Number(m[1]) <= Number(target[1]);
+}
+
+export async function runAll(opts = {}) {
+  const dir = opts.dir ?? path.join(__dirname);
+  const milestone = opts.milestone;
+
+  let files;
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith(".e2e.mjs"));
+  } catch {
+    files = [];
+  }
+  files.sort((a, b) => gpNumber(a) - gpNumber(b) || a.localeCompare(b));
+
+  if (files.length === 0) {
+    console.log("run: no GP case files found in e2e/cases");
+    return 1;
+  }
+
+  const testFiles = files.map((f) => path.join(dir, f));
+  const stream = run({
+    files: testFiles,
+    concurrency: 1,
+    testNamePatterns: milestone ? undefined : undefined,
+  });
+
+  const results = new Map(); // gp id -> { pass, fail }
+  let anyFail = false;
+
+  for await (const event of stream) {
+    if (event.type === "test:pass" || event.type === "test:fail") {
+      const name = event.data.name ?? "";
+      if (milestone && !milestoneAtOrBelow(name, milestone)) continue;
+      const gpMatch = /GP\d+/.exec(event.data.file ?? "") || /GP\d+/.exec(name);
+      const gpId = gpMatch ? gpMatch[0] : "GP?";
+      const bucket = results.get(gpId) ?? { pass: 0, fail: 0 };
+      if (event.type === "test:pass") bucket.pass += 1;
+      else {
+        bucket.fail += 1;
+        anyFail = true;
+      }
+      results.set(gpId, bucket);
+    }
+  }
+
+  for (const [gpId, { pass, fail }] of results) {
+    console.log(`${gpId}: ${fail === 0 ? "PASS" : "FAIL"} (${pass} pass, ${fail} fail)`);
+  }
+
+  return anyFail ? 1 : 0;
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const milestone = parseMilestoneArg(process.argv);
+  runAll({ milestone }).then((code) => process.exit(code));
+}
