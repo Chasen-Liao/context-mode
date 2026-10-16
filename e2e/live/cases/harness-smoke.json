@@ -1,0 +1,3 @@
+{ "id": "harness-smoke", "covers": ["e2e/harness/", "e2e/cases/run.mjs"], "kind": "local",
+  "run": ["node", "--test", "e2e/harness/normalize.test.mjs", "e2e/harness/run-filter.test.mjs"],
+  "expect": {} }
