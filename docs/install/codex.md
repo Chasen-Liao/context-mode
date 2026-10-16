@@ -88,3 +88,14 @@ Codex turns the server name into a tool-name-safe string: anything that is not a
 2. **A plugin system exists now**: `codex plugin marketplace add owner/repo --ref <ref>` can install a plugin from a git ref, and a plugin manifest can ship its own MCP servers and hooks. The spec's ADR-0011 release table says "Codex has no marketplace-upgrade command for a git-sourced plugin" — that was true for a bare MCP server entry, but Codex's plugin system (separate from the MCP-server-only path the spec assumes) now has one. This guide does not switch Codex to the plugin path; it keeps the spec's config.toml + hooks.json path, and only notes the plugin system exists as a future option.
 
 Neither difference changes the `toolNamePrefix`, matcher, or event-map rows in `impl/10-adapters.md` — this file is not edited.
+
+## Verified
+
+| Step | Result | Agent version | Date |
+|---|---|---|---|
+| CLI on PATH | worked | codex-cli 0.156.1 | 2026-10-17 |
+| `codex mcp add context-mode -- <cmd>` (isolated HOME, placeholder command) | worked, wrote `[mcp_servers.context-mode]` block to `~/.codex/config.toml` | codex-cli 0.156.1 | 2026-10-17 |
+| `codex mcp list` | worked | codex-cli 0.156.1 | 2026-10-17 |
+| Real server command | not run, v2 MCP server has no build on `v2-design` yet, so the real `<context-mode server command>` could not be substituted | codex-cli 0.156.1 | 2026-10-17 |
+| Hooks file (`$CODEX_HOME/hooks.json`) | not run, same reason | codex-cli 0.156.1 | 2026-10-17 |
+| `default_tools_approval_mode = "auto"` | not run, config-only change, deferred to the real server test | codex-cli 0.156.1 | 2026-10-17 |
