@@ -1,0 +1,6 @@
+{
+  "agent": "codex",
+  "event": "UserPromptSubmit",
+  "exitCode": 0,
+  "stdout": ""
+}

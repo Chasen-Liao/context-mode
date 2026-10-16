@@ -1,0 +1,6 @@
+{
+  "agent": "codex",
+  "event": "PreToolUse",
+  "exitCode": 0,
+  "stdout": ""
+}
