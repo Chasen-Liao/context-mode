@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { McpServer, type ServerContext, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import { AGENT_IDS, type AgentId } from "../core/contracts/agents.js";
-import { NODE_MIN, SERVER_KEY, TOOLS_TTL_MS } from "../core/contracts/constants.js";
+import { INTERNAL_ERROR_LINE, NODE_MIN, SERVER_KEY, TOOLS_TTL_MS } from "../core/contracts/constants.js";
 import { CtxError } from "../core/contracts/errors.js";
 import type { ProjectContext, ToolContext } from "../core/contracts/types.js";
 import { installExitGuard } from "../core/lifecycle/exit.js";
@@ -14,8 +14,6 @@ import { TOOLS, type RegisteredTool } from "../core/tools/registry.js";
 import { INSTRUCTIONS } from "../prompt/_generated.js";
 
 export { INSTRUCTIONS };
-
-const INTERNAL_ERROR_LINE = "Internal error. Fix: run ctx_doctor."; // impl/11 §5 step 7d
 
 // §5 step 1a-1d. Re-run per call (Assumption A3); no clientInfo read.
 function resolveAgent(argv: readonly string[], env: NodeJS.ProcessEnv): AgentId | undefined {

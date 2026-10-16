@@ -26,7 +26,10 @@ function finish(out: HookOutput): never {
 export async function main(argv: string[], _env: NodeJS.ProcessEnv): Promise<never> {
   const i = argv.indexOf("--agent");
   const agent = i >= 0 ? argv[i + 1] ?? "" : "";
-  if (!isAgentId(agent)) return finish(EMPTY);
+  if (!isAgentId(agent)) {
+    console.error("hooks: unknown --agent " + JSON.stringify(agent) + ". Fix: pass --agent with one of " + AGENT_IDS.join(", ") + ".");
+    return finish(EMPTY);
+  }
   const row = getAdapter(agent);
   try {
     const raw: unknown = JSON.parse(await readStdin());

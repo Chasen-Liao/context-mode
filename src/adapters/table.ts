@@ -2,12 +2,10 @@
 // Rows for adapters not built yet (M3) carry their data; their decode throws (hook fails open to allow,
 // impl/00 §5.3 step 5) and their encode gives the native empty allow shape.
 import type { AgentId } from "../core/contracts/agents.ts";
-import { HOOK_TIMEOUT_MS } from "../core/contracts/constants.ts";
+import { HOOK_TIMEOUT_MS, IN_PROCESS_TIMEOUT_MS } from "../core/contracts/constants.ts";
 import type { AdapterRow, CanonicalHookEvent, Decision, HookOutput } from "../core/contracts/types.ts";
 import * as claudeCode from "./claude-code.ts";
 import * as codex from "./codex.ts";
-
-const IN_PROCESS_TIMEOUT_MS = 0; // impl/10 §1.3: "n/a (in-process, no spawn)"
 
 const CLAUDE_EVENTS = { SessionStart: "SessionStart", UserPromptSubmit: "UserPromptSubmit", PreToolUse: "PreToolUse", PostToolUse: "PostToolUse" };
 const CLAUDE_TOOLS = { shell: ["Bash"], read: ["Read"], grep: ["Grep"], webfetch: ["WebFetch"], edit: ["Write", "Edit", "NotebookEdit"] };

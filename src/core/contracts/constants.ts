@@ -57,10 +57,12 @@ export const EXIT_SIGKILL_MS = 5000; // GP9, #862
 export const GP9_EXIT_MS = 2000; // impl/14 harness lifecycle budget; TECH-SPEC GP9 "exit < 2 s"
 export const COLD_START_MS = 1000; // GP4
 export const TOOLS_TTL_MS = 3600000; // ADR-0007 (A1)
+export const IN_PROCESS_TIMEOUT_MS = 0; // impl/10 §1.3: pi/opencode hookTimeoutMs "n/a (in-process, no spawn)"
 
 // Runtime
 export const NODE_MIN = "24.15.0"; // S-NODE
 export const DATA_ROOT = "~/.context-mode"; // PRD §4; the store module expands "~"
+export const INTERNAL_ERROR_LINE = "Internal error. Fix: run ctx_doctor."; // impl/11 §5 step 7d, §7 table
 export const REQUIRE_SECURITY_ENV = "CONTEXT_MODE_REQUIRE_SECURITY"; // v1 a4ab72eb #468; DECISIONS-r9 E2
 
 // MCP_HINT_EVERY: 10, or env CTX_MCP_HINT_EVERY when it is a positive safe integer (Q1, A-C4).
