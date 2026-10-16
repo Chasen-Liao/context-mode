@@ -46,20 +46,41 @@ export function getAdapter(id: AgentId): AdapterRow;
 
 One row per agent, PRD §3 agent list order. `installMode`, `projectSource` and `toolNamePrefix` values are fixed below; `eventMap` values are fixed in §2–§11 per agent together with decode/encode. Columns match the `AdapterRow` fields (00-architecture.md §3.1).
 
+`AdapterRow` gains two fields in this revision (DECISIONS-r9 R4, R5): `nativeTools: { shell: string[]; read?: string[]; grep?: string[]; webfetch?: string[]; edit?: string[] }` and `execReadOnlyHint: boolean`. Both are listed per row below the main table (§1.3a) to keep this table within line width.
+
 | id | installMode | projectSource (Q11) | toolNamePrefix | compactDelivery | compactSummary | hookTimeoutMs | denyChannel |
 |---|---|---|---|---|---|---|---|
 | `claude-code` | `"marketplace"` | `"env:CLAUDE_PROJECT_DIR"` | `"mcp__plugin_context-mode_context-mode__"` | `"sessionstart"` | `"host"` | `5000` | `"deny-reason"` |
-| `codex` | `"config-mcp"` | `"arg:--agent+cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `"none"` | `5000` | `"deny-reason"` |
+| `codex` | `"config-mcp"` | `"arg:--agent+cwd"` | `"mcp__context_mode__"` | `"sessionstart"` | `"none"` | `5000` | `"deny-reason"` |
 | `gemini` | `"extension"` | `"spawn-cwd"` | `"mcp_context-mode_"` | `"pending-flag"` | `"none"` | `5000` | `"deny-reason"` |
 | `qwen` | `"extension"` | `"spawn-cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `"none"` | `5000` | `"deny-reason"` |
 | `copilot-cli` | `"plugin"` | `"arg:--agent+cwd"` | `"mcp_context-mode_"` | `"pending-flag"` | `"none"` | `5000` | `"deny-reason"` |
 | `vscode` | `"mcp-entry"` | `"arg:workspaceFolder"` | `"mcp_context-mode_"` | `"pending-flag"` | `"none"` | `5000` | `"deny-reason"` |
 | `kiro` | `"mcp-entry"` | `"arg:--agent+cwd"` | `"mcp_context-mode_"` | `"none"` | `"none"` | `5000` | `"hint-only"` |
-| `zcode` | `"hooks+mcp"` | `"spawn-cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `"none"` | `5000` | `"deny-reason"` |
+| `zcode` | `"hooks+mcp"` | `"spawn-cwd"` | `"mcp__context-mode__"` [unverified, T-ZC] | `"sessionstart"` | `"none"` | `5000` | `"deny-reason"` |
 | `pi` | `"in-process"` | `"pi:ctx.cwd"` | `""` | `"pi-flag"` | `"none"` | n/a (in-process, no spawn) | `"deny-reason"` |
 | `opencode` | `"in-process"` | `"spawn-cwd"` | `""` | `"opencode-cache"` | `"none"` | n/a (in-process, no spawn) | `"deny-reason"` |
 
-Citations: `installMode` — PRD §3 agent table. `projectSource` — PRD §5 table (Q11, ADR-0007); Kiro row — DECISIONS-r3 Q24 item 2. `toolNamePrefix` — TECH-SPEC §3.8 (Claude Code, Codex, Gemini, Qwen, OpenCode 2, VS Code, Pi rows are `[V]`; Copilot CLI, Kiro, ZCode are `[U]`, S-NAMES, resolved here as Assumption A1 below). `compactDelivery` — PRD §11 delivery table. `denyChannel` — spike-hooks-verified.md §1 (Kiro: "any exit ≠0" with no structured decision field in the matrix; every other agent carries a `permissionDecision`/`decision`/`{block,reason}`/`Tool.Error` reason channel). `compactSummary` — DECISIONS-r6 D6, `tickets/memory-r6/eval/results.md` ("Resume-quality eval on real compaction points"). Rule: Claude Code is `"host"` — it writes its own compact summary, so after compaction the adapter injects one pointer line only, no state block: `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").` The 2,048 B block stays available on demand through `ctx_resume()` with no `seq`. Every other agent is `"none"` — the adapter injects the 2,048 B D1 block through its own `compactDelivery` path (ADR-0009 §6) — until a per-agent live check LV-COMPACT (milestone M3) shows that agent's host writes its own summary, at which point its row flips to `"host"`. The D1 algorithm and constants (`COMPACTION_BUDGET_BYTES` etc., see `impl/06-tools-session.md`) do not change for either value.
+Citations: `installMode` — PRD §3 agent table. `projectSource` — PRD §5 table (Q11, ADR-0007); Kiro row — DECISIONS-r3 Q24 item 2. `toolNamePrefix` — TECH-SPEC §3.8 (Claude Code, Codex, Gemini, Qwen, OpenCode 2, VS Code, Pi rows are `[V]`; Copilot CLI, Kiro are `[U]`, S-NAMES, resolved here as Assumption A1 below). `codex` value is `"mcp__context_mode__"` (underscore, DECISIONS-r9 R1): Codex replaces every character that is not ASCII alnum or `_` with `_` in the server name (`codex-rs/codex-mcp/src/mcp/mod.rs:587-602` `sanitize_responses_api_tool_name`, `codex-mcp/src/tools.rs:22,140,146`; live `mcp__context_mode__ctx_execute` observed in 3 runs, `out/final/probe-codex.md` F1). `zcode` value is unverified — no source and no live probe name it; it is marked `[unverified, T-ZC]` and decided only by live test spec T-ZC (§1.5a), never by taste (DECISIONS-r9 R3). `compactDelivery` — PRD §11 delivery table. `denyChannel` — spike-hooks-verified.md §1 (Kiro: "any exit ≠0" with no structured decision field in the matrix; every other agent carries a `permissionDecision`/`decision`/`{block,reason}`/`Tool.Error` reason channel). `compactSummary` — DECISIONS-r6 D6, `tickets/memory-r6/eval/results.md` ("Resume-quality eval on real compaction points"). Rule: Claude Code is `"host"` — it writes its own compact summary, so after compaction the adapter injects one pointer line only, no state block: `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").` The 2,048 B block stays available on demand through `ctx_resume()` with no `seq`. Every other agent is `"none"` — the adapter injects the 2,048 B D1 block through its own `compactDelivery` path (ADR-0009 §6) — until a per-agent live check LV-COMPACT (milestone M3) shows that agent's host writes its own summary, at which point its row flips to `"host"`. The D1 algorithm and constants (`COMPACTION_BUDGET_BYTES` etc., see `impl/06-tools-session.md`) do not change for either value.
+
+Note (DECISIONS-r9 V9): Claude Code's `compactSummary: "host"` row stays `"host"` only until live test spec T-CMP runs (`DECISIONS-r9` V9, arms B1-B3/B5). If arm (a) of T-CMP fails, the `claude-code` row flips to `"none"` in the same commit that records the failure — no separate migration step.
+
+### 1.3a `nativeTools` and `execReadOnlyHint` per row (DECISIONS-r9 R4, R5)
+
+| id | nativeTools.shell | nativeTools.read | nativeTools.grep | nativeTools.webfetch | nativeTools.edit | execReadOnlyHint |
+|---|---|---|---|---|---|---|
+| `claude-code` | `["Bash"]` | `["Read"]` | `["Grep"]` | `["WebFetch"]` | `["Write","Edit","NotebookEdit"]` | `false` |
+| `codex` | `["Bash"]` | — | — | — | `["apply_patch"]` | `true` |
+| `gemini` | filtered in hook body (§1.5a), not host matcher | — | — | — | — | `false` |
+| `qwen` | `["run_shell_command","Shell"]` | `["read_file"]` | `["grep_search"]` | `["web_fetch"]` | — | `false` |
+| `copilot-cli` | filtered in hook body (§1.5a), not host matcher | — | — | — | — | `false` |
+| `vscode` | filtered in hook body (§1.5a), not host matcher | — | — | — | — | `false` |
+| `kiro` | matcher ids only (§1.5), no native-name filter | — | — | — | — | `false` |
+| `zcode` | Claude names assumed `["Bash"]`, unverified (T-ZC) | — | — | — | — | `false` |
+| `pi` | filtered in `enforcement.decide` (§1.5, `nativeTools` passed through, no host matcher) | — | — | — | — | `false` |
+| `opencode` | filtered in `enforcement.decide` (§1.5, `nativeTools` passed through, no host matcher) | — | — | — | — | `false` |
+
+`qwen.nativeTools.shell` lists both `run_shell_command` and `Shell` because `tool-names.ts:28,121` and this file's prior draft (`10-adapters.md:199` before this revision) disagreed on the live name; both are kept until one is retired by a live check, per DECISIONS-r9 R4 evidence note. Every other `nativeTools` value is `[]`/absent unless listed. `execReadOnlyHint = true` only for `codex`; the MCP server reads the row for the agent identified by its own `projectSource` resolution (`"arg:--agent+cwd"`) and sets `annotations.readOnlyHint = true` on `ctx_execute` only when `execReadOnlyHint` is `true` for that agent. Every agent (including Codex) keeps `readOnlyHint` on `ctx_search`, `ctx_resume`, `ctx_stats` regardless of this field (DECISIONS-r9 R5).
 
 ### 1.4 `eventMap` per row (native hook/channel name per canonical event)
 
@@ -80,20 +101,40 @@ Citation: `tickets/spike-hooks-verified.md` §1 matrix, per-agent rows. Kiro and
 
 ### 1.5 Hook config format, matcher and timeout key per host
 
+Matcher rule (DECISIONS-r9 R4): for every agent with a host-side matcher field, the matcher is generated, not hand-written. `build/manifests.ts` builds it from this row's `nativeTools` (§1.3a) and `toolNamePrefix` (§1.3) as:
+
+```
+^(<all nativeTools names, escaped, joined with |>|<escaped toolNamePrefix>ctx_.*)$
+```
+
+So the matcher always sees both the host's own built-in tool names (`Bash`, `apply_patch`, `read_file`, …) and this server's own `ctx_*` tools. A matcher built from only the own prefix never sees the calls ADR-0008 denies — those are native-tool calls, not `ctx_*` calls. Agents that filter in the hook body instead of a host matcher field (`gemini`, `copilot-cli`, `vscode`, `pi`, `opencode`) apply the same `nativeTools` set inside that body check, not a regex.
+
 | id | Config file(s) | Shape | Matcher field | Timeout key |
 |---|---|---|---|---|
-| `claude-code` | plugin `hooks/hooks.json` | `{hooks:{<Event>:[{matcher,hooks:[{type:"command",command,timeout,async}]}]}}` | `matcher` regex `mcp__plugin_context-mode_context-mode__.*` | `timeout` (seconds; generated value = `hookTimeoutMs/1000`) |
-| `codex` | `config.toml` `[mcp_servers.context-mode]` + `$CODEX_HOME/hooks.json` (same shape as Claude Code) | `{hooks:{<Event>:[{matcher,hooks:[{type:"command",command,timeout}]}]}}` | `matcher` regex `mcp__context-mode__.*` | `timeout` (seconds) |
-| `gemini` | `.gemini/settings.json` `hooks` | `{hooks:{<Event>:[{hooks:[{type:"command",command,timeout}]}]}}`, no host-side matcher field | filter in hook body: native tool name matches `mcp_context-mode_.*` | `timeout` (ms; generated value = `hookTimeoutMs`) |
-| `qwen` | `.qwen/settings.json` (Claude shape) | `{hooks:{<Event>:[{matcher,hooks:[{type:"command",command,timeout}]}]}}` | `matcher` regex `mcp__context-mode__.*` | `timeout` (seconds) |
-| `copilot-cli` | `.github/hooks/*.json`, `~/.copilot/hooks/` | `{version:1,hooks:{<Event>:[{type:"command",command,timeoutSec}]}}`, no host-side matcher field | filter in hook body: native tool name matches `mcp_context-mode_.*` | `timeoutSec` (alias `timeout`; seconds) |
+| `claude-code` | plugin `hooks/hooks.json` | `{hooks:{<Event>:[{matcher,hooks:[{type:"command",command,timeout,async}]}]}}` | `matcher` regex `^(Bash|Read|Grep|WebFetch|Write|Edit|NotebookEdit|mcp__plugin_context-mode_context-mode__ctx_.*)$` | `timeout` (seconds; generated value = `hookTimeoutMs/1000`) |
+| `codex` | `config.toml` `[mcp_servers.context_mode]` + `$CODEX_HOME/hooks.json` (same shape as Claude Code) | `{hooks:{<Event>:[{matcher,hooks:[{type:"command",command,timeout}]}]}}` | `matcher` regex `^(Bash|apply_patch|mcp__context_mode__ctx_.*)$` — must match native `tool_name:"Bash"` (live: `codex-rs/core/src/tools/hook_names.rs:53-55`, `out/final/probe-codex.md` F2), not only the own prefix | `timeout` (seconds) |
+| `gemini` | `.gemini/settings.json` `hooks` | `{hooks:{<Event>:[{hooks:[{type:"command",command,timeout}]}]}}`, no host-side matcher field | filter in hook body: native tool name in `nativeTools` (none named, §1.3a) or `mcp_context-mode_.*` | `timeout` (ms; generated value = `hookTimeoutMs`) |
+| `qwen` | `.qwen/settings.json` (Claude shape) | `{hooks:{<Event>:[{matcher,hooks:[{type:"command",command,timeout}]}]}}` | `matcher` regex `^(run_shell_command|Shell|read_file|grep_search|web_fetch|mcp__context-mode__ctx_.*)$` | `timeout` (seconds) |
+| `copilot-cli` | `.github/hooks/*.json`, `~/.copilot/hooks/` | `{version:1,hooks:{<Event>:[{type:"command",command,timeoutSec}]}}`, no host-side matcher field | filter in hook body: native tool name in `nativeTools` (§1.3a) or `mcp_context-mode_.*` | `timeoutSec` (alias `timeout`; seconds) |
 | `vscode` | `.github/hooks/*.json`, `~/.copilot/hooks/` | same shape as `copilot-cli` | filter in hook body (matchers are not honoured — spike §2) | `timeout` (seconds) |
 | `kiro` | `.kiro/hooks/<id>.json`, `~/.kiro/hooks/` | `{version:"v1",hooks:[{name,trigger,matcher,action:{type:"command",command},timeout,enabled}]}` | `matcher` field `@mcp`, ids `mcp_context-mode_<tool>` | `timeout` (seconds) |
-| `zcode` | `~/.zcode/cli/config.json` `hooks.events.<Event>` (project hooks ignored) | `{hooks:{enabled:true,events:{<Event>:[{type:"command",command,timeoutMs}]}}}` | `matcher` regex `mcp__context-mode__.*` (Claude shape) | `timeoutMs` (generated value = `hookTimeoutMs`) |
-| `pi` | n/a — in-process `pi.on(event, handler)` | no file; `handleHook` called directly from the plugin entry | n/a (per-event, not per-tool; per-tool filtering happens inside `enforcement.decide`) | n/a |
-| `opencode` | n/a — in-process `ctx.<domain>.hook(name, cb)` | no file; `handleHook` called directly from the plugin entry | n/a | n/a |
+| `zcode` | `~/.zcode/cli/config.json` `hooks.events.<Event>` (project hooks ignored) | `{hooks:{enabled:true,events:{<Event>:[{type:"command",command,timeoutMs}]}}}` | `matcher` regex `^(Bash|mcp__context-mode__ctx_.*)$` (Claude shape, unverified — T-ZC) | `timeoutMs` (generated value = `hookTimeoutMs`) |
+| `pi` | n/a — in-process `pi.on(event, handler)` | no file; `handleHook` called directly from the plugin entry | n/a (per-event, not per-tool; per-tool filtering happens inside `enforcement.decide`, fed this row's `nativeTools`) | n/a |
+| `opencode` | n/a — in-process `ctx.<domain>.hook(name, cb)` | no file; `handleHook` called directly from the plugin entry | n/a (same as `pi`) | n/a |
 
-Citation: `tickets/spike-hooks-verified.md` §2, per-agent write-up, for file paths, shape and timeout key/units. Matcher regex values for `claude-code`/`codex`/`qwen`/`zcode` and the Kiro `@mcp` ids — TECH-SPEC §3.8 rules 2 and 4, plus the Kiro row of §1's matrix. `build/manifests.ts` (owner: `build-release`, not this module) renders these rows into the actual config files; this module only supplies the data.
+Citation: `tickets/spike-hooks-verified.md` §2, per-agent write-up, for file paths, shape and timeout key/units. Matcher regex values for `claude-code`/`codex`/`qwen`/`zcode` and the Kiro `@mcp` ids — TECH-SPEC §3.8 rules 2 and 4, plus the Kiro row of §1's matrix; v1 shipped native matchers `Bash`, `WebFetch`, `Read`, `Grep`, `Agent` (v1 `hooks/hooks.json:6-91`) are the precedent for including native names alongside the own prefix. `build/manifests.ts` (owner: `build-release`, not this module) renders these rows into the actual config files from `nativeTools` + `toolNamePrefix`; this module only supplies the data.
+
+### 1.5a Live test spec T-ZC (DECISIONS-r9 R3)
+
+- Target: ZCode `toolNamePrefix` and native `nativeTools.shell` name, currently assumed `"mcp__context-mode__"` / `["Bash"]` from the closest verified sibling (Assumption A1), unverified.
+- Method: GP3 golden-case run against a recorded ZCode `PreToolUse` payload (TECH-SPEC §3.8 rule 2: GP3 matchers are tested only against recorded payloads, never a live spike).
+- Pass: the recorded payload's `tool_name`/MCP tool-name field matches this file's matcher and `toolNamePrefix` value unchanged.
+- Fail: this file's `zcode` row (§1.3, §1.3a, §1.5) is corrected to the value the recorded payload actually shows, and the `[unverified, T-ZC]` mark is removed.
+- Fixture: `e2e/fixtures/zcode/<ver>/pretooluse.json`, one file per ZCode release under test, written the first time a ZCode install completes in the live harness (same capture step as the Codex/Qwen fixtures in `e2e/fixtures/<agent>/<ver>/`). Until that file exists, T-ZC prints `SKIPPED` with reason "ZCode not installed", the same treatment as the Copilot CLI MCP-firing row (§9 E2E note) — never a silent pass.
+
+### 1.5b Qwen shell name — which name is live (intern Q, S1)
+
+`tool-names.ts:28,121` and this file's prior draft disagree on whether Qwen's native shell tool is called `run_shell_command` or `Shell`. No live Qwen probe has run yet, so neither name is dropped by taste. Smallest rule consistent with DECISIONS-r9 R4: both stay in `qwen.nativeTools.shell` (§1.3a) and in the matcher (§1.5) until a GP3 live run against a recorded Qwen `PreToolUse` payload shows which one the installed Qwen build actually sends; that run is folded into S-NAMES (TECH-SPEC §9), not a separate test id, because S-NAMES already covers "exact MCP tool names" for this agent family. The losing name is then deleted from §1.3a and §1.5 in the same commit that closes S-NAMES.
 
 ---
 
@@ -156,11 +197,13 @@ export function encode(ev: CanonicalHookEvent, d: Decision, extra?: string): Hoo
 | subagent | `agent_id` / `agent_type` |
 | SessionStart.source | `source` (`startup`/`resume`/`clear`/`compact`/also `fork`, mapped to the same four canonical values; `fork` → `"resume"`) |
 | UserPromptSubmit.prompt | `prompt` |
-| tool (Pre/Post) | `tool_name` (`Bash`, `apply_patch`, or `mcp__context-mode__ctx_*`), `tool_input` |
+| tool (Pre/Post) | `tool_name` (`Bash`, `apply_patch`, or `mcp__context_mode__ctx_*`), `tool_input` |
 | result (Post) | `tool_response.is_error` |
 | hint field | `hookSpecificOutput.additionalContext` |
 | deny field | `hookSpecificOutput.permissionDecision="deny"` + reason, or process exit `2` |
 | replace field | none — Codex has no `updatedToolOutput` equivalent; case C has no substitute (documented gap) |
+
+Install note (DECISIONS-r9 R6): `--dangerously-bypass-hook-trust` and `sandbox_workspace_write.network_access = true` are live-harness flags for `codex exec` only (no trust prompt exists in `exec`; localhost fixtures need network) — never set for an interactive Codex session. A user approves hook trust once in the interactive CLI; `ctx_doctor` reports "Codex hooks not trusted" when the hooks file exists and no hook row was ever journaled for a Codex session (`probe-codex.md` Setup).
 
 - Errors: shared only.
 - Constants used: none.
@@ -335,13 +378,16 @@ In-process glue only, same reasoning as Pi.
 
 ## Assumptions
 
-- A1: `toolNamePrefix` for `copilot-cli`, `kiro`, `zcode` is picked from the closest verified sibling family (Copilot family → VS Code's `mcp_<server>_<tool>`; ZCode's "Claude shape" payload family → Claude/Codex/Qwen's `mcp__<server>__<tool>`; Kiro's own `@mcp` matcher doc already names `mcp_<server>_<tool>`). TECH-SPEC §3.8 marks all three `[U]`, pending S-NAMES; no spike file for S-NAMES exists yet in `tickets/spikes-r5/`. The adapter's `decode`/`encode` logic is table-driven on `toolNamePrefix`, so closing S-NAMES later is a one-line change to §1.3, not a code change.
+- A1: `toolNamePrefix` for `copilot-cli` and `kiro` is picked from the closest verified sibling family (Copilot family → VS Code's `mcp_<server>_<tool>`; Kiro's own `@mcp` matcher doc already names `mcp_<server>_<tool>`). TECH-SPEC §3.8 marks both `[U]`, pending S-NAMES; no spike file for S-NAMES exists yet in `tickets/spikes-r5/`. `zcode` is no longer part of this assumption (DECISIONS-r9 R3): it is decided only by live test spec T-ZC (§1.5a), marked `[unverified, T-ZC]` in §1.3 until that test runs. The adapter's `decode`/`encode` logic is table-driven on `toolNamePrefix`, so closing S-NAMES or T-ZC later is a one-line change to §1.3, not a code change.
 - A2: `hookTimeoutMs = 5000` for every spawn-based agent. `00-architecture.md` §3.2 defines no `HOOK_TIMEOUT_MS` constant and PRD §10.1/spike-hooks-verified.md leave each host's own default disputed or docs-only. 5 s sits under every host's own default (Claude Code 600 s, Gemini 60 s, Qwen/Kiro/VS Code 30–60 s, ZCode 60 s) and comfortably above `HOOK_P95_MS`/`HOOK_COMBINED_P95_MS` (40/60 ms, GS6), so it never fires on a healthy hook. Add `HOOK_TIMEOUT_MS = 5000` to `constants.ts` alongside this file.
 - A3: `denyChannel: "hint-only"` is set only for Kiro, because it is the one agent in the matrix with no structured reason field for either hint or deny (plain stdout/stderr). Gemini, Pi and OpenCode 2 lack a `PreToolUse` **hint** field but do carry a structured **deny** field (`decision`, `{block,reason}`, `Tool.Error`), so they keep `"deny-reason"`; their missing hint is handled per-agent in the encode table ("dropped"), not by a second enum value.
 - A4: Codex's `SessionStart.source` value `"fork"` (spike §1, Codex row) maps to canonical `"resume"`. ADR-0001's canonical `source` union has no `"fork"` value and no ADR text picks one; `"resume"` is the nearest existing value (a fork continues a prior session) and keeps the canonical type closed per `types.ts` §3.1.
+- A5: T-ZC runs against `e2e/fixtures/zcode/<ver>/pretooluse.json`; it prints `SKIPPED` (not `FAIL`) until that recorded payload exists (§1.5a).
+- A6: Qwen's shell name stays both `run_shell_command` and `Shell` (§1.3a, §1.5) until S-NAMES's live run names the one the installed build sends; no separate test id (§1.5b).
 
 ---
 
 ## Changes
 
 - DECISIONS-r6 D6: added `compactSummary: "host" | "none"` to the `ADAPTERS` table (§1.3). Claude Code = `"host"` (one pointer line, no state block). Every other agent = `"none"` (full 2,048 B block through its ADR-0009 §6 path) until its own LV-COMPACT live check (M3) passes.
+- DECISIONS-r9: R1 Codex `toolNamePrefix` to `mcp__context_mode__` (underscore) everywhere in this file (§1.3, §1.3a, §1.5, §3); R3 ZCode marked `[unverified, T-ZC]` with live test spec added (§1.5a); R4 added `nativeTools` field, rewrote all host matchers as generated from `nativeTools` + `toolNamePrefix` (§1.3a, §1.5); R5 added `execReadOnlyHint` (§1.3a); R6 added Codex install/doctor note (§3); V9 added compactSummary flip note (§1.3); intern questions closed: T-ZC fixture path and `SKIPPED` rule (§1.5a, A5), Qwen shell-name live check folded into S-NAMES (§1.5b, A6).

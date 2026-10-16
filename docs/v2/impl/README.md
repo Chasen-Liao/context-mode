@@ -1,6 +1,8 @@
 # context-mode v2: implementation docs
 
-These files tell an implementing agent exactly what to write. The design is final. Do not make design choices; if a doc is silent, follow its "Assumptions" section.
+These files tell an implementing agent exactly what to write. The design is final. Do not make design choices. If a doc is silent on a point and no "Assumptions" row in that module covers it: stop, ask the Lead, then record the answer as a new row in that module's "Assumptions" section before you write the code (DECISIONS-r9 G3).
+
+Every link in this file and in each module file is relative to the file it is written in (for example `./00-architecture.md`, `../adr/0008-enforcement.md`), never an absolute path (DECISIONS-r9 G2).
 
 ## Files
 
@@ -27,10 +29,14 @@ These files tell an implementing agent exactly what to write. The design is fina
 
 1. Read `00-architecture.md` in full. It is the contract every module follows: names, types, constants, import rules.
 2. Read the file for your module. Read no other module file unless 00 lists a call into it.
-3. Implement in the TECH-SPEC §12 milestone order (M0 → M7). Inside a milestone, follow the step order in your module file.
+3. Implement in the TECH-SPEC §12 milestone order (M0 → M7). Inside a milestone, follow the step order in your module file. M0's step command is `npx vitest run --config tests/vitest.config.ts` (DECISIONS-r9 G5; config reads `tests/keep-pass.list.json`, `14-tests.md` §7).
 4. Write the E2E case first (ADR-0017, PRD P6). Each function names its GP row or live case id and its `covers` path.
 5. After each step, run:
    - `node e2e/cases/run.mjs` (GP1–GP11, no model, free).
    - `node e2e/live/run.mjs` (step mode: only cases whose `covers` match your changed files; `claude-sonnet-5 --effort low`).
 6. A step is done only when both are green. Do not delete v1 `tests/`; the 131 KEEP-PASS files must stay green (ADR-0003 r2, Q1).
 7. Never import `src/` from `e2e/` (GS4). Never add a constant outside `src/core/contracts/constants.ts`.
+
+## Changes
+
+- 2026-10-16 (DECISIONS-r9, S8): silent-doc rule now says stop, ask the Lead, record the answer as a new Assumptions row (G3); added the relative-links rule (G2); named the M0 step command (G5).

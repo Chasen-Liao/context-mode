@@ -12,6 +12,15 @@ Every other agent reaches context-mode over MCP: a spawned `server.mjs` process,
 
 Both files are thin: they translate the host's own event/callback shape into a `CanonicalHookEvent` (00 §3.1), call `handleHook`, and translate the `HookOutput` back into whatever the host's callback return shape is. Neither file touches `context.db`, `decide()`, or the journal directly — `handleHook` already does that work for every agent (00 §5.3).
 
+## 1a. `nativeTools` filtering (DECISIONS-r9 R4)
+
+Neither Pi nor OpenCode 2 has a host-side `PreToolUse` matcher field (00 §3.1 `AdapterRow`, §1.5/§1.5a of `impl/10-adapters.md`): both are in-process, so `enforcement.decide` is the only place that sees every tool call, native or `ctx_*`. Both rows carry `nativeTools` (`impl/10-adapters.md` §1.3a) so `decide` applies the same enforcement rules to a native tool call as to a `ctx_*` call, with no separate matcher step:
+
+- `pi.nativeTools`: no native name is listed (§1.3a of `impl/10-adapters.md`); Pi's own `Bash`-equivalent and `Read`-equivalent tools pass through `tool_call` unnamed in this revision, so `decide` treats every `tool_call` the same way regardless of `event.toolName` until a future row names them.
+- `opencode.nativeTools`: same — no native name is listed; `"tool.execute.before"` passes every call through `decide` the same way.
+
+This file never builds or reads a matcher regex; §3.4 (`tool_call`) and §4.4 (`"tool.execute.before"`) below call `handleHook`/`decide` for every event they receive, and `decide` is the only place `nativeTools` is consulted (`impl/08-enforcement.md`, not this module).
+
 ## 2. `src/core/contracts/errors.ts` entries this module uses
 
 From 00 §3.3, verbatim, no new text:
@@ -188,7 +197,7 @@ None directly — every constant-governed decision (`OUTPUT_CAP`, `STATE_BUDGET`
 - A24: `INSTRUCTIONS` is delivered to Pi exactly once per session (first `before_agent_start`), never repeated, to stay inside the byte-stability rule's intent.
 - A25: Pi's `AdapterRow.denyChannel` is `"deny-reason"` — the only enum member ADR-0016's Pi row supports.
 - A26: Pi signals a non-rewritable deny by throwing inside `tool_call`; no source states Pi's exact block mechanism.
-- A27: Pi's `session_compact` → `before_agent_start` latency is unmeasured (no spike file); stated as a live-check-only gap.
+- A27: Pi's `session_compact` → `before_agent_start` latency is unmeasured (no spike file); stated as a live-check-only gap. No numeric latency budget is set: ADR-0009's byte-stability rule binds bytes within a turn, not the gap between these two calls, and no 00 §3.2 constant names one. The only guarantee this file gives is ordering, already required by §3.3 step 3 and §3.6 step 3: the flag set by `session_compact` must be read and cleared by the very next `before_agent_start` call in the same process, never a later one. `GP-LIVE-HOOKS` checks that ordering holds; it does not check a time bound.
 - A28: the OpenCode plugin `id` is the literal `"context-mode"`, reusing `SERVER_KEY`; no source names it directly.
 - A29: OpenCode's hook payload carries `sessionId` per call (not cached in closure), because OpenCode's plugin handles more than one session per process, unlike Pi.
 - A30: OpenCode's `ProjectSourceKind` reuses the existing `"spawn-cwd"` tag; 00's union has no OpenCode-specific member.
@@ -197,4 +206,6 @@ None directly — every constant-governed decision (`OUTPUT_CAP`, `STATE_BUDGET`
 
 ## Changes
 
+- 2026-10-16 (DECISIONS-r9, S8): A27 now states the rule — no numeric latency budget for `session_compact` → `before_agent_start`; the only guarantee is ordering (flag read and cleared by the very next `before_agent_start` call), checked by `GP-LIVE-HOOKS`.
 - D6 (`docs/v2/review/DECISIONS-r6.md`; measured in `tickets/memory-r6/eval/results.md`): Pi's `session_compact` delivery (§3.4) now picks its output by `row.compactSummary`; Pi is `"none"` today, so `handleHook` still hands back the full 2,048 B state block.
+- DECISIONS-r9 R4: added §1a — Pi and OpenCode 2 use `AdapterRow.nativeTools` inside `enforcement.decide` for every `tool_call`/`"tool.execute.before"` event; neither file builds or reads a host matcher (in-process, no matcher field exists).

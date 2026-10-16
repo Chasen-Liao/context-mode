@@ -79,6 +79,8 @@ score  = w · decay · bonus
 
 A `decision` row (§8) is never a candidate here. The prompt row already holds the text; a second line would waste budget.
 
+Scoring covers **sections**, not raw `EventKind` values: a `cmd` or `toolerr` row with `ok = 0` feeds the `open_errors` section (weight `WEIGHT.toolerr`, value `900`); a `cmd` row with `ok = 1` only resolves an existing open error, it is never itself a candidate; `cost` and `decision` rows are never candidates (DECISIONS-r9 F2/F8).
+
 ### 4. Selection: budgeted lazy greedy (knapsack by score/size)
 
 - Budget **B = 2,048 UTF-8 bytes**: 5× under Claude Code's 10,000-char spill limit. This is the compaction-state budget only, separate from the global `OUTPUT_CAP = 16,384` B used elsewhere (ADR-0008, ADR-0016; Q2).
@@ -103,7 +105,7 @@ more: ctx_search(queries:[…], scope:"session")
 
 ### 6. Delivery: one path per agent
 
-Delivery now also depends on `compactSummary` (`adapters/table.ts`: `"host" | "none"`), per DECISIONS-r6 D6. `"host"` means the agent writes its own compact summary: after compaction, inject one pointer line only (no state block): `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").` The 2,048 B block (§4, unchanged) is still computed on demand — `ctx_resume()` with no `seq` returns it. `"none"` means the full 2,048 B block is injected through the agent's row below, as before. Claude Code is `"host"`, verified on measured evidence (`tickets/memory-r6/eval/run2.mjs`, `tickets/memory-r6/eval/results.md`): pointer-only scored 0.85 vs 0.75 for block-only or summary+block. Every other agent stays `"none"` until its own LV-COMPACT live check (one per agent, M3) shows the host writes a summary the model sees; then that row's column flips to `"host"`. One path per agent, no fallback.
+Delivery now also depends on `compactSummary` (`adapters/table.ts`: `"host" | "none"`), per DECISIONS-r6 D6. `"host"` means the agent writes its own compact summary: after compaction, inject one pointer line only (no state block): `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").` The 2,048 B block (§4, unchanged) is still computed on demand — `ctx_resume()` with no `seq` returns it. `"none"` means the full 2,048 B block is injected through the agent's row below, as before. Claude Code is `"host"`, verified on measured evidence (`tickets/memory-r6/eval/run2.mjs`, `tickets/memory-r6/eval/results.md`): pointer-only scored 0.85 vs 0.75 for block-only or summary+block. This holds only through test spec T-CMP (milestone M2): if its arm (a) — pointer-only — fails T-CMP, Claude Code's row flips to `"none"` in the same commit as the failing test, no interim state. Every other agent stays `"none"` until its own LV-COMPACT live check (one per agent, milestone M3) shows the host writes a summary the model sees; then that row's column flips to `"host"`. Each flip is decided once per release by that agent's own live check, never re-decided per session (DECISIONS-r9 V9, V27). One path per agent, no fallback.
 
 | Agent | Path |
 |---|---|
@@ -163,7 +165,7 @@ Rules, in order:
 3. **Fetch.** Fetch up to `limit` rows from each source on its own (≤ 3·limit candidates). Never clip one source before the merge.
 4. **Normalize.** Convert every timestamp to ISO-8601 UTC `YYYY-MM-DDTHH:MM:SS.sssZ` before any compare. Fixes v1's `9de1c658` bug (SQLite and ISO shapes mixed).
 5. **Order.** Ascending by normalized timestamp (oldest first). Ties break by `seq` ascending. Rows with no `seq` (auto-memory files) sort after journal rows at the same timestamp, then by path ascending. Same input, same order.
-6. **Page.** Drop rows at or before the `after` cursor, then cut to `limit`. Reply ends with `more: ctx_search({…, sort:"timeline", after:<last seq>})` when rows remain. `offset` with `sort:"timeline"` returns `isError` `INVALID_ARGS`; `after` with `"relevance"` returns the same error.
+6. **Page.** `after` is an epoch-ms timestamp cursor (M18), not `seq`: drop rows with normalized timestamp ≤ `after`, then cut to `limit` — except a page never ends inside a group of rows sharing one timestamp; it extends to the end of that group so no row is skipped between pages. Reply ends with `more: ctx_search({…, sort:"timeline", after:<ms>})` when rows remain (M22). `offset` with `sort:"timeline"` returns `isError` `INVALID_ARGS`; `after` with `"relevance"` returns the same error.
 7. **Empty.** Empty `queries` is allowed in timeline mode; it returns the newest page in scope.
 8. **Output.** Each line: `[<iso time>] <source> #<seq> <first line of row>`, cut by `capBytes(text, OUTPUT_CAP)`.
 
@@ -200,7 +202,7 @@ Trade: recall drops — a decision typed as free prose stays a plain, searchable
 list_A = ContentStore + SessionDB FTS5 hits, ordered by bm25(chunks, 5.0, 1.0)   (title 5×, body 1×)
 list_B = the same hit set, ordered by created_at desc (recency)
 RRF(d) = 1/(60 + rank_A(d)) + 1/(60 + rank_B(d))        rank starts at 1
-order  = current session first (#895), then RRF desc, then seq asc
+order  = current session first (#895), then RRF desc, then seq desc (M19), then ord asc
 ```
 
 This reuses the RRF fusion already in v1's `store.ts` (`const K = 60`, `bm25(chunks, 5.0, 1.0)`), rather than adding a second scoring scheme. Not adopted: Generative Agents' weighted sum (needs embeddings and an LLM importance score); Mem0, A-MEM, Zep (LLM in the write or read path); MMR (v1's diversity cap from `604aba98` covers this instead). Source: Cormack et al., SIGIR '09.
@@ -243,6 +245,7 @@ Sources: `docs/v2/review/DECISIONS-r7.md`; `tickets/memory-retrieval/eval/result
 
 ## Changes
 
+- 2026-10-16 (DECISIONS-r9): §3 names which sections/kinds score (F2/F8: `cmd`/`toolerr` with `ok=0` feed `open_errors`, `cost`/`decision` never candidates); §6 adds the T-CMP fail-back for Claude Code and the per-release, per-agent flip rule (V9, V27); §8.1 `after` fixed to an epoch-ms cursor, not `seq` (M18), with the paging line to match (M22); §8.3 tie-break fixed to `seq` desc then `ord` asc (M19).
 - 2026-10-14 (fix-r4, owners.adr-b): added the single journal write path, §0 (A4); added the byte-identical-per-turn rule (A49); scoped the "only re-injection point" claim to Claude Code/Codex/Qwen/ZCode and named the Gemini/Copilot CLI/VS Code second path (B26); resolved Kiro as unsupported with a documented gap, and clarified Qwen's delivery path (B12, B23).
 - 2026-10-15: status set to Accepted. Folded r3's Q12 into the OpenCode 2 delivery row and Q2 into the budget line in §4; removed the standalone r3 section.
 - 2026-10-16 (Memory-R6): added §8 — `sort:"timeline"` semantics, the literal-cue `decision` tag, and RRF-based cross-session ranking, sourced from `tickets/memory-r6/research-memory.md`.

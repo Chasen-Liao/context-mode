@@ -183,7 +183,7 @@ None surfaced to the caller. All platform-kill failures are swallowed inside thi
 
 ### E2E case
 
-TECH-SPEC GP4 row, clause "process tree killed (Windows: `taskkill /F /T /PID`, matching v1's proven mechanism … no Job Object switch)"; cancel-path clause "cancel on a long-running call tears down the child process tree within 1 s". ADR-0017 `covers`: `src/core/sandbox/`. Assumption A6 in 00-architecture is the ADR-level resolution of the Job-Object-vs-taskkill question — this file must never be changed to Job Object without a new ADR superseding A6.
+TECH-SPEC GP4 row, clause "process tree killed (Windows: `taskkill /F /T /PID`, matching v1's proven mechanism … no Job Object switch)"; cancel-path clause "cancel on a long-running call tears down the child process tree within 1 s". T-F5 (GP4, Windows only): spawn a child that spawns a grandchild with no `cmd.exe` in between, call `killTree` on the top PID, assert the grandchild process is gone within `KILL_GRACE_MS`; if it fails, file a new ADR to pick a Job Object path — until then this file does not change (DECISIONS-r9 F5). ADR-0017 `covers`: `src/core/sandbox/`. Assumption A6 in 00-architecture is the ADR-level resolution of the Job-Object-vs-taskkill question — this file must never be changed to Job Object without a new ADR superseding A6.
 
 ---
 
@@ -289,7 +289,11 @@ TECH-SPEC GP5 row, clauses "proxy env — the SSRF check runs on the resolved pr
 
 ## Assumptions
 
-- **AS1 — Windows kill mechanism is `taskkill /F /T /PID`, not a Job Object**, even though `tickets/spikes-r5/S-TIMEOUT.md` and `TECH-SPEC.md:422` propose/describe a Job Object. Reason: `docs/v2/impl/00-architecture.md` Assumption A6 and PRD-v2.md §8 both explicitly resolve this in favor of `taskkill /F /T /PID` ("no switch to a Job Object without its own ADR"), and 00-architecture is this task's named authority to follow exactly. `kill.ts` §4 implements `taskkill`.
+- **AS1 — Windows kill mechanism is `taskkill /F /T /PID`, `shell: false`.** Parent-death on Windows is stdin EOF, then `taskkill /T` of the server's own children (not a Job Object). Reason: DECISIONS-r9 F6 — Node ships no Job Object API without a native addon, and the release ships no `node_modules` to carry one (PRD-v2.md:182); v1 shipped `taskkill` and fixed its gaps by spawning direct (`8a778ba9`, `2be94b03`, `c02b184d`). `kill.ts` §4 implements `taskkill`.
 - **AS2 — `EXEC_TIMEOUT_MS` is a fixed default *and* ceiling of 600,000 ms, not "no default, host RPC timeout governs"**, even though the TECH-SPEC GP4 row's prose still describes the old v1-derived "no server-side default" model. Reason: `docs/v2/impl/00-architecture.md` §3.2 constants table (`EXEC_TIMEOUT_MS`, "600000 (default and max)") and DECISIONS-r3 Q8 ("one fixed default timeout … 600,000 ms … default = max") are the later, settled decision; `spawn.ts` §5 takes `o.timeoutMs` as given by the caller rather than re-deciding this, so this module is correct under either reading — the assumption only matters for the caller in `tools-exec/execute.ts`, noted here so that module's author does not re-introduce "no default" from the stale GP4 prose.
 - **AS3 — `spawn.ts` does not call `buildChildEnv` or `findRuntime` itself.** 00's cross-module interface list shows all four sandbox functions as siblings with no call graph between them; giving `runProcess` a bare `env: Record<string,string>` input (already built) keeps `ctx_batch` able to build one env once and reuse it across several `runProcess` calls, which the PRD's "batch included" timeout-handling language implies without stating the mechanism.
 - **AS4 — `killTree`'s Windows `taskkill` call is the one exempted spawn inside the sandbox module.** The 00 rule list bans `spawn` from hooks, not from `sandbox` itself (sandbox's whole job is spawning); `taskkill` is the kill mechanism named by PRD §9/A6, so it must run as a child process. No ADR states this exemption in words, but it is the only reading under which A6's own chosen mechanism is implementable.
+
+## Changes
+
+- r9 (`DECISIONS-r9.md` F5, F6): AS1 now states the final Windows mechanism (taskkill `/F /T /PID`, `shell:false`; stdin EOF then `taskkill /T` for parent-death, no Job Object) and drops the "even though S-TIMEOUT proposes a Job Object" text; `kill.ts` §4 E2E case adds T-F5 (grandchild-kill), gated behind a new ADR if it fails.

@@ -92,7 +92,8 @@ Nothing host-specific is written by hand twice: every manifest, hook config, mat
 src/
   core/                    # knows no agent
     tools/registry.ts      # the ONLY tool list; MCP server and both plugins read it
-    sandbox/ store/ project/ journal/ policy/ stats/ lifecycle/
+    contracts/             # types and constants (DECISIONS-r9 F3; 00-architecture.md §1 is the source tree)
+    store/ journal/ project/ sandbox/ compaction/ ops/ policy/ stats/ lifecycle/
   adapters/
     table.ts               # ONE row per agent
     claude-code.ts codex.ts gemini.ts qwen.ts copilot-cli.ts vscode.ts kiro.ts zcode.ts
@@ -350,6 +351,7 @@ The module structure, dependency rules, constants, and per-module file map for i
 - 2026-10-14/15 (r4 fix pass, recorded in each ADR's own Changes section): corrected citations, closed cross-ADR contradictions (the §10/§11 selection-formula claim, Q6 checkpoint ownership, Kiro's seven open findings), added the missing per-host rows.
 - 2026-10-15 (r5 spikes): S-NODE (Node 24.15.0), S-TIMEOUT (600,000 ms), and the ADR-0006 alwaysLoad re-probe on Opus 5.5 and Sonnet 5 — all folded into §4, §7 and §8 above.
 - 2026-10-15: this document rewritten as one consistent design, with history moved into this section.
+- 2026-10-16 (DECISIONS-r9, S8): §3.2 tree matches 00-architecture.md §1 (`src/core/store/`, `src/core/journal/`, `src/core/project/`, `src/core/compaction/`, `src/core/ops/`), closing F3.
 - 2026-10-16 (r6, `docs/v2/review/DECISIONS-r6.md` D1–D4): §8 `ctx_search` row rewritten for the D2 timeline contract, the D3 `decision` rule and the D4 RRF (k=60) cross-session order; §11 compaction gains the full D1 formula with its constants unchanged and the `decision` row rule.
 - 2026-10-16 (r6, `DECISIONS-r6.md` D6): §11 compaction delivery now depends on `adapters/table.ts` column `compactSummary`. Claude Code = `"host"`: inject one pointer line only. Every other agent = `"none"`: inject the 2,048 B D1 block, unchanged, through its ADR-0009 §6 path, until LV-COMPACT (M3) proves that agent's host writes its own summary. See `tickets/memory-r6/eval/results.md`.
 - 2026-10-16 (r7, `docs/v2/review/DECISIONS-r7.md` R1, R2): §8 `ctx_search` row states the measured recall gain for BM25+RRF (k=60) over v1 (0.48 vs 0.27) and drops MMR, which gave no gain.

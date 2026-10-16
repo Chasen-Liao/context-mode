@@ -41,7 +41,7 @@ export type ExecuteInput = z.infer<typeof ExecuteInput>;
 
 > Runs code in a sandboxed subprocess in the project directory and returns only what the code prints. Languages: shell, powershell, javascript, typescript, python, and other runtimes found on PATH. Use it when output may be long, for example tests, builds, logs, git history or API responses, and print just the lines or numbers you need. For a large file, set `file` to its local path instead of reading it: the code gets the path in the CTX_FILE environment variable, and only what the code prints comes back. Set `intent` to a short phrase when output may be large: the matching sections come back and the full output is indexed for ctx_search. Stops after `timeoutMs` (default 120000) and kills the whole process tree.
 
-This is one of the two paths named in the Read deny reason (ADR-0008 "Read: hint to deny", `08-enforcement.md` step 6): a denied Read of a file over `OUTPUT_CAP` points here, with `file` set and the real content never entering the conversation; stdout stays capped at `OUTPUT_CAP` same as any other call.
+This is one of the two paths named in the Read deny reason (ADR-0008 "Read: hint to deny", `08-enforcement.md` step 6): a denied Read of a file over `OUTPUT_CAP` points here, with `file` set and the real content never entering the conversation; stdout stays capped at `OUTPUT_CAP` same as any other call. Test spec T-CAP (DECISIONS-r9 V12, milestone M2): 10 cases where the answer sits past the 16,384 B cap; scorer is the answer key plus "a paging or filter call is present" in the transcript, gate correct ≥ 9/10.
 
 This text is frozen (ADR-0005, PR1–PR12 lint); do not fix the "default 120000" mismatch with the 600000 constant in this file — that correction belongs to the prompt-drafts owner, not to this module (Assumption A10). `registry.ts` sets `readOnly: false` (TECH-SPEC §8).
 
@@ -65,7 +65,7 @@ This text is frozen (ADR-0005, PR1–PR12 lint); do not fix the "default 120000"
 6. Build env via `buildChildEnv(process.env, { CTX_FILE: input.file ? resolve(ctx.project.worktree, input.file) : undefined })` (strips `NODE_OPTIONS` and preload vars per `sandbox/env.ts`).
 7. Compute the effective timeout: `input.timeoutMs ?? EXEC_TIMEOUT_MS`.
 8. Call `runProcess(argv, { cwd: ctx.project.worktree, env, signal: ctx.signal, timeoutMs: effectiveTimeout, stdin: undefined })`.
-9. On `background: true`: steps 8 runs detached — return immediately after spawn with `text = "started in background, pid <pid>"`, `isError: false`, `sandboxBytes: 0` (no cap/intent/index path applies; the process is not awaited). *(Assumption A11: PRD/TECH-SPEC name `background: true` as "stays" (Q9) but do not spec its exact reply shape; this one-line ack with pid is the minimal shape consistent with "caller does not wait".)*
+9. On `background: true`: step 8 runs detached — return immediately after spawn with `text = `started in background, pid ${pid}`` (literal template, `${pid}` = the child's numeric PID as a decimal string, no other text, no trailing punctuation, lowercase per ADR-0005), `isError: false`, `sandboxBytes: 0` (no cap/intent/index path applies; the process is not awaited). This is the frozen reply text (DECISIONS-r9 S5 close-out, item "background reply text"): PRD/TECH-SPEC name `background: true` as "stays" (Q9) but left the exact shape open; this template is now the decision, not a placeholder.
 10. Await the awaited (non-background) call. If `killed === "timeout"`: return `isError: true`, `text = errorText("TIMEOUT", { ms: effectiveTimeout })`.
 11. If `killed === "cancel"` (ctx.signal aborted): return `isError: true`, `text = "Cancelled."` within `KILL_GRACE_MS` of the abort (GP4 cancel case; no named error-table key — cancel is not a caller mistake).
 12. Combine `stdout` + `stderr` into one text (stderr appended only if `exitCode !== 0`, so a clean Grep-exit-1 case with stdout-only output is not polluted — Grep exit 1 is explicitly not an error, TECH-SPEC §8/GP4).
@@ -154,7 +154,7 @@ Indexing in steps 7–8 runs on a worker thread / child process per ADR-0016 ("s
 
 - A9: `language` accepts any PATH runtime string beyond the five named ones; the five get a dedicated lookup entry, others fall back to a `-c`-or-tempfile heuristic. No source gives an exhaustive runtime list.
 - A10: the shipped `ctx_execute` description text keeps its stale "default 120000" wording (frozen prompt text, ADR-0005 lint); the real default is `EXEC_TIMEOUT_MS` = 600000 per Q8. Not fixed here; out of this module's scope.
-- A11: `background: true` reply shape (`"started in background, pid <pid>"`) is this file's minimal choice; no source specs the exact text.
+- A11 (closed, DECISIONS-r9 S5): `background: true` reply text is frozen: `` `started in background, pid ${pid}` `` — no other field, no punctuation after the PID. No source gave an exact string before this decision; this is now the decided text, not an open choice.
 - A12: `ctx_batch` is not `readOnlyHint` (it runs commands); 00's `readOnlyHint` list omits it, used as confirmation.
 - A13: batch commands run sequentially, in array order, under one shared timeout for Q8's "bounds the whole handler, batch included."
 - A14: a batch stops on the first failing/timing-out command but still indexes the partial output collected so far.
@@ -163,7 +163,11 @@ Indexing in steps 7–8 runs on a worker thread / child process per ADR-0016 ("s
 - A17: `ctx_batch` has no separate GPn id; it shares GP4's case file since TECH-SPEC §6.2 lists no GP row naming `ctx_batch` alone.
 - A18: the wrapper's own timeout exit code is 124 (POSIX `timeout` convention); no source names one.
 - A19: step-7/8 indexing runs via `node:worker_threads`, the only built-in matching ADR-0016's "worker thread (or child process)" note without a new dependency.
+- A20: error key placement and priority. `00-architecture.md` §3.3 is the one canonical table for keys shared across modules; it already holds `ONE_OF_INPUT`, `INVALID_ARGS`, `SPAWN_FAILED` (DECISIONS-r9 M23). A key used by only one module (`PLUGIN_ROOT_MISSING`, `CONFIG_PARSE_FAILED`, both `tools-ops`-only) stays defined in that module's own file (`07-tools-ops.md` §2/§4, A-T2) and is not duplicated into 00 §3.3. Priority order when a handler could match more than one key: (1) schema/shape errors first (`UNKNOWN_FIELD`, `ONE_OF_INPUT`, `INVALID_ARGS` — zod or an explicit field check, before any I/O); (2) resource-resolution errors (`OUTSIDE_ROOT`, `PLUGIN_ROOT_MISSING`, `CONFIG_PARSE_FAILED`); (3) execution errors (`SPAWN_FAILED`, `NO_RUNTIME`, `TIMEOUT`). This module (`tools-exec`) only ever reaches keys already listed in §1 above; it does not add a new key.
 
 ## Changes
 
 - r8 (`DECISIONS-r8.md` VR): §2.2 description text now matches `drafts.md`'s `ctx_execute` wording (large file via `file`/`CTX_FILE`, not read first); added the note that a denied Read points here.
+- r9 (`DECISIONS-r9.md` V12): §2.3 cites test spec T-CAP (M2, 16,384 B cap, correct ≥ 9/10) for the Read-deny-to-`ctx_execute` path.
+- DECISIONS-r9 (S4 intern question): added A20, naming the canonical-vs-module-local split for error keys (`ONE_OF_INPUT`/`INVALID_ARGS`/`SPAWN_FAILED` in 00 §3.3; `PLUGIN_ROOT_MISSING`/`CONFIG_PARSE_FAILED` in `07-tools-ops.md`) and the match priority order.
+- r9 (S5 close-out): §2.3 step 9 and A11 freeze the background reply text to `` `started in background, pid ${pid}` ``; closes the open intern question on exact format.

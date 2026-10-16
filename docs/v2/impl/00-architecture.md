@@ -224,7 +224,9 @@ export interface AdapterRow {
   id: AgentId;
   installMode: "marketplace" | "config-mcp" | "extension" | "plugin" | "mcp-entry" | "hooks+mcp" | "in-process";
   projectSource: ProjectSourceKind;
-  toolNamePrefix: string;  // e.g. "mcp__context-mode__", gemini "mcp_context-mode_", opencode "context-mode_"
+  toolNamePrefix: string;  // e.g. claude-code/vscode/kiro "mcp__context-mode__", codex "mcp__context_mode__" (underscore — DECISIONS-r9 R1), gemini "mcp_context-mode_", opencode "context-mode_"
+  nativeTools: { shell: string[]; read?: string[]; grep?: string[]; webfetch?: string[]; edit?: string[] }; // DECISIONS-r9 R4; feeds the PreToolUse/PostToolUse matcher and in-body filters
+  execReadOnlyHint: boolean; // DECISIONS-r9 R5; true only for codex, sets annotations.readOnlyHint on ctx_execute
   eventMap: Partial<Record<CanonicalEventName | AuxEventName, string>>; // canonical → native name
   compactDelivery: "sessionstart" | "pending-flag" | "pi-flag" | "opencode-cache" | "none";
   compactSummary: "host" | "none";  // "host": host writes its own compact summary (verified by LV-COMPACT, M3); "none": inject the 2,048 B D1 block via the ADR-0009 §6 path. DECISIONS-r6 D6.
@@ -234,6 +236,8 @@ export interface AdapterRow {
   encode(ev: CanonicalHookEvent, d: Decision, extra?: string): HookOutput;
 }
 ```
+
+`nativeTools` values (DECISIONS-r9 R4): `claude-code` shell `["Bash"]`, read `["Read"]`, grep `["Grep"]`, webfetch `["WebFetch"]`, edit `["Write","Edit","NotebookEdit"]`; `codex` shell `["Bash"]`, edit `["apply_patch"]`; `qwen` shell `["run_shell_command","Shell"]`, read `["read_file"]`, grep `["grep_search"]`, webfetch `["web_fetch"]`; `zcode` same as `claude-code`, marked unverified (T-ZC); `gemini`/`copilot-cli`/`vscode` carry the same per-agent set but filter inside the hook body, not via a host matcher (no host-side matcher field to fill); `kiro`/`pi`/`opencode` empty `{shell:[]}` (no native-tool gate; enforcement runs through `decide()` directly). The generated matcher (`build/manifests.ts`) is `^(<all nativeTools[] values for the row, alternated>|<escaped toolNamePrefix>ctx_.*)$`.
 
 ### 3.2 Constants (`src/core/contracts/constants.ts`)
 
@@ -262,6 +266,13 @@ export interface AdapterRow {
 | `HOOK_CPU_OVER_NODE_MS` | `20` | GS6 |
 | `HOOK_COMBINED_P95_MS` | `60` | GS6, A31 |
 | `READ_MAX_LINES` | `200` (hint text only, not enforced) | DECISIONS-r8 |
+| `SYNC_INDEX_MAX_BYTES` | `65536` B; output at or under this size is chunked, indexed and selected inside the hook (sync); above it, chunk in memory and select by BM25, return `replace`, FTS5 write detached | DECISIONS-r9 F1, `out/r9/perf-f1.md` |
+| `RATIO_SECTION_DECAY` | `0.7` | ADR-0009 §4; DECISIONS-r9 §C |
+| `MAX_CANDIDATES_TOTAL` | `340` | ADR-0009 §4; DECISIONS-r9 §C |
+| `SEARCH_PAGE_SIZE` | `20` per source, before merge | ADR-0009 §8.1 rule 3; DECISIONS-r9 M15 |
+| `MAX_CHUNK_BYTES` | `4096` B | DECISIONS-r9 §C |
+| `SNIPPET_MAX_BYTES` | `800` B; ⌊`OUTPUT_CAP` / `SEARCH_PAGE_SIZE`⌋ = 819, minus room for the label | DECISIONS-r9 M21 |
+| `REQUIRE_SECURITY_ENV` | `"CONTEXT_MODE_REQUIRE_SECURITY"` | v1 `a4ab72eb` #468; DECISIONS-r9 E2 |
 | `MCP_HINT_EVERY` | `10` (env `CTX_MCP_HINT_EVERY`) | Q1 |
 | `EXIT_SIGTERM_MS` | `2000`; `EXIT_SIGKILL_MS` `5000` | GP9, #862 |
 | `COLD_START_MS` | `1000` | GP4 |
@@ -288,6 +299,9 @@ All errors are one line: `<cause>. Fix: <action>` (P1, PRD §13). Table keys are
 | `FETCH_FAILED` | `Fetch failed: <code>. Fix: check the URL or proxy.` (#1135) |
 | `SSRF` | `Blocked private address <host>. Fix: use a public URL.` |
 | `OUTSIDE_ROOT` | `Path <p> is outside the project. Fix: use a path inside <root>.` |
+| `INVALID_ARGS` | `Invalid argument <field>. Fix: <action>.` (`ctx_search` `offset` with `sort:"timeline"`, or `after` with `sort:"relevance"`; DECISIONS-r9 M23) |
+| `ONE_OF_INPUT` | `Pass exactly one of <names>. Fix: drop the extra field.` (DECISIONS-r9 M23) |
+| `SPAWN_FAILED` | `Failed to start the process: <detail>. Fix: check the command and PATH.` (DECISIONS-r9 M23) |
 
 ## 4. Cross-module interfaces
 
@@ -354,7 +368,7 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
 ### 5.1 MCP server start (`server.mjs`) — GP1, GP9; covers `src/entries/server.ts`
 1. Read `--agent <id>` from argv; else `claude-code` if `CLAUDE_PROJECT_DIR` set; else the row whose `projectSource` is `spawn-cwd` passed via `--agent` at install. Unknown → still serve; doctor reports `NO_PROJECT` (ADR-0007 d4).
 2. Check `process.versions.node >= NODE_MIN` and `await import("node:sqlite")`. On failure: degraded mode, list only `ctx_doctor` (PRD §13).
-3. Create MCP server with `instructions = INSTRUCTIONS`; register `TOOLS` in `TOOL_ORDER`; `ctx_execute` gets `_meta {"anthropic/alwaysLoad": true}` (ADR-0006); `readOnlyHint` on search/resume/stats. Serve `server/discover` and `initialize` with the same bytes (ADR-0007, GS9).
+3. Create MCP server with `instructions = INSTRUCTIONS`; register `TOOLS` in `TOOL_ORDER`; `ctx_execute` gets `_meta {"anthropic/alwaysLoad": true}` (ADR-0006); `readOnlyHint` on search/resume/stats; `annotations.readOnlyHint = true` on `ctx_execute` only when `getAdapter(agent).execReadOnlyHint` is true (codex only — DECISIONS-r9 R5; without it every codex call fails with `"MCP tool call requires approval, but approval policy is never"`). Serve `server/discover` and `initialize` with the same bytes (ADR-0007, GS9).
 4. Install lifecycle (`exit.ts`): if stdin not TTY, on `end` → close DB → exit; escalate SIGTERM 2 s, SIGKILL 5 s. No timers otherwise, no `chdir`, no spawn.
 5. Project and DB open lazily on the first tool call. Write `owners/<server-id>.pid` then.
 
@@ -398,17 +412,15 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
 
 ## Assumptions
 
-- A1: `TOOLS_TTL_MS = 3600000`. ADR-0007 requires `ttlMs` but gives no value; one hour keeps clients from re-listing a fixed surface.
-- A2: Source-tree paths follow PRD §3.2 (`src/core/…`, `src/entries/…`, `build/`). TECH-SPEC M-gates name `src/storage/`, `src/compaction/`, `src/doctor/`, `scripts/build/`; the PRD layout is newer (rewritten 2026-10-15), so `covers` paths must use the PRD paths above.
+- A1: `TOOLS_TTL_MS = 3600000`. ADR-0007 requires `ttlMs` but gives no value; the tool list changes only on upgrade, and upgrade already needs a restart (§5.5), so one hour keeps re-lists rare (DECISIONS-r9 F7).
 - A3: Tool set is the 9 tools of PRD §8 (`ctx_batch`, `ctx_index` absorbing fetch). Old names `ctx_fetch_and_index`/`ctx_batch_execute` in ADR text map to these.
 - A4: Case-B wrapper ships as `run.mjs` in the release root (ADR-0016 "`node <bundle>/run…`").
 - A5: `projectKey` = first 16 hex chars of sha256 of the git common dir realpath; ADR-0002 names the hash but not its length.
-- A6: Kill on Windows is `taskkill /F /T /PID` (PRD §8, GP4) over Job Object (S-TIMEOUT), because PRD/GP4 forbid a switch without its own ADR.
+- A6: Kill on Windows is `taskkill /F /T /PID` (PRD §8, GP4) over Job Object (S-TIMEOUT), because PRD/GP4 forbid a switch without its own ADR; Node has no Job Object API, so one would need a native addon the release cannot ship. Parent-death on Windows: stdin EOF, then `taskkill /T` of own children (DECISIONS-r9 F6).
 - A7: `cost` event kind added for GP10 turn-keyed stats; ADR-0009 lists only 5 kinds.
-- A8: DB opens on a non-MCP session use session id `"mcp:"+server-id` when request `_meta` has none.
+- A8: DB opens on a non-MCP session use session id `"mcp:"+server-id` when request `_meta` has none; this is the fallback session id itself, kept (not "latest session") because a stdio server serves one client, so two clients never share it, and an unknown or empty session id reads `[]` (DECISIONS-r9 F4; v1 `7e6c243a`, PR #398, where falling back to the global latest session leaked one session into another).
 - A14: ADR-0005's caps/doubt regex rules (PR1, PR2) are each one check, so `lintPromptText` returns one `LintResult` per rule, not a single pass/fail. `docs/v2/prompt/lint.mjs` §4 step 4 calls it once per tool/instructions text and fails the run on any `ok: false` row. This owning function was missing before this edit.
 
 ## Changes
 
-- `AdapterRow` gains `compactSummary: "host" | "none"`; `COMPACT_POINTER_LINE` constant added; §5.3/§5.4 flows now branch by `compactSummary` (DECISIONS-r6 D6, tickets/memory-r6/eval/results.md).
-- `READ_HINT_BYTES` retired, `READ_MAX_LINES` added; §5.3 PreToolUse now denies an unranged Read (or a one-file shell dump with no bound) over `OUTPUT_CAP` instead of hinting (DECISIONS-r8).
+- `AdapterRow` gains `compactSummary: "host" | "none"`, `nativeTools`, `execReadOnlyHint`; `COMPACT_POINTER_LINE` constant added; §5.3/§5.4 flows now branch by `compactSummary` (DECISIONS-r6 D6, tickets/memory-r6/eval/results.md); `toolNamePrefix` comment fixes Codex to underscore form; `READ_HINT_BYTES` retired, `READ_MAX_LINES` added, §5.3 PreToolUse now denies an unranged Read (or a one-file shell dump with no bound) over `OUTPUT_CAP` instead of hinting (DECISIONS-r8); new constants `SYNC_INDEX_MAX_BYTES`, `RATIO_SECTION_DECAY`, `MAX_CANDIDATES_TOTAL`, `SEARCH_PAGE_SIZE`, `MAX_CHUNK_BYTES`, `SNIPPET_MAX_BYTES`, `REQUIRE_SECURITY_ENV`; §3.3 gains `INVALID_ARGS`, `ONE_OF_INPUT`, `SPAWN_FAILED`; A1 cites §5.5, A2 removed (source tree is §1 alone), A6 and A8 get their Windows-kill and session-id reasoning (DECISIONS-r9).

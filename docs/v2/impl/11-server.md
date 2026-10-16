@@ -108,7 +108,7 @@ None (side-effecting: registers process listeners).
 4. Escalation: send `SIGTERM` to `process.pid` immediately on `end`. Start a timer for `EXIT_SIGTERM_MS`; if the process has not exited by then, the OS default `SIGTERM` handler is expected to have exited it — this module does not re-send `SIGTERM`. Start a second timer for `EXIT_SIGKILL_MS` from the same `end` event; if the process is still alive at that point, call `process.kill(process.pid, "SIGKILL")`.
 5. Both timers are started with `.unref()` so they never hold the event loop open on their own, and both are cleared if `process.exit` already ran (listen once on `process.on("exit", ...)` to clear them).
 6. No other timer, probe, or `ps`/`execFileSync` call is started by this module (PRD P5, GP9; v1's ppid-polling grandparent check, `src/lifecycle.ts`, is not carried into v2 — see Assumptions A1 below).
-7. Windows parent-death: not handled in this file. GP9 requires a Job Object on Windows; that is wired in `src/entries/server.ts` step 2 below, not here, because a Job Object is set up once at process start, not on stdin `end`.
+7. Windows parent-death: not handled in this file. Per DECISIONS-r9 F6, Windows uses the same stdin-EOF path as Unix, then `taskkill /T` of the server's own children — no Job Object; that is wired in `src/entries/server.ts` step 9b below.
 
 ### Errors
 
@@ -142,7 +142,7 @@ No return value; this function runs for the life of the process and only resolve
 #### Steps
 
 1. **Resolve agent id** (ADR-0007 decision 4, DECISIONS-r3 Q11/Q24):
-   a. Read `--agent <id>` from `argv`. If present and it is a member of `AGENT_IDS`, use it.
+   a. Read `--agent <id>` from `argv`. If present and it is a member of `AGENT_IDS`, use it. Codex's `AdapterRow.projectSource` is `"arg:--agent+cwd"`: the server learns it is running under Codex from this same `--agent` flag, then reads `AdapterRow.execReadOnlyHint` for that row to drive step 4c (DECISIONS-r9 R5).
    b. Else, if `env.CLAUDE_PROJECT_DIR` is set, use `"claude-code"`.
    c. Else, use the `AdapterRow` whose `projectSource === "spawn-cwd"` and read its id the same way `--agent` would have supplied it at install time.
    d. Else: agent id is unresolved. Do not guess. Proceed to step 2 anyway — `resolveProject` (store module) will itself fail with `NO_PROJECT`, and the server still starts and serves `tools/list` so `ctx_doctor` is reachable (PRD §13; this is not a "missing input returns one line" case at startup, because startup must not exit — only the first tool call surfaces `NO_PROJECT`).
@@ -156,11 +156,11 @@ No return value; this function runs for the life of the process and only resolve
 4. **Construct the MCP server** with `@modelcontextprotocol/server` v2.3.1:
    a. `instructions: INSTRUCTIONS` — the same bytes are returned from both the 2025-xx `initialize` path and the 2026-07-28 `server/discover` path, because both are answered from this one `INSTRUCTIONS` constant, not two separately-maintained strings (ADR-0007 decision 3, GS9).
    b. Register tools from the list built in step 3, in `TOOL_ORDER` order. Pass each tool's `_meta`: only `ctx_execute` gets `{"anthropic/alwaysLoad": true}` (ADR-0006 decision 2); none of the others carry this key.
-   c. Mark `readOnlyHint` on `ctx_search`, `ctx_resume`, `ctx_stats` per their `ToolDef.readOnly` flag.
+   c. Mark `readOnlyHint` on `ctx_search`, `ctx_resume`, `ctx_stats` per their `ToolDef.readOnly` flag. Additionally, for `ctx_execute` only: set `annotations.readOnlyHint = true` when the resolved `AdapterRow.execReadOnlyHint` is `true` (codex row only — all other rows carry `execReadOnlyHint: false`; DECISIONS-r9 R5). Without this, every Codex call fails with `"MCP tool call requires approval, but approval policy is never"` under every `approval_policy`/`default_tools_approval_mode` tried (`out/final/probe-codex.md` Setup).
    d. `tools/list` and `server/discover` results both carry `resultType: "complete"`, `ttlMs: TOOLS_TTL_MS`, `cacheScope: "public"` (ADR-0007 decision 5; constant `TOOLS_TTL_MS`, Assumption A1 of `00-architecture.md`).
    e. Do not register: roots, sampling, logging, resources subscriptions, tasks, elicitation, MRTR (ADR-0007 decision 6). Do not register `ctx_route` as a listed tool — it exists only as an internal `mcp_tool` hook dispatch target used by the `hooks` module, never returned from `tools/list` (ADR-0007 decision 5, Assumption A36-equivalent note in 0007's Changes section).
 5. **Stateless identity (ADR-0007 decision 4):**
-   a. On every tool call, build `ToolContext` fresh from that request: `sessionId` from request `_meta` if present, else `"mcp:" + serverId` (server-id is a process-local random or PID-derived string generated once at start; `00-architecture.md` Assumption A8).
+   a. On every tool call, build `ToolContext` fresh from that request: `sessionId` from request `_meta` if present, else `"mcp:" + serverId` (server-id is a process-local random or PID-derived string generated once at start; `00-architecture.md` Assumption A8). This fallback is kept because a stdio server serves exactly one client — one `StdioServerTransport` per process — so two clients never share it; an unknown or empty session id reads `[]` and never falls back to "latest session" (DECISIONS-r9 F4; v1 `7e6c243a` leaked one session into another this way, PR #398).
    b. Do not cache `clientInfo`, `sessionId`, or `ProjectContext` across requests at module scope, except the one SDK-level exception named in ADR-0007 decision 4: the SDK's own initialize-time `clientInfo` cache may be read at tool-call time, only to detect a 2025-xx client (the #542/#539 fix). This read never changes routing or identity for `ctx_doctor`/`ctx_upgrade` — those two tools' agent id always comes from step 1, never from `clientInfo`.
    c. `ctx_doctor` and `ctx_upgrade` display `clientInfo` (when present) for debugging only; they do not branch logic on it.
 6. **Resolve `ProjectContext` lazily:**
@@ -176,7 +176,7 @@ No return value; this function runs for the life of the process and only resolve
 9. **Install lifecycle:**
    a. Call `installExitGuard({ onShutdown, isTTY: process.stdin.isTTY })` (module 4 above). `onShutdown` is: best-effort `closeDb` on any open `DbHandle` (wrapped in try/catch — a failed checkpoint never blocks shutdown, per store module's `closeDb` contract), best-effort remove `owners/<server-id>.pid`.
    b. Node 24.15.0 core has no API that assigns a process to a Windows Job Object without a native addon. This spec does not add a native dependency for this. So on Windows too, use the same stdin-EOF path as Unix (step 9a's `installExitGuard`, with `isTTY: process.stdin.isTTY`); do not create a Job Object. This is final, not a fallback to revisit (see Assumptions A2).
-   c. Install no other timer. No `setInterval` for version checks, stats heartbeats, or sentinel refreshes (those are v1-only, `src/server.ts:4940-4960`; GS7/PRD P5 forbid them in v2 — idle server is 0% CPU).
+   c. Install no other timer. No `setInterval` for version checks, stats heartbeats, or sentinel refreshes (those are v1-only, `src/server.ts:4940-4960`; GS7/PRD P5 forbid them in v2 — idle server is 0% CPU). V20 (DECISIONS-r9): with stdin open and no requests for 10 s, process CPU time grows by no more than 1% of wall time, read via `process.cpuUsage()` exposed through `ctx_stats`'s debug field, or `ps`, in the test harness only.
 10. **Connect the stdio transport** (`StdioServerTransport`), last. All stderr-only logging (ADR-0007 decision 6: "Logs go to stderr") happens through `console.error`, never `console.log` (stdout is the MCP channel).
 11. Return a `Promise` that only resolves after `onShutdown` has run and the process is about to exit (i.e., this function's promise is the server's whole lifetime; callers `await startServer(...)` at the top level and let the process exit naturally).
 
@@ -208,10 +208,14 @@ ADR-0017 `covers`: `src/entries/server.ts`, `src/prompt/`.
 
 ## Assumptions
 
-- A1: v1's ppid/grandparent-ppid polling (`src/lifecycle.ts`, `makeDefaultIsParentAlive`, issue #103/#311) is **not** carried into v2's `exit.ts`. `00-architecture.md` and GP9 both specify stdin-EOF plus a fixed SIGTERM/SIGKILL escalation as the one Unix lifecycle path, and a Job Object (not ppid polling) for Windows parent-death; PRD P5 forbids `ps`/boot probes. Reason: the architecture doc and GP9 row are unambiguous about the mechanism, and the v1 ppid-polling code is the exact `ps`-based probe P5 bans.
-- A2: GP9/DECISIONS-r4 I1-17 ask for a Windows Job Object for parent-death, but name no API. Node 24.15.0 core ships no API to assign a process to a Windows Job Object without a native addon (checked against `node:child_process`, `node:process`, `node:os`). This spec picks the no-native-addon path over adding one: on Windows, use the same stdin-EOF plus SIGTERM/SIGKILL escalation as Unix (step 9b), and do not create a Job Object. This is the final mechanism, not a point open for later confirmation.
+- A1: v1's ppid/grandparent-ppid polling (`src/lifecycle.ts`, `makeDefaultIsParentAlive`, issue #103/#311) is **not** carried into v2's `exit.ts`. `00-architecture.md` and GP9 both specify stdin-EOF plus a fixed SIGTERM/SIGKILL escalation as the lifecycle path on all OSes (DECISIONS-r9 F6 settles Windows the same way, no Job Object); PRD P5 forbids `ps`/boot probes. Reason: the architecture doc and GP9 row are unambiguous about the mechanism, and the v1 ppid-polling code is the exact `ps`-based probe P5 bans.
+- A2: GP9/DECISIONS-r4 I1-17 asked for a Windows Job Object for parent-death, but named no API. Node 24.15.0 core ships no API to assign a process to a Windows Job Object without a native addon (checked against `node:child_process`, `node:process`, `node:os`), and the release ships no `node_modules` to carry one. DECISIONS-r9 F6 settles this: on Windows, use the same stdin-EOF plus SIGTERM/SIGKILL escalation as Unix (step 9b), then `taskkill /T` of the server's own children; do not create a Job Object. This is the final mechanism, not a point open for later confirmation.
 - A3: the per-call `agentId` resolution in step 7a re-runs step 1's argv/env read on every tool call rather than caching it once at startup. ADR-0007 decision 4 requires statelessness and forbids caching identity at connection scope; re-reading cheap, already-parsed `argv`/`env` values is not the kind of per-connection state the ADR forbids (it forbids caching across requests, not re-deriving from already-available process state), and keeps one code path for "resolve agent id" instead of two (startup-time and per-call).
 
 ## Files written
 
 `/Users/mksglu/.claude/claude-worktree-workspaces/oss-new/docs/v2/impl/11-server.md`
+
+## Changes
+
+- r9 (`DECISIONS-r9.md` R5, F4, V20, F6): step 4c adds `execReadOnlyHint` (Codex `ctx_execute` only); step 1a cites Codex's `projectSource: "arg:--agent+cwd"`; step 5a/9c cite F4 (session-id fallback never leaks across clients) and V20 (idle-server CPU test); Windows parent-death (step 9b, exit.ts §7, Assumptions A1/A2) now cites F6's final no-Job-Object mechanism instead of describing a Job Object as pending.

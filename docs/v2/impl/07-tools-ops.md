@@ -204,6 +204,8 @@ export function runDoctorChecks(ctx: ToolContext, adapter: AdapterRow): Promise<
 
 **D5b — double-fire.** Only when `adapter.id === "vscode"` or `adapter.id === "claude-code"` and the repo has both a `.claude/settings.json` hooks block **and** a VS Code `chat.useClaudeHooks` setting active for the same repo root → FAIL, detail `"both Claude Code hooks and VS Code chat.useClaudeHooks are active for this repo"`, fix `"disable chat.useClaudeHooks or the Claude Code hooks block"`.
 
+**D5 Codex trust sub-case (R6, DECISIONS-r9).** For `adapter.id === "codex"` only: if the hooks file exists on disk but no hook row was ever journaled for any Codex session (module `store`'s event log, filtered `agent:"codex"`), D5's `detail` is `"Codex hooks not trusted"` instead of the round-trip detail, status `"UNKNOWN"` (not FAIL — this is a one-time interactive-CLI trust step, not a broken install). Live-harness callers of `codex exec` pass `--dangerously-bypass-hook-trust` to skip the prompt (S1 `10-adapters.md` §3 `codex.ts` install note); `ctx_doctor` itself never passes this flag.
+
 **D6 — MCP.** Read `ctx.clientInfo.name` and `ctx.protocolVersion` from the live request. Missing both → status `"UNKNOWN"` (per PRD §13 note: `clientInfo` is optional and non-behavioural), never FAIL on this alone.
 
 **D7 — project and worktree.** Compare `ctx.project.source` against the adapter's declared `projectSource`; for `pi`, confirm the resolved path matches `piCwd` captured at plugin-load time. Mismatch → FAIL, detail `"resolved project source <got> does not match the host's actual cwd"`, fix `"restart the agent in the correct directory"`.
@@ -297,6 +299,12 @@ GP11 ("upgrade keeps user values, removes v1 entries, no baked paths, rollback w
 
 This order matches 00-architecture.md's file-tree listing order (`doctor.ts`, `upgrade.ts`, then `ops/*`) only in *presentation*; build order is dependency order, listed above.
 
+## 8. `ctx_stats` decisions owned here (DECISIONS-r9 V5, V18, V19; function lives in `06-tools-session.md`)
+
+- V5: the savings number shown to the user comes only from `ctx_stats` output (measured byte counts the server already tracked). No tool-description or hint text tells the model about savings. A scorer must never read a savings claim out of model-generated text; it reads `ctx_stats`'s own reply. Test spec T-F3 (`14-tests.md` §6).
+- V18 (GP10, issue #1248): `ctx_stats` called in a session with zero prior tool calls returns a reply with zero rows and `isError: false` (an empty session is valid, not an error — same pattern as D9's "0 sources, 0 chunks" above).
+- V19 (GP10, issue #950): for a known call sequence, the sum of every per-tool row's count equals the total row's count exactly; no double-count, no dropped call.
+
 ## Assumptions
 
 - A-T1: `DoctorRow`, `V1Finding`, `UpgradeMode`, `UpgradeChangeRow`, `HostConfigEdit` are added to `types.ts` here because ADR-0010/0011 require these shapes (doctor row, v1 finding `{file,path,reason}`, upgrade change table) but 00-architecture.md §3.1 does not list them. Kept consistent with 00's existing naming style (PascalCase interfaces, `AgentId`-keyed fields).
@@ -305,6 +313,10 @@ This order matches 00-architecture.md's file-tree listing order (`doctor.ts`, `u
 - A-T4: `ctx_upgrade`'s zod schema is `z.object({ mode: z.enum(["upgrade","uninstall"]).optional(), confirmDelete: z.boolean().optional() }).strict()`; Q16 names only `confirmDelete`, and `mode` is needed to select uninstall per Q16 ("a mode of `ctx_upgrade`"). `"install"` is not a selectable mode here because 00-architecture.md §5.5 step 1 shows install happening before the server/tool exists; this tool only ever runs as upgrade or uninstall once the server is live.
 - A-T5: D8 is modeled as one `DoctorRow` carrying either of two FAIL causes (stale-schema, integrity_check), per TECH-SPEC §3.11's "two separate FAIL rows" language read against ADR-0010's single `D8` id — TECH-SPEC's "two rows" is satisfied by one row id whose `detail` names which of the two failed, since ADR-0010 numbers D8 as one check and PRD §13 lists D1–D10 as ten ids, not eleven.
 - A-T6: `covers` paths in this file use the PRD/00-architecture source tree (`src/core/tools/doctor.ts`, `src/core/tools/upgrade.ts`, `src/core/ops/*`), not TECH-SPEC §13's `src/doctor/`/`src/upgrade/`, matching 00-architecture.md's own Assumption A2.
+
+## Changes
+
+- 2026-10-16 (DECISIONS-r9, S8): added D5's Codex-trust sub-case (R6: `"Codex hooks not trusted"` detail, status `UNKNOWN`, `--dangerously-bypass-hook-trust` is a live-harness flag only, never passed by `ctx_doctor` itself); added §8 naming the three `ctx_stats` decisions this module cites (V5 savings-from-`ctx_stats`-only, V18 zero-rows `isError:false`, V19 per-tool rows sum to total).
 
 ---
 

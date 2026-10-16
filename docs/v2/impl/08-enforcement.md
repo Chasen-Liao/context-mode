@@ -17,7 +17,8 @@ Build order inside this file: §1 → §6 in that order (parser before the rules
 export type TokenKind = "word" | "op" | "io" | "unhandled";
 export interface Token { kind: TokenKind; text: string; start: number; end: number; }
 // "op": && || ; | ( )   "io": > >> < 2>  2>&1  &>
-// "unhandled" marks a construct this lexer does not model: [[ ]] (( )) case fn() $( ) ` `
+// "unhandled" marks a span this lexer does not read as a command: [[ ]] (( )) $( ) ` `
+// (case/fn() bodies are read as nested pipeline_lists, §2.2 — their keyword/opener words are plain "word" tokens)
 ```
 
 ### 1.2 `export function lex(cmd: string): Token[]`
@@ -32,18 +33,36 @@ wrapper, not by lexing its inside).
 2. `NORMAL`: skip runs of space/tab. On `'` → push `IN_SINGLE`, consume to the next unescaped `'` as one `word` token
    (quotes included in `text`, so later stages can still see literal content inside, matching v1's model). On `"` →
    same with `IN_DOUBLE`, stopping at the next unescaped `"`; `\"` and `` \$ `` inside double quotes are literal.
+   (DECISIONS-r9 P3) `IN_SINGLE`/`IN_DOUBLE` are tracked as a one-entry quote stack, not a flat flag: each push
+   records its quote char, each pop checks it matches the open char before returning to `NORMAL` (or to the
+   enclosing quote state — the one nesting case the lexer allows is a `$( )`/backtick span opened while
+   `IN_DOUBLE`, which pushes its own independent state per step 6 and pops back to `IN_DOUBLE` on close). Text
+   read while any quote state is on the stack stays part of the current `word` token's `text` and is never
+   re-tokenized as `op`/`io`/`unhandled` — a quoted `curl`, `&&`, or `[[` is literal content, not a command.
 3. `NORMAL`: on `&&`, `||`, `;`, `|`, `(`, `)` → one `op` token of that exact text (longest match first: check `&&`
    before `&`, `||` before `|`).
 4. `NORMAL`: on `>>`, `>`, `<`, `2>&1`, `2>`, `&>` → one `io` token (longest match first).
+4a. `NORMAL`: on an unquoted LF or CR → one `op` token with text `;` (DECISIONS-r9 E1, v1 `#470`/`28e77e2b`: a bare
+   newline splits commands the same as `;`, so it is never treated as plain whitespace inside a word). A `\` placed
+   directly before an LF (line continuation) is consumed with the backslash and the newline together and emits no
+   token at all, joining the two physical lines into one logical line first, before this rule runs.
 5. `NORMAL`: on `<<` or `<<-` followed by a word → emit `io`, then read the heredoc tag, switch to `IN_HEREDOC` until
    a line equal to the tag (optionally with surrounding whitespace stripped for `<<-`) appears; the entire heredoc
    body becomes one `"unhandled"` token (its content is never read by the parser — this is how
    `cat <<EOF … curl … EOF` allows, per ADR-0008 GP3 row "curl only in the heredoc body").
 6. `NORMAL`: on `$(` or `` ` `` → scan forward tracking nested `(`/`)` depth (backtick form: to the next unescaped
    backtick) and emit the whole span as one `"unhandled"` token.
-7. `NORMAL`: on `[[`, `((`, the literal word `case`, or a word matching `name() {` → emit a single `"unhandled"`
-   token for that construct's keyword/opener only; `parse.ts` turns its presence into a `ParseResult.ok:false`
-   (§6.1).
+7. (DECISIONS-r9 P1) `NORMAL`: on `[[` → scan forward tracking nested `[[`/`]]` depth and emit the whole span as
+   one `"unhandled"` token (its condition expression is never a command; the parser treats the token only as a
+   divider between the pipelines before and after it, same as an `op`). Same rule for `((` to its matching `))`
+   (the arithmetic body is never a command). The literal word `case` opens a `case`-token; the lexer keeps lexing
+   normally after it (`case`, the subject word, `in`, each `pattern)`, and `esac` all come through as plain `word`
+   tokens) so `parse.ts` can split each branch body as its own `pipeline_list` (§2.2). A word matching
+   `name() {` (bare `name()` followed by `{`) or the two words `function name` followed by `{` opens a function
+   definition the same way: the lexer emits `word` tokens for `name`, `(`, `)`, `{` and keeps lexing the body
+   normally; `parse.ts` reads the body between `{` and the matching `}` as one nested `pipeline_list` (§2.2).
+   `coproc` and `select` are not given special lexing — they remain plain `word` tokens so `parse.ts` can still
+   detect them by `argv0`/first-word text for the `ParseError` in §2.3 step 2a.
 8. Otherwise: consume a maximal run of non-space, non-operator characters as one `word` token (this also matches
    plain `curl`, flags like `-sL`, and paths).
 9. Return the token array. No error is ever thrown by the lexer itself — unrecognized constructs always surface as
@@ -79,6 +98,18 @@ redirect      := io_token word
 A `(` / `)` subshell `op` token wraps a nested `pipeline_list`; its simple commands flatten into the same
 `commands[]` array (a subshell does not change curl/HTTP detection — the body still reaches stdout the same way).
 
+(DECISIONS-r9 P1) Three more forms flatten into the same `commands[]` array, each command tagged with an
+`insideConstruct: "function" | "case" | string` field added to `SimpleCommand` (the value for `"case"` branches is
+literally `"case"`; the value for a function body is the function's name):
+```
+function_def  := ( word "(" ")" | "function" word ) "{" pipeline_list "}"
+case_stmt     := "case" word "in" case_branch* "esac"
+case_branch   := pattern_word ")" pipeline_list ";;"
+```
+A `function_def`'s body `pipeline_list` flattens into `commands[]` the same as a subshell body. A `case_stmt`
+flattens **every** branch's body into `commands[]` (the decision does not know at parse time which branch runs, so
+every branch is checked, per DECISIONS-r9 P4 `case "$1" in x) curl …;; esac` → deny regardless of `$1`).
+
 ### 2.3 `export function parseShell(cmd: string): ParseResult`
 
 **Input:** `cmd` — raw command string.
@@ -86,13 +117,26 @@ A `(` / `)` subshell `op` token wraps a nested `pipeline_list`; its simple comma
 
 **Steps:**
 1. `tokens = lex(cmd)` (§1).
-2. If any token is `"unhandled"` and its text starts with `[[` → return `{ ok:false, construct:"[[" }`. Same check
-   in order for `((` → `"(("`, `case` → `"case"`, a `name() {` match → `"function"`, and a `$( )`/backtick token →
-   **not** a parse error (process substitution `<( )`/`>( )` is the only `$`-family construct that is a parse
-   error: scan for a literal `<(` or `>(` token sequence and return `construct:"process-substitution"`; plain
-   `$( )`/backtick stay parseable — they are unwrapped in §3, not rejected here).
+2. (DECISIONS-r9 P1) `[[ ... ]]` and `(( ... ))` `"unhandled"` tokens are **not** a parse error: the condition/
+   arithmetic body is skipped (never read as a command) and the surrounding `pipeline_list` parses normally around
+   it, exactly like an `op` divider — `[[ -f a.txt ]] && echo ok` parses as the single command `echo ok` chained
+   after a skipped `[[ ]]` span, with no `commands[]` entry for the `[[ ]]` span itself. `case`/`esac` and a
+   function-definition opener are **not** a parse error either: they recurse per the `case_stmt`/`function_def`
+   grammar in §2.2 and flatten their bodies' commands into `commands[]`, tagged `insideConstruct` (§2.2). `$( )`
+   and backtick tokens are **not** a parse error — they are unwrapped in §3. Process substitution (`<( )`/`>( )`:
+   scan for a literal `<(` or `>(` token sequence) **is** a parse error: `construct:"process-substitution"`.
+2a. `ParseError` fires (DECISIONS-r9 P2) only for: process substitution (step 2); an unterminated quote (lexer
+   state still `IN_SINGLE`/`IN_DOUBLE` at end of string) → `construct:"unterminated-quote"`; an unterminated
+   heredoc (lexer still `IN_HEREDOC` at end of string, no closing tag line found) → `construct:"unterminated-
+   heredoc"`; the literal word `coproc` → `construct:"coproc"`; the literal word `select` → `construct:"select"`;
+   subshell, grouping, `case`, or function-body nesting deeper than `MAX_NEST_DEPTH` (`32`, `00-architecture.md`
+   §3.2), counted by `(`/`)` and `{`/`}` pair depth while walking tokens → `construct:"nesting-too-deep"`. Every
+   one of these six codes gets the Q4 verdict: deny if a user `permissions.deny` pattern could match the raw text,
+   allow otherwise (§6.1 step 5b). `[[`, `((`, `case`, and function definitions are never one of these codes —
+   they always reach step 3.
 3. Otherwise, consume the token stream with the grammar in §2.2: split on `op` tokens `&&`/`||`/`;` into pipeline
-   segments at the top chain level; within a segment split on `|` into `simple_command`s.
+   segments at the top chain level; within a segment split on `|` into `simple_command`s; recurse into any
+   `case_stmt`/`function_def` span per step 2 and append its flattened commands to the same `commands[]` array.
 4. For each `simple_command`: `argv0` = first `word` token's text (quote characters stripped per v1 parity — a
    quoted `"curl"` still names `curl`); `args` = the rest; `raw` = the original substring for this segment.
 5. `redirectsToFile`: true iff this simple command has an `io` token `>` or `>>` whose following word is not `-`,
@@ -166,8 +210,15 @@ in project/user `settings.json`, merged project-then-user, project wins on confl
 2. Return the raw strings unchanged (no normalization) — matching is done by `matchesAnyDenyPattern` below, one
    pattern at a time, so the stored list stays exactly what the user wrote.
 
-**Error cases:** config file missing or unparsable → return `[]` (no fallback chain per PRD P1 — `ctx_doctor`
-reports a host-config FAIL separately; this function itself never throws).
+**Error cases (DECISIONS-r9 E2):** a *present* deny-config file that cannot be read or cannot be parsed, with the
+env var `REQUIRE_SECURITY_ENV` (`"CONTEXT_MODE_REQUIRE_SECURITY"`, `00-architecture.md` §3.2) set to `"1"` →
+`decide.ts` step 3 (§6.1) must deny every `PreToolUse` call for the rest of the session with
+`{kind:"deny", reason:"context-mode: your deny rules could not be read. Fix: run ctx_doctor."}`, so
+`readUserDeny` signals this case distinctly: it returns `null` (not `[]`) for "present but unreadable/unparsable"
+and `[]` only for "no deny config file at all" (not present is not an error). With `REQUIRE_SECURITY_ENV` unset or
+`"0"`, a `null` from `readUserDeny` is treated by `decide.ts` step 3 as `[]` (allow, log a warning to stderr) — no
+fallback chain beyond this one flag check (PRD P1); `ctx_doctor` reports a host-config FAIL separately. A missing
+file is never an error regardless of the flag.
 
 ### 4.2 `export function matchesAnyDenyPattern(text: string, patterns: string[]): string | null`
 
@@ -179,6 +230,14 @@ ctx_execute_file / ctx_batch_execute input").
 **Steps:** walk `patterns` in order; a pattern is a glob (`*`, `?`) matched by a small hand-written glob matcher
 (not a regex — the one permitted non-regex string-matching helper in this module, since it mirrors the host's own
 deny-pattern syntax rather than parsing shell); return the first pattern whose glob matches `text`.
+
+**`Read(...)` path patterns (DECISIONS-r9 V17, intern Q3 `#1075`):** a `Read(<glob>)` pattern is matched against the
+tool's resolved absolute path, with this prefix rule applied before the glob walk: a leading `//` in the pattern
+means "absolute path, any root" and is stripped, so `Read(//etc/**)` matches the absolute path `/etc/hosts`; a
+leading `~/` in the pattern is replaced with the literal value of `$HOME` before matching, so `Read(~/secret/**)`
+matches `$HOME/secret/a`; a leading `./` in the pattern is matched only against the path relative to `projectDir`
+and never against an absolute path, so `Read(./x/**)` does not match `/x/a` (no relative-to-absolute fallback, per
+PRD P1 no-fallback-chain). GP3 rows: see ADR-0008 Golden cases table.
 
 **Covers:** ADR-0008 "user permissions.deny | deny, same scope (Q5)"; GP3 "A subagent with tools: Bash and a user
 permissions.deny rule for rm -rf /, wrapped into run.mjs → still blocked" (ADR-0016 golden cases).
@@ -193,8 +252,9 @@ resolved by the caller per §5.2); `toolSet` — the resolved tool list for this
 `agentType` is not resolved to any source (Q23: "an agent type not found in any source goes to case B/C,
 never case A").
 
-**Output:** `"A"` if `toolSet` contains a `ctx_*`/`mcp__context-mode__*` tool name (per the agent's
-`toolNamePrefix`, from the `AdapterRow` — never a plain `ctx_*` string compare); `"B"` if `toolSet` contains `Bash`
+**Output:** `"A"` if `toolSet` contains a tool name starting with `row.toolNamePrefix` (the agent's own prefix from
+`AdapterRow` — per `DECISIONS-r9.md` R1, Codex's is `mcp__context_mode__` with an underscore, every other agent's is
+`mcp__context-mode__` with a hyphen; never a hardcoded literal of either form); `"B"` if `toolSet` contains `Bash`
 (its native name, e.g. Claude Code `"Bash"`) and case A did not apply; `"C"` otherwise, including `toolSet === null`.
 
 **Steps:**
@@ -258,8 +318,12 @@ Only called for `PreToolUse`; `hooks/dispatch.ts` (module `hooks`) is the only c
    WebFetch/curl/HTTP case; non-Bash, non-HTTP tool calls inside a case B/C subagent still run the same rule table
    below (a `Read` of a huge file inside a case-C subagent is handled by `hooks/dispatch.ts`'s `PostToolUse`
    `replace`, not here — `decide.ts` only emits the `PreToolUse` deny naming `Read offset/limit`, step 6).
-3. **User deny check (always first, before any context-mode rule — v1 parity):** build `text` = the exact command
-   string for `Bash`, or the JSON-stringified `code`/`command` field for `ctx_execute`/`ctx_batch`/
+3. **User deny check (always first, before any context-mode rule — v1 parity):** (DECISIONS-r9 E2) if `userDeny
+   === null` (the caller's `readUserDeny()` call, §4.1, hit a present-but-unreadable/unparsable config): if
+   `process.env.REQUIRE_SECURITY_ENV === "1"` → return `{kind:"deny", reason:"context-mode: your deny rules could
+   not be read. Fix: run ctx_doctor."}` immediately, for every `canonical`; else log a warning to stderr and treat
+   `userDeny` as `[]` for the rest of this call. Otherwise (`userDeny` is `[]` or a real list): build `text` = the
+   exact command string for `Bash`, or the JSON-stringified `code`/`command` field for `ctx_execute`/`ctx_batch`/
    `ctx_execute_file` input (Q5). If `matchesAnyDenyPattern(text, userDeny)` returns non-null → return
    `{kind:"deny", reason:"Blocked by security policy: matches deny pattern "+pattern}` (v1 text kept verbatim,
    ADR-0008 "the original text is kept as-is"). This applies to every `canonical`, including ctx tools.
@@ -286,12 +350,18 @@ Only called for `PreToolUse`; `hooks/dispatch.ts` (module `hooks`) is the only c
       - `argv0` lowercased is `gradlew`, `gradle`, `mvnw`, `mvn`, `sbt` (word-boundary already guaranteed by the
         lexer's token split) → deny (`kind:"build"`).
       - none of the above for any command → continue.
-   d. If no command denied: if the full command is "structurally bounded" (its single top-level pipeline has no
-      `op`/`io` tokens at all and `argv0` is one of a fixed small set: `pwd`, `whoami`, `git status`, a
-      `--version`/`-v`-only probe) → `{kind:"allow"}` (no hint). Else → throttled hint (`{kind:"hint", text:
-      BASH_HINT, onceKey: "bash:"+ev.sessionId}`) — `hooks/throttle.ts` (module `hooks`) is what actually enforces
-      "once per session" by `onceKey`; `decide.ts` always returns the hint decision, never checks the marker
-      itself.
+   d. If no command denied: if the full command is "structurally bounded" (DECISIONS-r9 E4; its single top-level
+      pipeline has no `op`/`io` tokens at all and `argv0` is one of: `pwd`, `whoami`, `uname`, `id`, `realpath`,
+      `ln`, `git status`, a `--version`/`-v`-only probe, or `cp`/`mv`/`rm` with no `-v`/`--verbose` flag among its
+      `args`) → `{kind:"allow"}` (no hint). `cp -v a b` and `rm --verbose x` are not in this set (the `-v`/
+      `--verbose` flag excludes them) and fall through to the hint below. Else → throttled hint (`{kind:"hint",
+      text: BASH_HINT, onceKey: "bash:"+ev.sessionId}`) — `hooks/throttle.ts` (module `hooks`) is what actually
+      enforces "once per session" by `onceKey`; `decide.ts` always returns the hint decision, never checks the
+      marker itself. (DECISIONS-r9 E5: the throttle key is `ev.sessionId` only, never a ppid; a `ev.sessionId` an
+      adapter failed to decode is treated as the literal string `"unknown"`, so every call in that run shares one
+      `onceKey` and still gets exactly one hint, never a hint per call.) (DECISIONS-r9 E3:
+      `CONTEXT_MODE_BASH_NUDGE_MIN_COMMAND_BYTES` from v1 is not ported — no code in this module reads it; a short
+      command gets the same once-per-session hint as a long one.)
 6. If `canonical === "Read"`: when `input.offset` and `input.limit` are both absent and file size `> OUTPUT_CAP` →
    `{kind:"deny", reason: READ_DENY_MESSAGE(path, size), onceKey: none}` (stateless, every call — ADR-0008 "Read:
    hint to deny"). `READ_DENY_MESSAGE(path, size)` returns: `"context-mode: this file is {size} bytes, more than
@@ -391,8 +461,11 @@ model used the exact alternative" (`[V] live on Haiku`). `covers: src/core/polic
 | `cat big.log` (no Read tool host, file > `OUTPUT_CAP`) | deny, same `READ_DENY_MESSAGE` |
 | `curl … \| jq '.data'` | allow (§2.4) |
 | `curl … \| jq 'length'` | allow (§2.4) |
-| a `[[ ... ]]` command containing `curl` | deny per Q4 (a deny pattern could match an unparsed construct) |
-| a `[[ ... ]]` command with no curl/HTTP token and no matching user deny pattern | allow per Q4 |
+| `[[ -f a.txt ]] && echo ok` | allow, no `ParseError` (DECISIONS-r9 P1/P4) |
+| `echo $((1+1))` | allow, no `ParseError` |
+| `deploy() { curl -s https://x.io/a.json; }; deploy` | deny (curl found inside the function body, §2.2) |
+| `case "$1" in x) curl -s https://x.io/a.json;; esac` | deny (curl found inside a case branch body, §2.2) |
+| `echo "unterminated` | `ParseError`, Q4 verdict |
 
 `covers: src/core/policy/decide.ts`.
 
@@ -400,6 +473,10 @@ model used the exact alternative" (`[V] live on Haiku`). `covers: src/core/polic
 
 - **LV:** "deny reached the model as an is_error tool result, and the model used the exact alternative" — proven
   live on Haiku per ADR-0008; re-run under `e2e/live/run.mjs` at `LIVE_MODEL`/`LIVE_EFFORT` (ADR-0017).
+- **T-ROUTE (DECISIONS-r9 V6, ADR-0008 "Open"):** live check that route hints/denies fire in the order the rule
+  table above lists them (user-deny first, then WebFetch/curl/http/build, then Read, then Grep, then the other-MCP
+  hint) across the same session, so an earlier rule's hint never masks a later rule's deny. Spec in `14-tests.md`
+  §6.
 
 ### 6.5 What this module does not own
 
@@ -439,3 +516,26 @@ returns the same `Decision` shape regardless of agent; only `encode()` branches 
   safely — assuming `Bash`'s presence would be exactly the "fallback chain" PRD P1 forbids. Reason: no-fallback-
   chain principle outweighs the looser ADR-0016 wording; once LV8 ships a table row, `toolSet` becomes non-null and
   step 1 no longer applies.
+- **B5 (matcher-regex algorithm referenced by B3, owned by `00-architecture`/`10-adapters`/`build-release`,
+  recorded here only because B3 names the same hook gate):** this file never builds the `settings.json` `matcher`
+  string — `build/manifests.ts` (module `build-release`) does, from each `AdapterRow.nativeTools` plus
+  `row.toolNamePrefix` (DECISIONS-r9 R4). For completeness, since an implementing agent reading B3/B4 together
+  could otherwise guess: the generated matcher is
+  `"^(" + nativeTools[shell,read,grep,webfetch,edit].flat().map(escapeRegExp).join("|") + "|" + escapeRegExp(row.toolNamePrefix) + "ctx_.*)$"`
+  — every native tool name for that row is regex-escaped and alternated, then one more alternative matches the
+  agent's own ctx-tool prefix followed by `ctx_` and anything (so both the native `Bash`/`Read`/… calls and this
+  server's own `ctx_*` tool calls hit the hook). A row with no `nativeTools` for a given hook point (e.g. a host
+  with no native `Grep`) simply contributes nothing for that slot; the alternation never contains an empty branch
+  (`escapeRegExp` is run per name, not per empty array). `toolSet === null` (§5.1 step 1) never changes the
+  generated matcher — the matcher is a build-time string from the adapter table, not a per-call runtime check;
+  `toolSet` only affects `pickSubagentCase`'s A/B/C pick after a call has already matched and the hook already
+  fired.
+
+## Changes
+
+- 2026-10-16 (DECISIONS-r9): R1 `toolNamePrefix` sourced from `AdapterRow`, no literal (§5.1); `[[`/`((`/`case`/
+  function parsed not `ParseError`'d (P1-P4, §1 step 7, §2.2, §2.3, §6.3); E2 `REQUIRE_SECURITY_ENV` fail-closed
+  path added (§4.1, §6.1 step 3); E3 nudge threshold documented as not ported (§6.1 step 5d); E4 bounded-command
+  set extended (§6.1 step 5d); E5 throttle key is `session_id` only, no ppid fallback (§6.1 step 5d); V17 Read
+  deny-path glob rules added (§4.2); B4 `toolSet === null` resolved to always `"C"` (§5.1); B5 matcher-regex
+  algorithm recorded for cross-reference (Assumptions).

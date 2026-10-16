@@ -7,7 +7,7 @@ This is the map. Start here, then follow the links.
 - v2 is ready for implementation. The owner accepted `DECISIONS-r3.md` in full ("doğru, tamamı ok") and delegated the r4 fixes in `DECISIONS-r4.md`. All 17 ADRs are Accepted (one, ADR-0016, is Accepted as a requirement; its mechanism stays Proposed until live checks LV8–LV10 pass).
 - Three spikes are closed: S-NODE, S-TIMEOUT, and the ADR-0006 re-probe (`tickets/spikes-r5/`).
 - Five spikes stay open and gate specific milestones (§9 below).
-- No work starts on `main`. `v2` work happens on its own branch; `main` stays frozen until release (ADR-0011).
+- No work starts on `main`. `v2` work happens on its own branch named `v2`; `main` stays frozen until release (ADR-0011).
 
 ## 2. Doc map
 
@@ -45,6 +45,12 @@ This is the map. Start here, then follow the links.
 | 0016 | A subagent must never receive a large tool output either. | Accepted as a requirement; mechanism proposed |
 | 0017 | An E2E case at every step, on `claude-sonnet-5 --effort low`; v1 users keep a working setup through the switch. | Accepted |
 | 0018 | One architecture contract (`docs/v2/impl/00-architecture.md`), one file per module; implementers follow `docs/v2/impl/` file by file. | Accepted |
+
+## 2a. Glossary
+
+GS = global success gate (TECH-SPEC §1). G = gap row (TECH-SPEC §9). Q = DECISIONS-r3 question. D = DECISIONS-r6 decision. R = DECISIONS-r7/r9 row. GP = golden-path E2E case (TECH-SPEC §5). LV = live check. T = test spec.
+
+GS6 = hook budget: `HOOK_P95_MS` 40, `HOOK_CPU_OVER_NODE_MS` 20, `HOOK_COMBINED_P95_MS` 60.
 
 ## 3. Agents (10)
 
@@ -130,6 +136,7 @@ S-NODE, S-TIMEOUT and the ADR-0006 re-probe are closed; see `tickets/spikes-r5/`
 
 ## Changes
 
+- 2026-10-16 (r9, `docs/v2/review/DECISIONS-r9.md`, S8): §1 names the v2 code branch `v2` (G1); new §2a glossary for GS/G/Q/D/R/GP/LV/T and the GS6 hook-budget numbers (G4).
 - 2026-10-16 (r6, `docs/v2/review/DECISIONS-r6.md`): §5 gains the RRF, timeline-cursor and decision-trigger rows and the corrected v1 category count (19, not 26); new §5a table maps each v1 memory feature to its v2 replacement.
 - 2026-10-16 (r7, `docs/v2/review/DECISIONS-r7.md`): §5 RRF row gains the measured recall@5 numbers (0.48 vs v1's 0.27) and states that MMR gave no gain.
 - 2026-10-16 (r8, `docs/v2/review/DECISIONS-r8.md`): ADR-0008 row now reads "replaces the mechanisms that caused v1's bugs, including a Read deny (was hint-only)"; deny rules now stop 87.64% of large-output bytes, up from 0.11%.

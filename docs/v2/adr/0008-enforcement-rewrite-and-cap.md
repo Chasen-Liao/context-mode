@@ -29,7 +29,7 @@ No new deny categories are added. The r2 deny of any Bash call whose predicted o
 - Shell file dumps on hosts with no `Read` tool get the same test: the command parser (no regex) reads argv0 for `cat`, `head`, `tail`, `sed -n`, `less`, `jq`, `bat`, `more` on one file argument, runs `fs.stat` on it, and applies the same size test and reason as Read. A dump with an explicit bound (`head -n N`, `tail -n N`, `sed -n 'a,bp'`) is the shell form of a ranged Read and is allowed.
 - Non-goal: this does not predict size before the call; the hook has the real byte count already (`PreToolUse` for Claude Code's `Read` fires after the file is resolved but the server denies before it is returned to the model — same point v1 denied WebFetch at, item 10 above). No new deny categories, no regex: the rule is `size > OUTPUT_CAP && !offset && !limit`, an `if`, not a pattern.
 - Open (new): `READ_HINT_BYTES` (`51200`, `impl/01-contracts.md:84`) is retired in favor of `OUTPUT_CAP` for the deny threshold, so there is one cap, not two. The hint on ranged reads keeps using `OUTPUT_CAP` too, for the same reason.
-- Open (T4, `DECISIONS-r8.md`): live recovery through `ctx_execute(file)` or a ranged Read in >= 8/10 forced-read runs is unmeasured at the needed sample size (4/4 runs used bash grep instead, which the updated reason text now also names as a legal path). Owner decides whether to re-run at n=10 or accept bash grep as a third named success path.
+- Decided (T4, `DECISIONS-r9.md` V1): test spec `T-T4` counts all three named paths as recovery — a ranged `Read`, `ctx_execute(file)`, or a bounded shell search (`grep`, `tail`, …) — because the deny reason text already names all three. Milestone M1, n = 10 forced whole-file `Read` + 10 edits; pass if recovery by any named path ≥ 8/10, the correct answer ≥ 9/10, and the edit is done ≥ 9/10.
 
 ## What changes, and which issues each change fixes
 
@@ -76,7 +76,13 @@ ADR-0016's wrapper/replacement text describes its chunk selection as "the same s
 
 ## Parse errors
 
-Constructs the parser does not handle (`[[`, `((`, `case`, functions, process substitution) raise `ParseError(code)`. Result (Q4): deny when a user `permissions.deny` rule could match the command; allow only when the curl/HTTP rule is the only rule that could apply. GP3 lists every code and its verdict.
+(DECISIONS-r9 P1/P2) Only five constructs raise `ParseError(code)`: process substitution (`<( )`/`>( )`), an
+unterminated quote, an unterminated heredoc, `coproc`, `select`, and nesting past `MAX_NEST_DEPTH` (`32`). Result
+(Q4) for each: deny when a user `permissions.deny` rule could match the command; allow only when the curl/HTTP
+rule is the only rule that could apply. `[[ ]]`, `(( ))`, `case`/`esac`, and function definitions are **not**
+`ParseError` — the parser reads inside them: a `[[ ]]`/`(( ))` body is skipped (never a command), and every
+`case` branch body and every function body is parsed as a nested command list and checked by the normal curl/
+HTTP/build rules (`impl/08-enforcement.md` §2.2, §2.3). GP3 lists every code and its verdict.
 
 ## New scope beyond v1 parity (Q5)
 
@@ -96,7 +102,21 @@ v1 only detected curl/wget directly (`routing.mjs:735-765`). v2 unwraps `sudo`, 
 | WebFetch of a claude.ai artifact URL | allow | #1006 |
 | WebFetch from a subagent without ctx tools | per ADR-0016 case B/C, never a plain allow | #794 |
 | Claude Code with the server not connected | the tool runs | #173 |
-| Read of a 300 KB file | hint, not deny | — |
+| Read of a 300 KB file | deny (unranged) | — |
+| Read of a 300 KB file with `limit: 200` | allow | — |
+| `[[ -f a.txt ]] && echo ok` | allow, no ParseError | — |
+| `echo $((1+1))` | allow | — |
+| `deploy() { curl -s https://x.io/a.json; }; deploy` | deny | — |
+| `case "$1" in x) curl -s https://x.io/a.json;; esac` | deny | — |
+| `echo "curl \"https://x.io/a.json\""` | allow | — |
+| `diff <(curl -s https://x.io/a.json) <(echo x)` | deny | — |
+| `FOO=1 curl -s https://x.io/a.json` | deny | — |
+| `grep x <<< "$(curl -s https://x.io/a.json)"` | deny | — |
+| `echo "unterminated` | `ParseError`, Q4 verdict | — |
+| user deny `Read(//etc/**)` against `/etc/hosts` | deny | intern Q3 #1075 |
+| user deny `Read(~/secret/**)` against `$HOME/secret/a` | deny | intern Q3 #1075 |
+| user deny `Read(./x/**)` against `/x/a` | allow | intern Q3 #1075 |
+| 10 synthetic large `curl`, 10 `wget`, 5 build outputs, each `> OUTPUT_CAP` | deny 25/25 (M1) | A1c |
 | `sudo curl -s https://x.io/a.json` | deny | wrapper: `sudo` |
 | `env FOO=1 curl -s https://x.io/a.json` | deny | wrapper: `env` |
 | `time curl -s https://x.io/a.json` | deny | wrapper: `time` |
@@ -111,7 +131,9 @@ v1 only detected curl/wget directly (`routing.mjs:735-765`). v2 unwraps `sudo`, 
 
 ## Open
 
-- **Hook budget (GS6):** bare Node is 45.6 ms p95 on the owner's Mac, so command hooks cannot meet "p95 ≤ 40 ms wall". Proposal: "≤ 20 ms CPU on top of bare Node" for the command-hook agents; Claude Code uses `mcp_tool` and starts no process. **Open question for the owner** (not yet answered by DECISIONS-r3 Q1-Q19, despite being load-bearing for GS6/GP3 pass criteria): one ratified end-to-end wall-clock number per agent class. Once answered, this line changes from "Proposal" to a dated decision, so later lint/decisions passes treat GS6 as settled instead of re-finding it as open every round.
+- **Hook budget (GS6) — decided (`DECISIONS-r9.md` V14):** bare Node is 45.6 ms p95 on the owner's Mac, so command hooks cannot meet a flat "p95 ≤ 40 ms wall". Claude Code uses `mcp_tool` dispatch (no process spawn) and keeps `HOOK_P95_MS = 40` (`00-architecture.md` §3.2) as its wall-clock budget. Command-hook agents (every agent that spawns a process per hook call) instead meet `HOOK_CPU_OVER_NODE_MS = 20` (CPU time over bare Node, not wall clock) and `HOOK_COMBINED_P95_MS = 60` (wall clock, process start included). Test spec `T-GS6` (`14-tests.md` §6) measures both. This line is a dated decision; it does not go back to "Proposal."
+- **Route hint ordering (A3, A7) — decided (`DECISIONS-r9.md` V6):** test spec `T-ROUTE` (`impl/08-enforcement.md` §6.4, `14-tests.md` §6) is the live check for hint/deny ordering across routed tool calls; no further owner input is needed.
+- **Parallel batches and subagent output (A5, A6) — decided (`DECISIONS-r9.md` V7):** test specs `T-PAR` (parallel-batch denies, `impl/08-enforcement.md` item 7) and `T-SUB` (subagent output budget, item 5) close these; see `14-tests.md` §6.
 - LV7 (above), and deny compliance on Opus and Sonnet, run in the live harness (ADR-0012).
 - **Gap (cross-reference, owned by TECH-SPEC §9 G25 row):** OpenCode 2 has no v1 hook-fix history to validate against, so GP-LIVE-HOOKS for OpenCode 2 needs purpose-built test cases rather than regression replays of old issues.
 
@@ -121,5 +143,7 @@ ADR-0016's adapter table cell for Claude Code Case B is "`updatedInput` + `allow
 
 ## Changes
 
+- 2026-10-16 (DECISIONS-r9): parser scope narrowed to five `ParseError` codes (P1/P2), `[[`/`((`/`case`/function
+  now parsed not rejected (P1, P4 golden cases); GS6 hook budget decided (V14: `HOOK_P95_MS`/`HOOK_CPU_OVER_NODE_MS`/`HOOK_COMBINED_P95_MS` from `00-architecture.md` §3.2, no longer "Proposal"); A3/A7 route-hint ordering closed by `T-ROUTE` (V6); A5/A6 parallel-batch and subagent-output items closed by `T-PAR`/`T-SUB` (V7).
 - 2026-10-14 (fix-r4, owners.adr-b): Q5 reworded as new scope, not v1 parity, with per-wrapper GP3 cases (A6); Copilot CLI added to the per-adapter deny-row with its `modifiedArgs` support marked unverified (A13); the ADR-0016 selection claim and Case B table cell corrected by cross-reference (A33, B3); GS6 hook budget routed to the owner as an open question (B46); OpenCode 2 G25 gap cross-referenced (B18).
 - 2026-10-15: status set to Accepted. Folded r3's Q4 into "Parse errors" and Q5 (scope + GP3 wrapper cases) into a new "New scope beyond v1 parity" section and the GP3 table; Q2 (`OUTPUT_CAP = 16384`) was already in the "Cross-reference" section above; Q19's routing-parity and hint-ordering lines are owned by PRD §7 and ADR-0006, not repeated here. Removed the standalone r3 section.

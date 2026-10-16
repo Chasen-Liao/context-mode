@@ -39,7 +39,7 @@ Exactly one line is added to each of v1's two existing output paths:
 context-mode v2 is available: https://github.com/mksglu/context-mode/blob/main/README.md#upgrading-from-v1
 ```
 
-This is Assumption A1 (§6 below): ADR-0011 names the sentence ("context-mode v2 is available: <link to Upgrading from v1>") but not the literal URL. The link target is `README.md`'s §5 heading, anchored by GitHub's own heading-to-anchor rule (`## Upgrading from v1` → `#upgrading-from-v1`), because ADR-0011 §"d) npm deprecate" already names the README as "the main channel" and gives no second doc.
+This is Assumption A1 (§7 below): ADR-0011 names the sentence ("context-mode v2 is available: <link to Upgrading from v1>") but not the literal URL. The link target is `README.md`'s §5 heading, anchored by GitHub's own heading-to-anchor rule (`## Upgrading from v1` → `#upgrading-from-v1`), because ADR-0011 §"d) npm deprecate" already names the README as "the main channel" and gives no second doc.
 
 ### 1.3 Steps
 
@@ -223,7 +223,16 @@ None.
 
 ---
 
-## 6. Assumptions
+## 6. v1 env vars: kept or ignored (DECISIONS-r9 E2, E3)
+
+`README.md` §5's feature table lists each v1 env var's v2 fate so an upgrading user does not guess:
+
+| v1 env var | v2 fate | Why |
+|---|---|---|
+| `CONTEXT_MODE_REQUIRE_SECURITY` | kept, same name, now `REQUIRE_SECURITY_ENV` (00-architecture.md §3.2 constant) | E2: fail-closed opt-in. `=1` and the user's policy file cannot be read/parsed → deny every PreToolUse with `"context-mode: your deny rules could not be read. Fix: run ctx_doctor."`; unset → allow and log to stderr. |
+| `CONTEXT_MODE_BASH_NUDGE_MIN_COMMAND_BYTES` | ignored (not ported) | E3: v2 hints once per session (ADR-0008 item 7); a size threshold cannot re-nudge a small call, and v1's denies never depended on command size either. |
+
+## 7. Assumptions
 
 | # | Assumption | Reason |
 |---|---|---|
@@ -232,3 +241,7 @@ None.
 | A3 | `plantV1Install`'s fixture content is the literal file/path text from ADR-0011's v1-cleanup table per agent, not a byte-for-byte copy of any real v1 release artifact. | ADR-0011's table is the only source of truth for "what a v1 install leaves behind" available to this spec; no v1 fixture file is named in the sources list. |
 | A4 | Rollback commands for Copilot CLI, VS Code, Kiro and ZCode reinstall v1 via `npm install -g context-mode` plus hand-recreating the hook file "from the v1 release's own install step". | ADR-0011 marks these agents "test first, then document" and gives no rollback command; since their forward-install path is exactly "the agent's git install" after `npm uninstall -g` (ADR-0011 "npm users" row), the symmetric rollback is reinstalling the npm package that still carries the original install logic — the same reasoning ADR-0011 uses explicitly for Pi and OpenCode 2 (reverse the exact forward-install edit). |
 | A5 | The `repo-cleanup-gate` live case belongs to this module's case set even though its `id` does not match the `v1-migration-*` glob in 00-architecture.md §1. | 00's row for this module names `build/check-removed.mjs` as an owned file; a file with no proof case would violate this task's own rule ("every function names the E2E case that proves it"), so one local case is added under this module rather than left uncovered. |
+
+## Changes
+
+- 2026-10-16 (DECISIONS-r9, S8): added §6 naming each v1 env var's v2 fate (E2 `CONTEXT_MODE_REQUIRE_SECURITY` kept as `REQUIRE_SECURITY_ENV`, E3 `CONTEXT_MODE_BASH_NUDGE_MIN_COMMAND_BYTES` ignored); renumbered old §6 Assumptions to §7 and fixed its one cross-reference.

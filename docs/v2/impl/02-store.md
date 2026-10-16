@@ -20,6 +20,7 @@ All constants below are names from `src/core/contracts/constants.ts`. All error 
 | `RETENTION_SIZE_CAP_BYTES` | `524_288_000` (500 MB) | Assumption A-S2 below (Q7b) |
 | `OUTPUT_CAP` | `16384` | ADR-0008/ADR-0016 Q2 (store only reads this; owned by `sandbox`) |
 | `OWNER_PID_STALE_CHECK_MS` | `0` (no wait; liveness is checked at call time, never polled) | ADR-0002 decision 4 |
+| `PROJECT_DEAD_IDLE_DAYS` | `14` | DECISIONS-r9 V22 (Q8 #1024): project-level sweep threshold, distinct from the row-level `RETENTION_IDLE_DAYS` (30) |
 
 ## 1. `src/core/contracts/errors.ts` additions (store's entries)
 
@@ -98,6 +99,8 @@ export const DDL: string; // full CREATE TABLE/INDEX statements, versioned by mi
 
 ### 5.1 DDL (version 1, applied by migration step 1)
 
+Naming (DECISIONS-r9 M14): the `sources`/`chunks` tables below are "ContentStore". The `events` table above is "SessionDB" — it is read for other sessions in the same `context.db` by `readSessionEvents` (§11). "Auto-memory" is not a table here: it is the host's own memory files for this project, read through `resolveConfigDir` (§2), Claude Code only today, empty elsewhere. `05-tools-index.md` §6 uses these three names; this file is where their storage lives.
+
 ```sql
 PRAGMA journal_mode = WAL;
 PRAGMA busy_timeout = 5000; -- mirrors DB_TIMEOUT_MS, SQLite also needs this pragma, not just the driver option
@@ -130,6 +133,7 @@ CREATE TABLE IF NOT EXISTS sources (
   origin      TEXT NOT NULL,          -- the path/URL/label the caller passed
   bytes_total INTEGER NOT NULL,
   created_ts  INTEGER NOT NULL,
+  created_at  TEXT NOT NULL,          -- ISO-8601 UTC mirror of created_ts, DECISIONS-r9 M16: the one per-source timestamp ADR-0009 §8.1 rule 4 reads across sources/events/auto-memory
   accessed_ts INTEGER NOT NULL        -- bumped on every ctx_search hit against this source; drives retention
 );
 CREATE INDEX IF NOT EXISTS idx_sources_accessed ON sources(accessed_ts);
@@ -140,7 +144,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks USING fts5(
   worktree UNINDEXED,
   agent UNINDEXED,
   seq UNINDEXED,      -- order within the source
-  body
+  body,
+  tokenize = 'unicode61 remove_diacritics 2'  -- DECISIONS-r9 V24 (Q10 #1295): folds Cyrillic and accented Latin to base form; CJK has no word breaks under unicode61 and stays open, see Notes below
 );
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -153,6 +158,7 @@ Notes:
 - Every data row carries `session_id`, `worktree`, `agent` (ADR-0002 decision 1) — `chunks` carries them as `UNINDEXED` FTS5 columns so `fts.ts` can filter before ranking without a join.
 - `chunks.body` is capped at `MAX_CHUNK_BYTES` per row by the caller (`index/chunk.ts`, owned by `tools-index`); `schema.ts` does not enforce this, it is a write-time contract documented here because the column exists in this module.
 - `meta` holds single-key values, e.g. `pending_compact:<session_id>` (ADR-0009 §6) and `owner_checkpoint_at` bookkeeping; no other module creates tables here.
+- `chunks.tokenize` (DECISIONS-r9 V24): GP5 case is CJK text keeps no diacritics to strip and `unicode61` draws no word boundaries inside it, so a CJK query still under- or over-matches; issue #1295 stays open with this limitation noted, nothing here claims to fix it.
 
 ### 5.2 `applyMigrations(db, fromVersion)`
 
@@ -273,8 +279,8 @@ Steps, all inside one `withWrite`:
 Steps:
 1. `readdir(<configDir>/projects)`.
 2. For each `projectKey` directory, acquire an exclusive lock scoped to that directory: open (or create) `<dir>/.cleanup.lock` with `O_CREAT | O_EXCL`-then-retry semantics is not used — instead, open `context.db` with `openDb`-equivalent access and run the live-PID check and the delete **inside the same `withWrite` transaction** (ADR-0002 decision 4: "the live-PID check runs inside the same transaction/lock as the delete itself, not as a separate step").
-3. Inside that transaction: call `listLiveOwners`; if the result is non-empty, `ROLLBACK` (via returning early so `withWrite` commits a no-op) and skip this project.
-4. If empty: `closeDb`, then delete the whole `<configDir>/projects/<projectKey>` directory (`context.db`, `-wal`, `-shm`, `owners/`) recursively.
+3. Inside that transaction: call `listLiveOwners`. GP8 named case (DECISIONS-r9 V22, Q8 #1024): a live owner PID, whatever the age of `accessed_ts`, is never deleted — `ROLLBACK` (via returning early so `withWrite` commits a no-op) and skip this project. This is the whole rule; there is no separate age check when an owner is live.
+4. If `listLiveOwners` is empty: GP8's other named case — a dead PID (no live owner) with the project's most recent `accessed_ts` older than `PROJECT_DEAD_IDLE_DAYS` (14 days) is deleted. A dead PID whose project was touched inside that window is not deleted (skip this project, same as step 3). When both conditions hold (dead PID, past the window): `closeDb`, then delete the whole `<configDir>/projects/<projectKey>` directory (`context.db`, `-wal`, `-shm`, `owners/`) recursively.
 5. A project can never be deleted between step 3's check and step 4's delete because no other process can open a write transaction on the same file while this one holds `BEGIN IMMEDIATE` — step 3 and step 4 run in the same critical section, not two.
 6. Return the list of deleted `projectKey`s.
 
@@ -352,6 +358,7 @@ export function readEventBySeq(db: DbHandle, seq: number): EventRow | undefined;
 ### 11.1 `readSessionEvents`
 1. `SELECT * FROM events WHERE session_id = :session_id [AND kind = :kind] ORDER BY seq ASC` — read-only, no transaction needed (SQLite readers never block on `BEGIN IMMEDIATE` writers under WAL).
 2. An empty `session_id` returns `[]` (ADR-0009 §2: "An empty id means nothing is injected" — this file is where that guard lives for every caller).
+3. An unknown `session_id` (no matching rows) also returns `[]`; this function never falls back to "the latest session" for either an empty or an unknown id (DECISIONS-r9 F4, `11-server.md:180`). The stdio transport's own fallback session id, `"mcp:" + serverId`, is passed in here like any other `session_id` — one `StdioServerTransport` per process means that fallback id is never shared between two clients, so it never collides with another session's rows (v1 regression `7e6c243a`, PR #398: a global-latest-session fallback leaked one session's events into another's).
 
 ### 11.2 `readEventBySeq`
 1. `SELECT * FROM events WHERE seq = :seq` — this is the primary-key read behind `ctx_resume(seq:N)` (ADR-0009 §4: "a primary-key read of the whole row, so a pointer is never a dead end").
@@ -373,7 +380,11 @@ E2E: GP6 (`ctx_resume(seq: N)` resumes from a given pointer). `covers`: `src/cor
 ## Assumptions
 
 - A-S1: `RETENTION_IDLE_DAYS = 30`. ADR-0002 Q7/PRD §4 require "age since last access" but name no number; 30 days matches the owner's existing session-TTL lineage cited in DECISIONS-r4 I2-14 (939c5ca8) and is written here so `cleanup.ts` has a concrete cutoff.
-- A-S2: `RETENTION_SIZE_CAP_BYTES = 500 MB`. Q7b is explicitly still open (DECISIONS-r4 A71): no v1 commit sets a total-index cap, only `MAX_CHUNK_BYTES=4096` per chunk. 500 MB is picked as a safe desktop default so `cleanup.ts` has a real cap to enforce; listed here as owner-pending, not derived from any cited source.
+- A-S2: `RETENTION_SIZE_CAP_BYTES = 524_288_000` (500 MB), decided, not a placeholder. DECISIONS-r9 S3 (intern question): no owner/user message sets this value; Q7b stays open at DECISIONS-r4 A71 and no later round changes it. The smallest rule consistent with the docs is to keep the one number already named in this file's own constants table (§0) and state it as fixed, so `cleanup.ts` has one real cap and no second number is introduced. If the owner sets a different cap later, change only this line and the §0 row; both cite the same value by name, never by literal, elsewhere in the codebase.
 - A-S3: `ctx_doctor`'s lossless `healLossless` (`VACUUM INTO` before rename-and-recreate) described in ADR-0010 D8 and PRD-v2.md:122 is **not** implemented in this module. ADR-0002 §3 and DECISIONS-r4 A57 state the named decision as hard-error + rename-aside only, with no mid-session self-heal; D8's `healLossless` branch belongs to `tools-ops`'s `ctx_doctor` file (`00-architecture.md` owner column), not `store`, and is out of scope for this spec. `store/db.ts` only ever renames-aside-and-fails-over to `ctx_doctor`; it never runs `VACUUM INTO` itself.
 - A-S4: `events.turn` and `sources.accessed_ts`/`created_ts` are stored as integer Unix milliseconds (`Date.now()`), matching ADR-0009's "age = current turn − item turn" integer arithmetic; no ADR states the unit explicitly.
 - A-S5: `owners/<serverId>.pid` liveness check uses `process.kill(pid, 0)` (signal-0 probe), not a `ps` spawn, to satisfy PRD P5 (idle server/liveness checks must not spawn processes); ADR-0002 names the file but not the liveness mechanism.
+
+## Changes
+
+- DECISIONS-r9: §5.1 names ContentStore/SessionDB/auto-memory (M14); `sources.created_at` added (M16); §8.1 adds the GP8 live-PID named case (V22); §5.1 `chunks.tokenize` set to `unicode61 remove_diacritics 2` with the CJK note (V24); §11.1 `readSessionEvents` never falls back to the latest session (F4); Assumptions A-S2 settles `RETENTION_SIZE_CAP_BYTES` as decided, not a placeholder (intern question).

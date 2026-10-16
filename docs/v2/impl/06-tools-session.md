@@ -13,30 +13,34 @@ Write code in this order, because each file is a direct dependency of the next:
 
 All six files import only from `src/core/contracts/*`, `src/core/store/*`, `src/core/journal/*`, `src/core/project/*`. No file in this module opens a DB connection directly — all reads/writes go through `openDb()` / `withWrite()` from `src/core/store/db.ts` (00-architecture.md §1, "one path, no fallback chains", PRD P1).
 
-Every constant below is a name in `src/core/contracts/constants.ts`. This spec is the first writer of that file's session-module slice; add the named constants there if they are not already present, with exactly these names and values.
+This module owns none of its own constants (DECISIONS-r9 §C). Every value below is defined once in `src/core/contracts/constants.ts` §3.2 (owned by `impl/00-architecture.md`); this file only cites the name.
 
-| Constant | Value | Source |
+| Name used here | Was named (now retired) | Source |
 |---|---|---|
-| `COMPACTION_BUDGET_BYTES` | `2048` | ADR-0009 §4 |
-| `MAX_CANDIDATES_PER_SECTION` | `85` | ADR-0009 §2 (⌊2048/24⌋) |
-| `MAX_CANDIDATES_TOTAL` | `340` | ADR-0009 §4 |
-| `POINTER_THRESHOLD_BYTES` | `640` | ADR-0009 §4 |
-| `SCORE_WEIGHT_OPEN_ERROR` | `900` | ADR-0009 §3 |
-| `SCORE_WEIGHT_PROMPT` | `500` | ADR-0009 §3 |
-| `SCORE_WEIGHT_EDIT` | `400` | ADR-0009 §3 |
-| `SCORE_WEIGHT_INDEX` | `200` | ADR-0009 §3 |
-| `DECAY_HALF_LIFE_TURNS` | `4` | ADR-0009 §3 |
-| `RATIO_SECTION_DECAY` | `0.7` | ADR-0009 §4 |
+| `STATE_BUDGET` | `COMPACTION_BUDGET_BYTES` | 00 §3.2, value `2048`, ADR-0009 §4 |
+| `MAX_CANDIDATES` | `MAX_CANDIDATES_PER_SECTION` | 00 §3.2, value `85` (⌊2048/24⌋), ADR-0009 §2 |
+| `MAX_CANDIDATES_TOTAL` | — | 00 §3.2, value `340`, ADR-0009 §4 |
+| `POINTER_MIN` | `POINTER_THRESHOLD_BYTES` | 00 §3.2, value `640`, ADR-0009 §4 |
+| `WEIGHT.toolerr` | `SCORE_WEIGHT_OPEN_ERROR` | 00 §3.2, value `900`, ADR-0009 §3; feeds the `open_errors` section from `cmd`/`toolerr` rows (DECISIONS-r9 F2) |
+| `WEIGHT.prompt` | `SCORE_WEIGHT_PROMPT` | 00 §3.2, value `500`, ADR-0009 §3 |
+| `WEIGHT.edit` | `SCORE_WEIGHT_EDIT` | 00 §3.2, value `400`, ADR-0009 §3 |
+| `WEIGHT.index` | `SCORE_WEIGHT_INDEX` | 00 §3.2, value `200`, ADR-0009 §3 |
+| `DECAY_HALF_LIFE_TURNS` | — | 00 §3.2, value `4`, ADR-0009 §3 |
+| `DECAY_X1000` | — | 00 §3.2, a checked-in 128-entry integer array, ADR-0009 §3; entry `i` = `Math.round(1000 * (0.25 + 0.75 * 2 ** (-i / DECAY_HALF_LIFE_TURNS)))`; age past 127 uses entry 127 (M6) |
+| `RATIO_SECTION_DECAY` | — | 00 §3.2, value `0.7`, ADR-0009 §4 |
+| `RESUME_CAP` | — | 00 §3.2, value `2048` (same bytes as `STATE_BUDGET`, separate name because it bounds `ctx_resume()`'s no-`seq` reply, not the render budget; V21, issue #1022) |
 | `OUTPUT_CAP` | `16384` | PRD §8, Q2 — reused, not redefined, by `ctx_stats` and `ctx_purge` replies |
 | `DOCTOR_REPORT_CAP_BYTES` | `4096` | PRD §13 — referenced only as the sibling cap in error text; owned by `tools-ops` |
 
+Every step below names the current column; do not use a retired name in new code.
+
 ## Shared types (owned by `contracts`, consumed here)
+
+`EventKind` (7 values: `"prompt" | "edit" | "cmd" | "toolerr" | "index" | "cost" | "decision"`, ADR-0009 §8.2) is owned by `src/core/contracts/types.ts` §3.1. This module **imports** it (`import type { EventKind } from "../contracts/types"`) and does not redefine it — a local 6-value copy is a bug (DECISIONS-r9 F2/F8).
 
 Add to `src/core/contracts/types.ts` if absent. This module treats these as read-only inputs:
 
 ```ts
-export type EventKind = "prompt" | "edit" | "cmd" | "toolerr" | "index" | "cost";
-
 export interface EventRow {
   seq: number;
   sessionId: string;
@@ -99,7 +103,7 @@ export function buildCandidates(
 - `upToSeq`: the highest `seq` to include (the compaction turn boundary, GP6 "byte-identical across every request within a turn").
 
 ### Output
-An array of `Candidate`, unsorted across sections, each section internally in `seq` ascending order, capped at `MAX_CANDIDATES_PER_SECTION` per section and `MAX_CANDIDATES_TOTAL` overall (drop the oldest `seq` first when a section is over cap, since the newest rows are always more relevant — ADR-0009 §2 names the cap but not the drop order; this is an Assumption, see end of file).
+An array of `Candidate`, unsorted across sections, each section internally in `seq` ascending order, capped at `MAX_CANDIDATES` per section and `MAX_CANDIDATES_TOTAL` overall (drop the oldest `seq` first when a section is over cap, since the newest rows are always more relevant — ADR-0009 §2 names the cap but not the drop order; this is an Assumption, see end of file).
 
 ### Steps
 
@@ -109,8 +113,8 @@ An array of `Candidate`, unsorted across sections, each section internally in `s
 4. Build **changed files**: for every distinct `path` among rows with `kind = 'edit'`, take the latest row (last write wins) and the count of rows sharing that `path` as `repeatCount`. One `Candidate` per `path`, `section: "changed_files"`.
 5. Build **earlier requests**: every `kind = 'prompt'` row except the one chosen in step 2. One `Candidate` per row, `section: "earlier_requests"`.
 6. Build **indexed sources**: every `kind = 'index'` row, one `Candidate` per row (by `key`, the index source label), `section: "indexed_sources"`.
-7. For each candidate, set `bytes = Buffer.byteLength(text, "utf8")` where `text` is the exact rendered line for that row (see `render.ts` §5 for the per-section line format — `candidates.ts` builds `text` using the same format so `score.ts`/`render.ts` never reformat).
-8. For each section, if its candidate count exceeds `MAX_CANDIDATES_PER_SECTION`, keep the `MAX_CANDIDATES_PER_SECTION` candidates with the highest `seq` and drop the rest.
+7. For each candidate, build `text` using the exact per-section line format from `render.ts` §3 (M4: `last_request` → `now: <body>`; `open_errors` → `error #<seq> <tool>: <key>`; `changed_files` → `edited <path> x<repeatCount>`; `earlier_requests` → `asked #<seq>: <body>`; `indexed_sources` → `indexed <key>`; the row's `body` is its first line only, with `\n`/`\r` folded to a single space). Section headers are never rendered; section order alone carries meaning. Set `bytes = Buffer.byteLength(text, "utf8")`; assert `bytes >= 1` (M9 — every format above has a non-empty prefix, so an empty line can never occur).
+8. For each section, if its candidate count exceeds `MAX_CANDIDATES`, keep the `MAX_CANDIDATES` candidates with the highest `seq` and drop the rest.
 9. Concatenate all five sections' candidates. If the total exceeds `MAX_CANDIDATES_TOTAL`, drop the lowest-`seq` candidates, keeping `last_request` pinned regardless of its `seq`.
 10. Return the array.
 
@@ -118,7 +122,7 @@ An array of `Candidate`, unsorted across sections, each section internally in `s
 This function never throws on a well-formed `db` handle. A DB-open failure is the caller's (`resume.ts`) problem, not this function's — it receives an already-open `db`.
 
 ### Constants used
-`MAX_CANDIDATES_PER_SECTION`, `MAX_CANDIDATES_TOTAL`.
+`MAX_CANDIDATES`, `MAX_CANDIDATES_TOTAL`.
 
 ---
 
@@ -137,7 +141,7 @@ export function scoreCandidates(
 
 ### Steps
 
-1. For each candidate, pick `w` by section: `last_request` and `earlier_requests` → `SCORE_WEIGHT_PROMPT`; `open_errors` → `SCORE_WEIGHT_OPEN_ERROR`; `changed_files` → `SCORE_WEIGHT_EDIT`; `indexed_sources` → `SCORE_WEIGHT_INDEX`.
+1. For each candidate, pick `w` by section: `last_request` and `earlier_requests` → `WEIGHT.prompt`; `open_errors` → `WEIGHT.toolerr`; `changed_files` → `WEIGHT.edit`; `indexed_sources` → `WEIGHT.index`.
 2. `age = max(0, currentTurn - candidate.turn)`.
 3. Compute `decayTable`: a checked-in integer lookup indexed by `age`, precomputed once at module load as `Math.round(1000 * (0.25 + 0.75 * 2 ** (-age / DECAY_HALF_LIFE_TURNS)))` for `age` in `0..127`, clamped to the `age = 127` value beyond that (ADR-0009 §3: "a checked-in integer table"). This keeps the formula integer-only at call time.
 4. `decay = decayTable[min(age, 127)]`.
@@ -150,7 +154,7 @@ export function scoreCandidates(
 None. `currentTurn < candidate.turn` cannot happen from `buildCandidates` output; if it does (caller bug), `age` clamps to 0 rather than going negative.
 
 ### Constants used
-`SCORE_WEIGHT_OPEN_ERROR`, `SCORE_WEIGHT_PROMPT`, `SCORE_WEIGHT_EDIT`, `SCORE_WEIGHT_INDEX`, `DECAY_HALF_LIFE_TURNS`.
+`WEIGHT.toolerr`, `WEIGHT.prompt`, `WEIGHT.edit`, `WEIGHT.index`, `DECAY_HALF_LIFE_TURNS`.
 
 ---
 
@@ -168,18 +172,18 @@ export function renderState(
 ): string;
 ```
 
-Returns the exact `<context_mode_state>` block, ≤ `COMPACTION_BUDGET_BYTES` UTF-8 bytes.
+Returns the exact `<context_mode_state>` block, ≤ `STATE_BUDGET` UTF-8 bytes.
 
 ### Steps (budgeted lazy greedy, ADR-0009 §4)
 
 1. Separate the pinned `last_request` candidate (if present) from the rest.
-2. `used = 0` (bytes). If the pinned candidate exists, append its line, `used += pinned.bytes + 1` (newline), regardless of ratio — it is always taken first.
+2. `reserved` = the byte length of the open tag line, the close tag line, and an empty `more: ctx_search(queries:[],scope:"session")` line (M12 — reserved before any item is placed, so the wrapper and an empty `more:` line always fit). `budget = STATE_BUDGET - reserved`. `used = 0` (bytes). If the pinned candidate exists, append its line, `used += pinned.bytes + 1` (newline), regardless of ratio — it is always taken first.
 3. For every remaining candidate, maintain a per-section counter `k` starting at 0, incremented each time a candidate from that section is taken. Compute `ratio = candidate.score * (RATIO_SECTION_DECAY ** k) / candidate.bytes`.
-4. Sort remaining candidates by `ratio` descending. This sort is recomputed once up front using `k = 0` for all (ADR-0009 §4 names ratio order, not a re-sort per pick); ties break by ascending `seq` for determinism (GP6 "same rows → same bytes").
+4. Sort remaining candidates by `ratio` descending. This sort is recomputed once up front using `k = 0` for all (ADR-0009 §4 names ratio order, not a re-sort per pick); ties break by descending `seq` for determinism (M25 — newest first; fixes this file's earlier "ascending" text).
 5. Walk the sorted list once. For each candidate:
-   a. If `candidate.bytes > POINTER_THRESHOLD_BYTES`, replace its line with a pointer line: `` #<seq> (<bytes> B) ctx_resume(seq:<seq>) `` and use the pointer's own byte length for the budget check (ADR-0009 §4: "An item over 640 B is never cut. It becomes a pointer line.").
-   b. If `used + lineBytes + 1 <= COMPACTION_BUDGET_BYTES`, take it: append the line to its section's output, `used += lineBytes + 1`, increment that section's `k`.
-   c. Otherwise skip it and continue (ADR-0009 §4: "An item that does not fit is skipped, and smaller ones may still fit.").
+   a. If `candidate.bytes > POINTER_MIN`, replace its line with a pointer line: `` #<seq> (<bytes> B) ctx_resume(seq:<seq>) `` and use the pointer's own byte length for the budget check (ADR-0009 §4: "An item over 640 B is never cut. It becomes a pointer line.").
+   b. If `used + lineBytes + 1 <= budget`, take it: append the line to its section's output, `used += lineBytes + 1`, increment that section's `k`.
+   c. Otherwise skip it, add its `more:` query (M11, next step) and continue (ADR-0009 §4: "An item that does not fit is skipped, and smaller ones may still fit.").
 6. Assemble the fixed section order: `last_request`, `open_errors`, `changed_files`, `earlier_requests`, `indexed_sources`; within a section, lines in ascending `seq` order (ADR-0009 §5).
 7. Wrap:
 ```
@@ -188,14 +192,14 @@ Returns the exact `<context_mode_state>` block, ≤ `COMPACTION_BUDGET_BYTES` UT
 more: ctx_search(queries:[…], scope:"session")
 </context_mode_state>
 ```
-The `more:` line's `queries` array is the `key`/`path`/`source` text of every candidate dropped in step 5c, deduplicated, in `seq` order, capped so the whole line still fits inside the remaining budget — if the exact line would push `used` over `COMPACTION_BUDGET_BYTES`, truncate the array (never the string inside it) until it fits, or omit the line if even an empty-array `more: ctx_search(queries:[],scope:"session")` would not fit (it always fits, since the budget check in step 5 already reserved room — see Assumption A-render-1).
+The `more:` line's `queries` array (M11) holds one entry per candidate dropped in step 5c: `key` for an `open_errors` or `indexed_sources` candidate, `path` for a `changed_files` candidate; a dropped `last_request`/`earlier_requests` (prompt) candidate adds no query. Dedup by exact string match. Order the surviving entries by ascending `seq` of the candidate that produced them. The array fills the `reserved` bytes computed in step 2 (M12): add entries, in that order, while the line still fits in `reserved`; stop and keep the array as built so far once the next entry would not fit — the wrapper plus an empty `more:` line always fits because `reserved` already covers that case.
 8. Return the assembled string. No clock, no user role, bare tool names (ADR-0009 §5).
 
 ### Errors
 None — this is a pure function over already-validated input.
 
 ### Constants used
-`COMPACTION_BUDGET_BYTES`, `POINTER_THRESHOLD_BYTES`, `RATIO_SECTION_DECAY`.
+`STATE_BUDGET`, `POINTER_MIN`, `RATIO_SECTION_DECAY`.
 
 ---
 
@@ -225,7 +229,7 @@ export async function ctxResume(
 2. Resolve `sessionId = input.session ?? currentSessionIdFromMeta(project)`. A missing session id with no current-session fallback returns `{isError: true, text: "ctx_resume: no session id — pass session or call from an active session."}`.
 3. Open `db = openDb(project)` read-only.
 4. If `input.seq` is a number: run `SELECT * FROM events WHERE session_id = :sessionId AND seq = :seq`. Zero rows → `{isError: true, text: "ctx_resume: no row at seq <seq> for this session."}`. One row → return `{text: row.body}` verbatim (this is the primary-key pointer read, ADR-0009 §4 "`ctx_resume(seq:N)` is a primary-key read of the whole row").
-5. Otherwise (no `seq`): this is the on-demand path for the 2,048 B state block (DECISIONS-r6 D6). Find `upToSeq = MAX(seq) FROM events WHERE session_id = :sessionId`. No rows at all → `{text: "ctx_resume: no journal rows for this session yet."}` (not an error — a fresh session has nothing to resume). `ctx_resume()` with no `seq` is the single call every agent uses to get the block: a `"host"` adapter (`compactSummary: "host"`, e.g. Claude Code) calls it only when the model asks, after its one pointer line; a `"none"` adapter (every other agent, per `impl/10-adapters.md` §1.3) calls it through its own `compactDelivery` path (ADR-0009 §6) right after compaction. The D1 algorithm and constants below (steps 6-9) are the same call either way.
+5. Otherwise (no `seq`): this is the on-demand path for the state block (DECISIONS-r6 D6), bounded by `RESUME_CAP` (`2048` B, same value as `STATE_BUDGET`, V21 — not the v1 figure of 196 KB named in the old report, issue #1022). Find `upToSeq = MAX(seq) FROM events WHERE session_id = :sessionId`. No rows at all → `{text: "ctx_resume: no journal rows for this session yet."}` (not an error — a fresh session has nothing to resume). `ctx_resume()` with no `seq` is the single call every agent uses to get the block: a `"host"` adapter (`compactSummary: "host"`, e.g. Claude Code) calls it only when the model asks, after its one pointer line; a `"none"` adapter (every other agent, per `impl/10-adapters.md` §1.3) calls it through its own `compactDelivery` path (ADR-0009 §6) right after compaction. The D1 algorithm and constants below (steps 6-9) are the same call either way.
 6. `candidates = buildCandidates(db, sessionId, upToSeq)`.
 7. `currentTurn = the `turn` value of the row at `upToSeq``.
 8. `scored = scoreCandidates(candidates, currentTurn)`.
@@ -334,15 +338,15 @@ None beyond the DB layer's own timeout constant (owned by `store`, not redefined
 
 ## Assumptions
 
-- A-section-cap-drop: ADR-0009 §2 caps each section at `MAX_CANDIDATES_PER_SECTION` but does not say which candidates to drop when a section is over cap. This spec drops the oldest `seq` first, because the render step already favors recency through the age-decay score, so dropping old candidates before scoring avoids wasted score computation on items that would lose the ratio sort anyway.
+- A-section-cap-drop: ADR-0009 §2 caps each section at `MAX_CANDIDATES` but does not say which candidates to drop when a section is over cap. This spec drops the oldest `seq` first, because the render step already favors recency through the age-decay score, so dropping old candidates before scoring avoids wasted score computation on items that would lose the ratio sort anyway.
 - A-score-table-range: ADR-0009 §3 names a "checked-in integer table" for decay but not its size. This spec fixes it at `age` 0..127 (clamped beyond), because 128 turns covers every realistic single session and keeps the table small and deterministic.
 - A-stats-cost-bytes: PRD §12 gives the `saved` formula but not which journal rows carry `bytesProduced`/`bytesReturned`. This spec uses one `cost`-kind row per tool call (Assumption A7 in 00-architecture.md already adds this kind), written once by the handler at return time, matching ADR-0009 §0's single-write-path rule.
 - A-stats-dedup-mechanism: I1-14 requires turn-keyed idempotency but does not name the SQL mechanism. This spec uses `INSERT OR IGNORE` on a `(session_id, turn)` partial unique index for `kind = 'cost'` rows, in `appendEvent()` (owned by `store`, not this module) — `stats.ts` itself does no de-duplication at read time.
 - A-purge-no-dual-hash: v1's `purgeSession()` swept both a canonical and a legacy raw-casing hash because of a mid-life case-fold migration (v1 commit history). v2's single `projectKey` scheme (A5, 00-architecture.md) has no legacy variant, so `purge.ts` deletes rows by SQL `WHERE`, not by sweeping files on disk — v2 has one `context.db` per project, not per-session sidecar files, so the whole file-sweep shape of v1's module does not carry over; this is a deliberate simplification, not a gap.
-- A-render-more-line-fit: step 7 of `render.ts` asserts the `more:` line always fits. This holds because steps 1–5 only fill up to `COMPACTION_BUDGET_BYTES` minus nothing reserved for the `more:` line; to make the assertion true, `render.ts` must reserve `64` bytes (an empty `more: ctx_search(queries:[],scope:"session")` line's exact byte length) before running the greedy walk in step 5 — i.e. step 5's budget check uses `COMPACTION_BUDGET_BYTES - 64`, not the raw constant. This 64-byte reservation is not named in ADR-0009 and is this file's own addition to make the renderer always terminate successfully.
 
 ---
 
 ## Changes
 
+- DECISIONS-r9: constants renamed to the 00-architecture names (`STATE_BUDGET`, `MAX_CANDIDATES`, `POINTER_MIN`, `WEIGHT.*`, `RESUME_CAP` added); `EventKind` now imported from `contracts` (7 kinds, `decision` added) instead of a local 6-value redefinition; open-errors section scoped to `cmd`/`toolerr` rows with `ok=0` only, `cost`/`decision` never candidates (F2, F8); `ctx_resume()`'s no-`seq` reply bounded by `RESUME_CAP` (V21); added the exact per-section line formats and the `bytes >= 1` assert (M4, M9); render tie-break fixed to descending `seq` (M25); `more:` query build rule — dedup, `key`/`path` source, no query from a prompt (M11) — and its byte budget reserved up front as `STATE_BUDGET - reserved` (M12), replacing the old 64-byte assumption.
 - DECISIONS-r6 D6: `ctx_resume()` called with no `seq` (§4 step 5) is now named as the on-demand path for the 2,048 B block, used by both `compactSummary: "host"` agents (after their own one-line pointer) and `compactSummary: "none"` agents (through their ADR-0009 §6 delivery path). The D1 algorithm and constants are unchanged.

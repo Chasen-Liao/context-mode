@@ -48,6 +48,9 @@ Rules per field, each citing its source:
 | `ToolDef<I>` | `alwaysLoad` | `true` only for `ctx_execute` | ADR-0006 |
 | `AdapterRow` | `denyChannel` | `"deny-reason"` for hosts that read a hard deny reason; `"hint-only"` for hosts with no deny channel | ADR-0001 §4, README §6 Gaps |
 | `AdapterRow` | `compactSummary` | `"host"` (Claude Code, verified): inject only `COMPACT_POINTER_LINE` after compaction, no state block — `ctx_resume()` with no `seq` returns the 2,048 B block on demand. `"none"` (every other agent): inject the 2,048 B D1 block through that agent's ADR-0009 §6 delivery path, until its LV-COMPACT live check (M3) proves the host writes its own summary | DECISIONS-r6 D6, tickets/memory-r6/eval/results.md |
+| `AdapterRow` | `toolNamePrefix` | Codex is `"mcp__context_mode__"` (underscore): Codex replaces every char that is not ASCII alnum or `_` with `_` in the server name; all other hosts keep the hyphen form | DECISIONS-r9 R1 |
+| `AdapterRow` | `nativeTools` | `{ shell: string[]; read?: string[]; grep?: string[]; webfetch?: string[]; edit?: string[] }`; feeds the generated PreToolUse/PostToolUse matcher `^(<all nativeTools values>|<escaped toolNamePrefix>ctx_.*)$` and the in-body filter for hosts with no host-side matcher | DECISIONS-r9 R4 |
+| `AdapterRow` | `execReadOnlyHint` | `boolean`; `true` only for `codex`, sets `annotations.readOnlyHint = true` on `ctx_execute`; every other row is `false` | DECISIONS-r9 R5 |
 
 No type in this file has an optional field that is also used to pick between two runtime paths (P1): optionality here only ever means "this event/host does not carry this field," never "pick path A or B."
 
@@ -92,6 +95,13 @@ Exports every row of the table below, by the exact name in column 1. No other mo
 | `LIVE_EFFORT` | `string` | `"low"` | ADR-0017 |
 | `LIVE_BUDGET_USD` | `number` | `0.25` | ADR-0017 |
 | `LIVE_SKIP_LIMIT` | `number` | `3` | ADR-0013 |
+| `SYNC_INDEX_MAX_BYTES` | `number` | `65536` | DECISIONS-r9 F1, `out/r9/perf-f1.md` |
+| `RATIO_SECTION_DECAY` | `number` | `0.7` | ADR-0009 §4; DECISIONS-r9 §C |
+| `MAX_CANDIDATES_TOTAL` | `number` | `340` | ADR-0009 §4; DECISIONS-r9 §C |
+| `SEARCH_PAGE_SIZE` | `number` | `20` | ADR-0009 §8.1 rule 3; DECISIONS-r9 M15 |
+| `MAX_CHUNK_BYTES` | `number` | `4096` | DECISIONS-r9 §C |
+| `SNIPPET_MAX_BYTES` | `number` | `800` | DECISIONS-r9 M21 |
+| `REQUIRE_SECURITY_ENV` | `string` | `"CONTEXT_MODE_REQUIRE_SECURITY"` | v1 `a4ab72eb` #468; DECISIONS-r9 E2 |
 
 ### `DECAY_X1000` build steps
 
@@ -115,7 +125,8 @@ Exports `ERROR_TEXT`, a `Readonly<Record<ErrorCode, string>>`. Every value is on
 ```ts
 export type ErrorCode =
   | "NODE_TOO_OLD" | "NO_SQLITE" | "DB_GONE" | "NO_PROJECT" | "UNKNOWN_FIELD"
-  | "TIMEOUT" | "NO_RUNTIME" | "FETCH_FAILED" | "SSRF" | "OUTSIDE_ROOT";
+  | "TIMEOUT" | "NO_RUNTIME" | "FETCH_FAILED" | "SSRF" | "OUTSIDE_ROOT"
+  | "INVALID_ARGS" | "ONE_OF_INPUT" | "SPAWN_FAILED";
 ```
 
 | Code | Text | Source |
@@ -130,6 +141,9 @@ export type ErrorCode =
 | `FETCH_FAILED` | `Fetch failed: <code>. Fix: check the URL or proxy.` | #1135 |
 | `SSRF` | `Blocked private address <host>. Fix: use a public URL.` | Q19, PRD §9 |
 | `OUTSIDE_ROOT` | `Path <p> is outside the project. Fix: use a path inside <root>.` | #954, #1294 |
+| `INVALID_ARGS` | `Invalid argument <field>. Fix: <action>.` | DECISIONS-r9 M23 |
+| `ONE_OF_INPUT` | `Pass exactly one of <names>. Fix: drop the extra field.` | DECISIONS-r9 M23 |
+| `SPAWN_FAILED` | `Failed to start the process: <detail>. Fix: check the command and PATH.` | DECISIONS-r9 M23 |
 
 `UNKNOWN_FIELD`'s literal `"queries"` is specific to `ctx_search`'s one documented unknown-key case (Q19, PRD §8); it is still the generic text for any unknown-field error in v2, because v2 has exactly one tool whose schema rejects unknown keys. Listed under Assumptions (A-C2).
 
@@ -166,7 +180,13 @@ Output: the one-line string with every `<name>` placeholder in `ERROR_TEXT[code]
 
 Steps:
 1. Read `template = ERROR_TEXT[code]`.
-2. Find every `<name>` token in `template` using a fixed, non-regex scan: walk the string, and on each `<` start collecting characters until the matching `>`; the collected text between them is `name`.
+2. Find every `<name>` token in `template` with a single left-to-right pass over the characters, one index `i` at a time, no regex:
+   - When `template[i]` is not `<`, copy it to the output and move on.
+   - When `template[i]` is `<`, start a token: set `j = i + 1` and read forward while `template[j]` is not `<` and not `>`.
+     - If `template[j]` is `>`: the token closed. `name = template.slice(i + 1, j)`. Replace step (4) runs on this `name`. Set `i = j + 1` and continue the outer pass.
+     - If `template[j]` is `<` (a second `<` before any `>`): the first `<` was not a token open, because `ERROR_TEXT` never nests one placeholder inside another. Copy the first `<` to the output as a literal character and resume the pass at `i = i + 1` (so the second `<` gets its own, fresh token attempt).
+     - If `template` ends before a `>` is found (unterminated `<`): the `<` and every character after it are not a token; copy them to the output as literal characters and stop the pass.
+   - `ERROR_TEXT` templates carry no escape syntax for `<` or `>` (no `\<` form): every `<` in a template either opens a real placeholder or is plain text, decided only by the rules above. A-C4 records this.
 3. For each `name` found: if `vars[name]` is `undefined`, throw a plain `Error("formatError: missing var " + name + " for " + code)` — this is a build/test-time programmer error, never a path a release build can hit, so it is not in `ERROR_TEXT`.
 4. Replace each `<name>` token with `String(vars[name])`.
 5. Return the resulting string.
@@ -197,8 +217,10 @@ ADR-0017 `covers`: `src/core/contracts/errors.ts`.
 - A-C1: `DECAY_X1000` is built for ages `0`–`64` turns. No source gives this bound; a session realistically never reaches it, and the score module clamps beyond it, so the table only needs to be finite. Reason: ADR-0009 names the formula, not an array length.
 - A-C2: `UNKNOWN_FIELD`'s fixed `Fix: use "queries".` text is kept as the one generic unknown-field message, because Q19 and PRD §8 name exactly one tool (`ctx_search`) with this behavior; v2 has no second case that needs a different fix hint.
 - A-C3: `formatError` throws a plain (non-`CtxError`) `Error` on a missing var, because that path is a programmer mistake caught by tests, not a user-facing error with its own line in `ERROR_TEXT`.
+- A-C5: No `ERROR_TEXT` template nests one `<name>` inside another or escapes a literal `<`/`>`, so `formatError` needs no nesting or escape rule; a `<` that hits a second `<` before a `>`, or that never meets a `>`, is copied through as plain text (§4.3 step 2). Reason: no template in the table needs nesting or escaping, so the simplest scan that is still exact is enough.
 
 ## Changes
 
 - `AdapterRow.compactSummary` row added to the field table (DECISIONS-r6 D6, tickets/memory-r6/eval/results.md).
 - A-C4: `MCP_HINT_EVERY`'s env override (`CTX_MCP_HINT_EVERY`) falls back to `10` on a non-numeric or non-positive value, since Q1 names the default and the override but not its own validation rule.
+- `AdapterRow` gains `toolNamePrefix` Codex note, `nativeTools`, `execReadOnlyHint` rows; constants gain `SYNC_INDEX_MAX_BYTES`, `RATIO_SECTION_DECAY`, `MAX_CANDIDATES_TOTAL`, `SEARCH_PAGE_SIZE`, `MAX_CHUNK_BYTES`, `SNIPPET_MAX_BYTES`, `REQUIRE_SECURITY_ENV`; `ErrorCode` and the error table gain `INVALID_ARGS`, `ONE_OF_INPUT`, `SPAWN_FAILED`; §4.3 step 2 spells out the full scan algorithm for `<name>` tokens, and A-C5 states the no-nesting/no-escape rule (DECISIONS-r9).

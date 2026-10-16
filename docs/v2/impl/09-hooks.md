@@ -32,6 +32,7 @@ export function shouldHint(db: DbHandle, sessionId: string, onceKey: string): bo
 3. Plain once-per-session keys (`read-50kb`, `bash-grep-hint`) use a boolean row: fire only when the row does not exist yet; after firing, write it with value `"1"`.
 4. Every write in steps 2–3 happens inside the same `withWrite` transaction as the journal append for that hook call (§4 step 3), so a crash between "decided to hint" and "wrote the marker" cannot double-fire or never-fire across a retry.
 5. Return `true` when step 2 or 3 decided to fire; `false` otherwise.
+6. Keying is `session_id` only (DECISIONS-r9 E5, ADR-0008 item 7): there is no `ppid` fallback. `shouldHint` is called with `ev.sessionId` taken straight from the decoded event; if the adapter's `decode` produced no `sessionId` (empty or absent in the raw payload), `dispatch.ts` never calls `shouldHint` at all and the call gets zero hints (no "latest session" guess, no ppid-derived key). Two different `ppid`s sharing one `session_id` share one marker and fire once between them.
 
 ## 3. `src/core/hooks/detached.ts`
 
@@ -112,8 +113,11 @@ export async function handleHook(agent: AgentId, raw: unknown, env: NodeJS.Proce
 3. `key` for `cmd`: canonical command via the quote-aware whitespace-fold state machine shared with `enforcement`'s lexer (ADR-0009 §1 "a quote-aware state machine that only folds whitespace outside quotes" — this module calls `enforcement`'s exported lexer tokenizer and re-joins tokens with single spaces, rather than owning a second copy, per the DAG: `hooks` already imports `enforcement`). `key` for `toolerr`: `ev.tool.canonicalName + ":" + stableJson(ev.tool.input)`. `exit_code`: parse `ev.result.text`'s first line with `startsWith("Exit code ")` and a digit loop (ADR-0009 §1); `null` if no such line. `path`: `ev.tool.input.file_path ?? ev.tool.input.path ?? null`.
 4. `appendDetached(project, ev.sessionId, { session_id: ev.sessionId, worktree: project.worktree, agent, kind, tool: ev.tool.canonicalName, key: key ?? null, path, ok: ev.result.isError ? 0 : 1, exit_code, bytes: ev.result.bytes, body: (ev.result.text ?? "").slice(0, POINTER_MIN), turn: ev.turn ?? 0, sandbox_bytes: ev.result.bytes, returned_bytes: ev.result.bytes })` — `body` is capped at `POINTER_MIN` (640 B) bytes here only to bound the journal row's own storage; this is unrelated to and does not substitute for the `ctx_resume` pointer mechanism, which reads the full tool-result text from the host, not from this capped copy (Assumption A26: no source bounds the journal's stored `body` size for a non-`ctx_*` row, and an unbounded copy of every large Read/Grep output would defeat ADR-0016's own purpose).
 5. Subagent Case B/C completion (deferred from §4.5 step 3):
-   - Case B, `decision0.kind` was `allow` at `PreToolUse` and the real output is now known: `if (ev.result.bytes > OUTPUT_CAP)`: `sourceId = indexText(db, project, ev.sessionId, "subagent:" + ev.tool.canonicalName + ":" + ev.turn, ev.result.text, "text").sourceId`; `selected = selectChunks(db, sourceId, ev.tool.description ?? "", OUTPUT_CAP)`; `decision = { kind: "replace", output: selected.text + (selected.more ? "\n" + selected.more : "") }`. `else`: `decision = { kind: "allow" }` (output already under budget, nothing to replace).
-   - Case C: same two steps (`indexText` then `selectChunks`), unconditionally when `ev.result.bytes > OUTPUT_CAP` (Case C has no pre-check equivalent to Case B's `allow`-at-`PreToolUse` step, since Case C's whole mechanism is post-run replacement); `decision = { kind: "replace", output: selected.text + (selected.more ? "\n" + selected.more : "") }` or `{ kind: "allow" }` under budget.
+   - Case B, `decision0.kind` was `allow` at `PreToolUse` and the real output is now known: `if (ev.result.bytes > OUTPUT_CAP)`, run the DECISIONS-r9 F1 split on `ev.result.bytes` against `SYNC_INDEX_MAX_BYTES` (`65536`, 00 §3.2):
+     - `ev.result.bytes <= SYNC_INDEX_MAX_BYTES`: `sourceId = indexText(db, project, ev.sessionId, "subagent:" + ev.tool.canonicalName + ":" + ev.turn, ev.result.text, "text").sourceId` (chunked and written to FTS5 inline, inside this hook call); `selected = selectChunks(db, sourceId, ev.tool.description ?? "", OUTPUT_CAP)`; `decision = { kind: "replace", output: selected.text + (selected.more ? "\n" + selected.more : "") }`.
+     - `ev.result.bytes > SYNC_INDEX_MAX_BYTES`: chunk `ev.result.text` in memory with the same chunker `indexText` uses internally (no DB write yet); run `selectChunks`'s in-memory form (`05-tools-index.md` §5) — BM25 over the in-memory chunks against `ev.tool.description ?? ""`, capped to `OUTPUT_CAP` — and set `decision = { kind: "replace", output: selected.text + (selected.more ? "\n" + selected.more : "") }` from that result. The FTS5 write of the full chunk set then runs through `appendDetached`'s same fire-and-forget path (§3), never blocking this `decision`. No byte of `ev.result.text` is dropped: the in-memory selection reads whole chunks, it is the detached write that lands them in `sources`/`chunks` after the hook has already answered.
+     - `else` (`ev.result.bytes <= OUTPUT_CAP`): `decision = { kind: "allow" }` (output already under budget, nothing to replace, nothing indexed).
+   - Case C: same split on `ev.result.bytes` against `OUTPUT_CAP` then `SYNC_INDEX_MAX_BYTES` as Case B above (Case C has no pre-check equivalent to Case B's `allow`-at-`PreToolUse` step, since Case C's whole mechanism is post-run replacement); `decision = { kind: "replace", output: selected.text + (selected.more ? "\n" + selected.more : "") }` or `{ kind: "allow" }` under `OUTPUT_CAP`.
    - Case A, or no subagent marker: `decision = { kind: "allow" }` (the main session's own large-output handling for non-`ctx_*` tools is a hint, not a replace — ADR-0016 scopes the replace mechanism to subagents only; the main session relies on the tool's own size being whatever the host tool already returns).
 6. Go to §4.2 step 6.
 
@@ -147,7 +151,8 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<neve
 
 ### 5.3 Wall-time budget (GS6, TECH-SPEC §1)
 
-- Claude Code (`type: mcp_tool`-equivalent matcher gate, TECH-SPEC §1 line 209): hook process spawns only for `mcp__context-mode__.*`; p95 ≤ `HOOK_P95_MS` (40 ms) wall, measured end-to-end by `hook-runner.mjs`.
+- Matcher gate (DECISIONS-r9 R4): the hook process spawns for the agent's `nativeTools` set (00 §3.1 `AdapterRow.nativeTools`) plus its own `toolNamePrefix`-scoped `ctx_*` calls — `^(<all nativeTools names>|<escaped toolNamePrefix>ctx_.*)$` — never for only `mcp__context-mode__.*` (that matcher never sees the native calls ADR-0008 denies). Claude Code's own prefix is `mcp__context-mode__` (hyphen, R3); Codex's is `mcp__context_mode__` (underscore, R1).
+- Claude Code: p95 ≤ `HOOK_P95_MS` (40 ms) wall, measured end-to-end by `hook-runner.mjs`.
 - Command-hook agents (every other agent, spawning this same `hook.mjs` for every matched native tool call): bare Node p95 is 45.6 ms (S-TIMEOUT measurement, ADR-0008 "Open"); this module's own code on top of bare-Node spawn stays ≤ `HOOK_CPU_OVER_NODE_MS` (20 ms CPU), enforced in CI as a bench assertion in GP3, not a wall-clock one (ADR-0008 "Open": the end-to-end 40 ms wall number is unratified for these agents; only the 20 ms CPU-over-bare-Node delta and the combined `HOOK_COMBINED_P95_MS` = 60 ms ceiling are settled, GS6/A31). No step in §4 opens a second process, spawns a child, or starts a timer — the entire dispatch is synchronous DB I/O plus the two in-process calls (`renderState`, `selectChunks`) already specced by `tools-session`/`tools-index`.
 - `PreToolUse` opens the DB only for the throttle marker (§4.5 step 4); it never opens it for the journal (00 rule P4), which is the one thing keeping this path inside the CPU budget: a `meta` row touch is a single-row lookup, not a journal scan.
 
@@ -182,13 +187,15 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<neve
 | `PreToolUse` deny/rewrite/hint, `decide`/`pickSubagentCase` calls | ADR-0008 Golden cases, ADR-0016 Golden cases (GP3) | LV1, LV2, LV8–LV10 |
 | `PreCompact`/pending-flag delivery | ADR-0009 "Golden cases (GP6)" | `[V]` live note in ADR-0009 §6 |
 | Kiro `stdout == ""` | GP3 Kiro fixture row | — |
-| Wall-time budget | TECH-SPEC §1 GS6 row, "GP3 bench" | — |
+| Wall-time budget | TECH-SPEC §1 GS6 row, "GP3 bench" | T-GS6 (DECISIONS-r9 V14): bench asserts `HOOK_P95_MS` ≤ 40 ms wall for Claude Code and `HOOK_CPU_OVER_NODE_MS` ≤ 20 ms CPU plus `HOOK_COMBINED_P95_MS` ≤ 60 ms wall for every command-hook agent, n ≥ 200 runs per agent, scorer = p95 of recorded durations |
+| §4.6 step 5 output split | DECISIONS-r9 F1 | T-F1: fixture pair at `SYNC_INDEX_MAX_BYTES` (65536) exactly and at 1 MB; asserts inline FTS5 write below the cap, detached write above it, and `decision.output` byte-identical in both paths to the in-memory `selectChunks` result |
+| §5.3 matcher gate (native `nativeTools` ∪ own prefix) | DECISIONS-r9 R4 | T-CX: Codex fixture asserts `tool_name: "Bash"` is matched by the generated matcher and that `mcp__context_mode__ctx_execute` (underscore) is matched, not `mcp__context-mode__` |
 
 ADR-0017 `covers`: `src/core/hooks/`, `src/entries/hook.ts`.
 
 ## 9. Constants this module reads (`constants.ts`, 00 §3.2)
 
-`MCP_HINT_EVERY`, `OUTPUT_CAP`, `POINTER_MIN`, `HOOK_P95_MS`, `HOOK_CPU_OVER_NODE_MS`, `HOOK_COMBINED_P95_MS`, `READ_MAX_LINES`. No other constant in the table is read by `hooks`.
+`MCP_HINT_EVERY`, `OUTPUT_CAP`, `SYNC_INDEX_MAX_BYTES`, `POINTER_MIN`, `HOOK_P95_MS`, `HOOK_CPU_OVER_NODE_MS`, `HOOK_COMBINED_P95_MS`, `READ_MAX_LINES`. No other constant in the table is read by `hooks`.
 
 ## Assumptions
 
@@ -206,3 +213,4 @@ ADR-0017 `covers`: `src/core/hooks/`, `src/entries/hook.ts`.
 
 - `READ_HINT_BYTES` retired, `READ_MAX_LINES` added; §4.5 step 2 now denies an unranged Read (or unbounded one-file shell dump) over `OUTPUT_CAP` instead of hinting (DECISIONS-r8).
 - D6 (`docs/v2/review/DECISIONS-r6.md`; measured in `tickets/memory-r6/eval/results.md`): `SessionStart` (§4.3 step 1) and the pending-flag path (§4.4 step 2) now branch on `row.compactSummary`; `"host"` sends the fixed pointer line only, `"none"` sends the full 2,048 B block through the agent's existing ADR-0009 §6 path.
+- DECISIONS-r9: §5.3 matcher gate now reads `nativeTools` plus `toolNamePrefix` (R4), not a hardcoded `mcp__context-mode__.*`; §4.6 step 5 splits on `SYNC_INDEX_MAX_BYTES` for in-memory chunk selection above it (F1); §2.2 adds the session-id-only throttle keying with no-session-id = no hint (E5); §8 table adds T-GS6, T-F1, T-CX test specs for V14/F1/R4.
