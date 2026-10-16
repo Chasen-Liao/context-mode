@@ -1,0 +1,7 @@
+{
+  "id": "keep-pass-131",
+  "kind": "local",
+  "covers": ["tests/", "docs/v2/review/TEST-TRIAGE-r2.md", ".impl/keep-pass-map.json"],
+  "run": ["node", "e2e/checks/keep-pass-count.mjs"],
+  "expect": { "jsonField": "ok", "equals": true }
+}
