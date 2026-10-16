@@ -1,0 +1,4 @@
+{ "id": "memory-retrieval-local", "kind": "local",
+  "covers": ["src/core/tools/search.ts", "tickets/memory-retrieval/"],
+  "run": ["node", "tickets/memory-retrieval/eval/ci-smoke.mjs"],
+  "expect": { "jsonField": "pass", "equals": true } }
