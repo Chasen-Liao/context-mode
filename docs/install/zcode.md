@@ -68,3 +68,17 @@ This section lists facts that disagree with `docs/v2/impl/10-adapters.md`'s `zco
 3. **The config path is confirmed for MCP servers, not shown for hooks.** `~/.zcode/cli/config.json` is correct and matches `impl/10-adapters.md` §1.5's assumed path, under `mcp.servers`. The docs do not show a `hooks.events.<Event>` key shape anywhere, because the CLI does not run plugin hooks (see point 1); no confirmation either way for a non-plugin, hand-written hook entry.
 4. **There is no official npm CLI package.** Z.ai's own install path is the desktop app only; the CLI source lives in `zai-org/ZCode` and must be built from source. The `zcode` command most installers get comes from an unofficial third-party package, `zcode-app-cli` on npm, not a Z.ai release. ADR-0011's update-command table should flag ZCode's CLI row as community-maintained if v2 ever documents an update command for it.
 5. **Git-ref plugin installs are confirmed possible**, supporting ADR-0011's "ZCode: test first, then document" line for the `release` branch update path: a marketplace entry's `source` object takes `ref` (tested: branch name) and `path` (subfolder). Tag/commit-hash support is undocumented, so ADR-0011's release step should still test the exact ref it plans to use before publishing docs that claim it works.
+
+## Verified
+
+No v2 src build exists on `v2-design` yet (docs/ADRs only); this verified only the agent install and MCP/hook config steps, in an isolated HOME/prefix, with the `node /private/tmp/cm-v2-impl/start.mjs` stdio server standing in for the context-mode server.
+
+| Step | Result | Agent version | Date |
+|---|---|---|---|
+| Install `zcode-app-cli` via npm into isolated prefix | worked | zcode-app-cli 3.15.3-36 / zcode-runtime 0.16.9 | 2026-10-17 |
+| `zcode --version` / `zcode --help` run | worked | 0.16.9 | 2026-10-17 |
+| Write MCP server block to `~/.zcode/cli/config.json` per this guide | ran, but not read by this build | 0.16.9 | 2026-10-17 |
+| `zcode doctor` shows the server configured | worked, after moving the same block into `~/.zcode/cli/setting.json`'s `mcp.servers` | 0.16.9 | 2026-10-17 |
+| `/mcp list`, `/mcp status`, live chat, login | needs owner login | 0.16.9 | 2026-10-17 |
+
+Deviation found: in the installed build, `~/.zcode/cli/config.json` is reported by `zcode doctor` as "legacy; migration source only". The live MCP server block (and the hooks block, `hooks.enabled` + `hooks.events`) lives in `~/.zcode/cli/setting.json`, not `config.json`. This guide's §1 CLI step should write to `setting.json` instead. Recorded in `docs/v2/impl/DEVIATIONS.md`.
