@@ -7,7 +7,8 @@
 //
 // Layers run in this order and stop at the first FAIL (impl/14 §8 step 3):
 //   1 keep-pass      npx vitest run --config tests/vitest.config.ts <files>   (DECISIONS-r9 G5)
-//   2 gp-cases       node e2e/cases/run.mjs --milestone Mn                   (DEVIATIONS D-M0-2)
+//   2 gp-cases       node build/build.mjs --out release-out, then
+//                    node e2e/cases/run.mjs --milestone Mn                   (DEVIATIONS D-M0-2, D-M0-F1-1)
 //   3 prompt-lint    node docs/v2/prompt/lint.mjs drafts docs/v2/prompt/drafts.md   (< M2)
 //                    node docs/v2/prompt/lint.mjs --out release-out                 (>= M2)
 //   4 check-removed  node build/check-removed.mjs                            (>= M6, D-M0-1)
@@ -119,15 +120,22 @@ function keepPass(ms) {
 }
 
 // ---- layer 2: GP + 14a cases tagged <= Mn (impl/14 §5, DEVIATIONS D-M0-2, D-M0-5) ----
+// The GP cases read release-out/, so this layer builds it first, the same order as a CI cell
+// (impl/14 §8 step 2: build, then cases). A failed build is this layer's FAIL (D-M0-F1-1).
 function gpCases(ms) {
-  const gone = missing(["e2e/cases/run.mjs"]);
+  const gone = missing(["build/build.mjs", "e2e/cases/run.mjs"]);
   if (gone) return gone;
+  const b = run(process.execPath, ["build/build.mjs", "--out", "release-out"]);
+  if (b.status !== 0) {
+    dumpChild("gp-cases", b);
+    return { status: "FAIL", detail: `build/build.mjs --out release-out exit ${b.status}` };
+  }
   const r = run(process.execPath, ["e2e/cases/run.mjs", "--milestone", MILESTONES[ms]]);
   if (r.status !== 0) {
     dumpChild("gp-cases", r);
     return { status: "FAIL", detail: `e2e/cases/run.mjs --milestone ${MILESTONES[ms]} exit ${r.status}` };
   }
-  return { status: "PASS", detail: `e2e/cases/run.mjs --milestone ${MILESTONES[ms]} exit 0` };
+  return { status: "PASS", detail: `build ok; e2e/cases/run.mjs --milestone ${MILESTONES[ms]} exit 0` };
 }
 
 // ---- layer 3: prompt lint; mode chosen by milestone, one rule (impl/13 §7) ----
