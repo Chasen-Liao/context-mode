@@ -109,3 +109,13 @@ claude plugin install context-mode@context-mode
 - `impl/10-adapters.md` §1.3 gives `hookTimeoutMs` as a generated value with the rule "seconds; generated value = `hookTimeoutMs/1000`"; the current `hooks/hooks.json` in this clone sets `timeout` per hook directly rather than through a generated `build/manifests.ts` step. This is a build-time detail, not a user-facing difference, so it does not change any command above.
 - ADR-0011's update command table assumes auto-update stays off for third-party marketplaces; no public Claude Code changelog entry seen during this check contradicts that, so the two update commands above are taken as current without a separate citation beyond the ADR.
 - No other disagreement found between this guide and `impl/10-adapters.md` row `claude-code` / ADR-0011 as of 2026-10-17.
+
+## Verified
+
+| Step | Result | Agent version | Date |
+|---|---|---|---|
+| CLI on PATH | worked | 2.1.283 | 2026-10-17 |
+| `claude plugin marketplace add mksglu/context-mode` (isolated HOME, no login) | needs owner login (no output after 120 s, likely waiting on auth/trust) | 2.1.283 | 2026-10-17 |
+| `claude plugin install context-mode@context-mode` | not run, blocked by the step above | 2.1.283 | 2026-10-17 |
+| `/ctx-doctor` | not run, no v2 MCP build on `v2-design` yet (repo root still has only the v1 plugin) | 2.1.283 | 2026-10-17 |
+| Caution | running `claude` with the working directory inside this repo clone fires the v1 plugin's own self-heal hooks and rewrites bundle files; always run it from outside the repo | 2.1.283 | 2026-10-17 |
