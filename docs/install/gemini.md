@@ -188,3 +188,12 @@ researched for this guide.
    does not change the adapter's behavior, only the install instructions
    above.
    Source: [extensions reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/extensions/reference.md) — checked 2026-10-17.
+
+## Verified
+
+| Step | Result | Agent version | Date |
+|---|---|---|---|
+| Install CLI (`npm install @google/gemini-cli` into an isolated prefix) | worked | 0.64.0 | 2026-10-17 |
+| `gemini --version` | worked | 0.64.0 | 2026-10-17 |
+| `gemini extensions install https://github.com/mksglu/context-mode --ref release` | needs owner login (CLI stopped on an interactive "trust this workspace?" prompt; `--ref release` also does not exist yet) | 0.64.0 | 2026-10-17 |
+| MCP/hook config file steps | not run, no v2 build on `v2-design` yet | 0.64.0 | 2026-10-17 |
