@@ -62,7 +62,7 @@ export function spawnBundle(bundlePath, env) {
       if (msg && msg.id !== undefined && pending.has(msg.id)) {
         const { resolve } = pending.get(msg.id);
         pending.delete(msg.id);
-        resolve(msg);
+        resolve(msg.result ?? msg);
       } else if (msg && msg.id !== undefined) {
         throw new Error(`mcp-client: unmatched reply id ${msg.id}`);
       }
