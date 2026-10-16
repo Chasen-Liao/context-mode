@@ -157,3 +157,12 @@ This section lists what the live Qwen Code research found that the spec (`docs/v
 3. **Rollback has a middle option the spec does not mention.** ADR-0011 says Qwen (like Gemini) has "no CLI-native rollback command" and describes only the full manual path (remove entry, reinstall v1). The live CLI also has `qwen extensions disable context-mode`, which turns the v2 extension off without uninstalling it or touching v1 at all. This is a softer, reversible first step worth offering users before the full rollback in ADR-0011 — it does not replace that path, since disabling v2 does not restore v1's MCP entry.
 4. **Ongoing update command vs. first-switch command.** ADR-0011's release-steps table gives one command for Qwen: the first-time switch command (`qwen extensions install ... --ref release --auto-update`). For a user who already has the extension installed, the correct day-to-day update command is `qwen extensions update context-mode` (or `--all`), which the spec does not state separately. Both are documented above; this is an addition, not a conflict.
 5. **Windows path confirmed, not stated in the spec.** Neither `impl/10-adapters.md` nor ADR-0011 states a Windows path for Qwen's config. The source (`packages/core/src/config/storage.ts`) confirms it is `%USERPROFILE%\.qwen\settings.json`, the same `.qwen` folder name as macOS/Linux, not `%AppData%`.
+
+## Verified
+
+| Step | Result | Agent version | Date |
+|---|---|---|---|
+| Install CLI (`npm install @qwen-code/qwen-code` into an isolated prefix) | worked | 0.25.2 | 2026-10-17 |
+| `qwen --version` | worked | 0.25.2 | 2026-10-17 |
+| `qwen extensions --help` (command shape check) | worked, matches the doc's `install`/`update`/`disable`/`uninstall` commands | 0.25.2 | 2026-10-17 |
+| `qwen extensions install ...` against the real repo | not run, no v2 build on `v2-design` yet to install | 0.25.2 | 2026-10-17 |
