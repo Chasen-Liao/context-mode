@@ -163,3 +163,17 @@ Data: v1 rows are not migrated into v2 categories (rule changes, research-check 
 - `impl/06-tools-session.md`: add `"decision"` to `EventKind`; the `AskUserQuestion` write path; `candidates.ts` excludes `decision`.
 - `PRD-v2.md` §8 and README table: D5 rows; correct "26" to 19.
 - `TECH-SPEC.md` GP5/GP6: the golden cases in D1, D2, D3, D4.
+
+## D6. Measured resume quality (2026-10-16), pending owner decision
+
+`tickets/memory-r6/eval/run2.mjs`, 20 real compaction points, Sonnet low actor + judge:
+
+| Condition | Mean score (0-2) | Context bytes |
+|---|---|---|
+| Claude Code compact summary only | 0.85 | 19,703 |
+| Claude Code summary + v2 block | 0.75 | 21,704 |
+| v2 block only | 0.75 | 1,999 |
+
+- On Claude Code the v2 block adds no measurable resume quality (2 better, 4 worse, 14 same; not significant).
+- The v2 block alone reaches about the same score as Claude Code's own summary at about one tenth of the bytes.
+- Proposed (not yet applied): on agents that write their own compact summary (Claude Code), inject only a one-line `ctx_resume` pointer; on agents without one, inject the 2,048 B block. Waiting for the owner.

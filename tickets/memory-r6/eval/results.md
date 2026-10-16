@@ -80,3 +80,17 @@ it is not a proven win on unseen cases.
 -p` calls) for both the main sweep and the tuning sweep. The only paid
 calls on record are the 6 from the earlier LLM-judged pilot above, which
 the CLI did not meter in dollars (subscription, not an API key).
+
+## Resume-quality eval on real compaction points (run2.mjs, 2026-10-16)
+
+20 real compaction points from 6 projects (case data private, /tmp). Actor and judge: claude-sonnet-5, effort low, keyless. Score 0-2 vs the tool calls the real agent made next. v1 snapshot was 290-335 KB per case and failed every call in the pilot, so it is not in the full run.
+
+| Condition | Cases | Mean score (0-2) | Score 2 | Score 0 | Failed calls | Mean context bytes |
+|---|---|---|---|---|---|---|
+| cc | 20 | 0.85 | 6 | 9 | 0 | 19703 |
+| cc+v2 | 20 | 0.75 | 4 | 9 | 0 | 21704 |
+| v2 | 20 | 0.75 | 3 | 8 | 0 | 1999 |
+
+Paired cc+v2 vs cc: better 2, worse 4, same 14. Cost this run (list price): $3.79.
+
+Paired v2-only vs cc: better 3, worse 6, same 11. 9 of 20 cases score 0 in every condition (the next action is not predictable from any summary). Differences are 1-2 cases: not significant at n=20 (sign test, cc+v2 vs cc: 2 vs 4, p ~0.69).
