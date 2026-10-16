@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // CI gate for e2e/live/cases/memory-retrieval-local.json.
 // Runs run.mjs on the synthetic fixtures and fails if R2 recall@5 < 1.0.
+import os from "node:os";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +14,7 @@ const r = spawnSync(
     "--queries", path.join(HERE, "fixtures/queries"),
     "--journals", path.join(HERE, "fixtures/journals"),
     "--variants", "R0,R1,R2,R3,R4,R5",
-    "--out", path.join(HERE, "results.md"),
+    "--out", path.join(os.tmpdir(), "memory-retrieval-ci-results.md"),
     "--privout", "/tmp/memory-retrieval-private/results-ci",
   ],
   { encoding: "utf8" },

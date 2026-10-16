@@ -135,6 +135,8 @@ Qwen sits in the `SessionStart(compact)` row above, not a separate "no PreCompac
 
 ## Open
 
+- **O1. Earlier-error lookup:** BM25 alone beats RRF (0.72 vs 0.59). Candidate: lower the session list's weight for `toolerr` rows. Must be measured with `run.mjs` first. Source: `docs/v2/review/DECISIONS-r7.md`.
+- **O2. File by topic:** 0.04 for every variant; text search cannot link a later prompt to an old edit row. Candidate without embeddings: store the turn's prompt tokens on each `edit` row. Must be measured first. Source: `docs/v2/review/DECISIONS-r7.md`.
 - Hook budget: the whole SessionStart process is 48.6 ms p95, of which bare Node is 45.6 ms. See ADR-0008 "Open".
 - Resume-quality eval (Memory-R6, 2026-10-16): `tickets/memory-r6/eval/` holds a keyless, deterministic harness that scores `none`/`v1`/`v2` (this ADR)/`keeplastn`/`masking` on 12 real session cases. Deterministic sweep (12 cases, 0 model calls): `v2` holds the 2,048 B budget at 11-12/12 hit rate on naming the open error, last request, and changed files; `none`/`v1` carry no budget (155-191 KB mean); `keeplastn`/`masking` both drop below `v2` on naming the last request and changed files, the regression the research doc predicted. An LLM-judged quality pilot was started but stopped small (n=3) under time pressure — see `tickets/memory-r6/eval/results.md` for the exact numbers and the command to resume it.
 
@@ -214,6 +216,31 @@ This reuses the RRF fusion already in v1's `store.ts` (`const K = 60`, `bm25(chu
 - `decision` rows never appear in the compaction block's candidate list
 - a fresh same-session hit outranks an older cross-session hit with a higher BM25 score (open item: GP5 case, #895, not yet measured)
 
+## 9. Memory-R7: retrieval ranking, by measurement
+
+Owner decision (2026-10-16): keep the design below on the evidence in `docs/v2/review/DECISIONS-r7.md`. Evidence: `tickets/memory-retrieval/eval/results.md` (90 real queries from 7 projects, gold labels from transcript structure only, no model calls).
+
+### Measured
+
+| Variant | recall@5 | MRR | p95 ms |
+|---|---|---|---|
+| v1 behaviour | 0.27 | 0.22 | 8.6 |
+| BM25 only | 0.31 | 0.27 | 13 |
+| **BM25 per scope + RRF k=60** | **0.48** | **0.41** | 27 |
+| + MMR λ=0.7 | 0.47 | 0.40 | 27 |
+| + `source:"decision"` filter | 0.48 | 0.41 | 28 |
+| RRF k=20 / k=100 | 0.48 | 0.41 | 28 |
+
+### Rule (current)
+
+- **R1. Ranking = BM25 per scope (session, worktree, project) fused with RRF, k = 60.** Best overall; 1.8× v1. k is insensitive (20-100 equal), so the published default stays.
+- **R2. No MMR.** No gain, about 2× latency.
+- **R3. The `decision` tag stays structural (§8.2).** `source:"decision"` stays as a filter for the user; it gives no ranking gain.
+- **R4. `sort:"timeline"` with the `after` cursor stays as written in §8.1.** Paging is complete on real data.
+- **R5. Latency budget:** `ctx_search` p95 ≤ `SEARCH_P95_MS` (30 ms) on node:sqlite FTS5 with up to 17k journal rows (measured 27 ms).
+
+Sources: `docs/v2/review/DECISIONS-r7.md`; `tickets/memory-retrieval/eval/results.md`.
+
 ## Changes
 
 - 2026-10-14 (fix-r4, owners.adr-b): added the single journal write path, §0 (A4); added the byte-identical-per-turn rule (A49); scoped the "only re-injection point" claim to Claude Code/Codex/Qwen/ZCode and named the Gemini/Copilot CLI/VS Code second path (B26); resolved Kiro as unsupported with a documented gap, and clarified Qwen's delivery path (B12, B23).
@@ -221,3 +248,4 @@ This reuses the RRF fusion already in v1's `store.ts` (`const K = 60`, `bm25(chu
 - 2026-10-16 (Memory-R6): added §8 — `sort:"timeline"` semantics, the literal-cue `decision` tag, and RRF-based cross-session ranking, sourced from `tickets/memory-r6/research-memory.md`.
 - 2026-10-16 (DECISIONS-r6): rewrote §8 to the structural `decision` rule (tool answer + option echo only, no marker-word list); added the exact `CtxSearchInput` contract and reserved `source:"decision"`; added citations (Cormack SIGIR '09, LongMemEval arXiv:2410.10813, Mem0 arXiv:2504.19413) to the sources list; noted `decision` rows are not compaction candidates in §2; added the GP6 budget-skip case and the §8.4 GP6 extension.
 - 2026-10-16 (DECISIONS-r6 D6): §6 delivery now keys on `compactSummary` (`"host" | "none"`); Claude Code is `"host"` and gets a pointer line only, every other agent stays `"none"` until its LV-COMPACT check (M3); added the matching GP6 case; cited `run2.mjs`/`results.md` in Sources.
+- 2026-10-16 (DECISIONS-r7): added §9 — retrieval ranking R1-R5 with the measured table (BM25 per scope + RRF k=60, no MMR), sourced from `tickets/memory-retrieval/eval/results.md`; added O1/O2 to Open.

@@ -269,6 +269,8 @@ export interface AdapterRow {
 | `DATA_ROOT` | `~/.context-mode` | PRD §4 |
 | `LIVE_MODEL`/`LIVE_EFFORT`/`LIVE_BUDGET_USD` | `"claude-sonnet-5"`/`"low"`/`0.25` | ADR-0017 |
 | `LIVE_SKIP_LIMIT` | `3` | ADR-0013 |
+| `RRF_K` | `60` | ADR-0009 §8.3/§9 (DECISIONS-r7 R1); Cormack et al., SIGIR '09 |
+| `SEARCH_P95_MS` | `30` | ADR-0009 §9 (DECISIONS-r7 R5); measured 27 ms, `tickets/memory-retrieval/eval/results.md` |
 
 ### 3.3 Error text (`errors.ts`)
 
@@ -304,6 +306,7 @@ ftsInsert(db: DbHandle, src: SourceRow, chunks: Chunk[]): void;
 ftsQuery(db: DbHandle, q: string, scope: SearchScope, ctx: ProjectContext, sessionId: string, limit: number, offset: number): Hit[];
 ftsQueryTimeline(db: DbHandle, scope: SearchScope, ctx: ProjectContext, sessionId: string, limit: number, after: number | null, source?: string): Hit[]; // DECISIONS-r6 D2; merges ContentStore + SessionDB + auto-memory, oldest first
 // ctx_search gains sort?: "relevance" | "timeline" (default "relevance") and after?: number (timeline only); source:"decision" is a reserved label over kind:"decision" journal rows (DECISIONS-r6 D2, D3)
+// Ranking = BM25 per scope fused with RRF (RRF_K=60), no MMR step; the decision tag stays structural (§8.2); measured, not preference — DECISIONS-r7, tickets/memory-retrieval/eval/results.md
 metaSet(db, key: string, v: string): void; metaTake(db, key: string): string | null; // DELETE ... RETURNING
 
 // sandbox

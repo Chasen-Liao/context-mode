@@ -36,7 +36,7 @@ Stores content so it can be searched later: a local file or folder (nested .giti
 
 <!-- id: ctx_search -->
 ```text
-Searches content stored with ctx_index and earlier sandbox output in this project. Pass several queries in one call. By default it searches the current worktree; set `scope` to `project` for all worktrees or `session` for this session only. Results from the current session rank first, then by relevance. Set `sort` to `timeline` for oldest-first order across this session, prior sessions and memory, paged with `after`; `offset` is for relevance order only. Set `source` to `decision` to search only rows where the user answered a question. Every hit names its source. When nothing matches, the reply states the scope and how many sources are indexed.
+Searches content stored with ctx_index and earlier sandbox output in this project. Pass several queries in one call. By default it searches the current worktree; set `scope` to `project` for all worktrees or `session` for this session only. Results from the current session rank first, then by relevance, ranked with measurably better recall than plain keyword search. Set `sort` to `timeline` for oldest-first order across this session, prior sessions and memory, paged with `after`; `offset` is for relevance order only. Set `source` to `decision` to search only rows where the user answered a question. Every hit names its source. When nothing matches, the reply states the scope and how many sources are indexed.
 ```
 
 <!-- id: ctx_resume -->
@@ -100,4 +100,5 @@ r3: added the `seq` param to `ctx_resume` (PRD §7, decision A35), bumped status
 r4 fix pass: checked decisions A35 and B71 — `seq` is already in the `ctx_resume` text above, and B71 found no doc fix needed here (it is a process note about round-1's own notes field). No text changed.
 r6 (`DECISIONS-r6.md` D1-D3): `ctx_search` text now names `sort:"timeline"`, `after` paging, and `source:"decision"`; `ctx_resume` text drops "decisions" from the summary list and describes the pointer line, matching the 2,048 B budget rule. Both texts stay under the 1,024-char cap.
 r6 (`DECISIONS-r6.md` D6): `ctx_resume` text adds the no-`seq` call: it returns the state block on demand (Claude Code's pointer line reads from it after compaction). Still under the 1,024-char cap.
+r7 (`DECISIONS-r7.md` R1, R2): `ctx_search` text notes the measured recall gain over plain keyword search. Still under the 1,024-char cap (716).
 

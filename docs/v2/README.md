@@ -79,7 +79,7 @@ Skills (user commands only, no routing text, `disable-model-invocation: true`): 
 | Storage | One `context.db` per project (git common dir hash), node:sqlite, WAL | ADR-0002 |
 | Hook budget | 40 ms wall, measured in CI (G26). The command-hook CPU sub-budget (GS6) is still open | TECH-SPEC §7, ADR-0008 "Open" |
 | Tool description cap | 1,024 chars each; instructions ≤ 2,048 chars; descriptions + schemas ≤ 8,000 chars | ADR-0005 |
-| Cross-session rank fusion | RRF, k = 60; current session first, then RRF, then `seq` ascending | DECISIONS-r6 D4 |
+| Cross-session rank fusion | RRF, k = 60; current session first, then RRF, then `seq` ascending. Measured: recall@5 0.48 vs v1's 0.27 (90 real queries). No MMR: no gain over RRF | DECISIONS-r6 D4; DECISIONS-r7 R1, R2 |
 | `sort:"timeline"` page cursor | `after` (opaque seq); `offset` is relevance-only | DECISIONS-r6 D2 |
 | `decision` row trigger | `AskUserQuestion` answer, or an option echo next turn — never message shape | DECISIONS-r6 D3 |
 | v1 extracted `category` values | 19, not 26 (the "26" was uncounted commit text) | DECISIONS-r6 D5 |
@@ -131,3 +131,4 @@ S-NODE, S-TIMEOUT and the ADR-0006 re-probe are closed; see `tickets/spikes-r5/`
 ## Changes
 
 - 2026-10-16 (r6, `docs/v2/review/DECISIONS-r6.md`): §5 gains the RRF, timeline-cursor and decision-trigger rows and the corrected v1 category count (19, not 26); new §5a table maps each v1 memory feature to its v2 replacement.
+- 2026-10-16 (r7, `docs/v2/review/DECISIONS-r7.md`): §5 RRF row gains the measured recall@5 numbers (0.48 vs v1's 0.27) and states that MMR gave no gain.

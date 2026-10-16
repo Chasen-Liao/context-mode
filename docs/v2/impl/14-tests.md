@@ -2,6 +2,8 @@
 
 Changes (DECISIONS-r6): GP6 now carries the D1 open-error golden case; added `memory-r6-eval-local.json` and `memory-r6-resume-quality.json` live cases for the compaction fixtures; no case checks a prose `decision` row, per D3. Per D6 (`tickets/memory-r6/eval/results.md`): GP6 adds one case per `compactSummary` mode (`"host"`, `"none"`); added `LV-COMPACT-<agent>.e2e.mjs`, one live case per agent, run in M3.
 
+Changes (DECISIONS-r7): GP5 adds one golden recall@5 case per query type (`decision`, `errorfix`, `timeline`), fixed to the measured BM25+RRF (k=60, no MMR) numbers; the existing `e2e/live/cases/memory-retrieval-local.json` live case is cited as the free deterministic check for the same numbers.
+
 Owner: `tests` (see `00-architecture.md` §2). Scope: everything under `e2e/` except `e2e/live/cases/v1-migration-*.json` (owner: `v1-transition`, spec'd separately), plus the `tests/` v1 runner config. This module imports nothing from `src/` except the 131 KEEP-PASS files, which keep their existing `src/` imports (ADR-0003 r2, TECH-SPEC §6.1 hard rule).
 
 Sources: TECH-SPEC §6 (all), ADR-0003, ADR-0012, ADR-0017, DECISIONS-r4, `docs/v2/review/TEST-TRIAGE-r2.md`, `e2e/live/run.mjs` (already on disk — this spec keeps its CLI contract), `00-architecture.md` §1 e2e/ table.
@@ -82,7 +84,7 @@ import assert from "node:assert/strict";
 | `GP2-prompt-surface.e2e.mjs` | GP2 | `initialize`, `tools/list`, Pi system prompt | `src/prompt/`, `docs/v2/prompt/lint.mjs` |
 | `GP3-hooks.e2e.mjs` | GP3 | hooks ×10 adapters × 4 events | `src/core/hooks/`, `src/entries/hook.ts`, `src/core/policy/` |
 | `GP4-execute.e2e.mjs` | GP4 | `ctx_execute` | `src/core/tools/execute.ts`, `src/core/sandbox/` |
-| `GP5-index-search.e2e.mjs` | GP5 | `ctx_index` → `ctx_search` | `src/core/tools/{index,search}.ts`, `src/core/index/` |
+| `GP5-index-search.e2e.mjs` | GP5 | `ctx_index` → `ctx_search`; one golden recall@5 case per query type (`decision`, `errorfix`, `timeline`), fixed to the DECISIONS-r7 measured values (BM25+RRF k=60; no MMR) | `src/core/tools/{index,search}.ts`, `src/core/index/` |
 | `GP6-journal-resume.e2e.mjs` | GP6 | journal + resume; golden case for the DECISIONS-r6 D1 miss (open-error row dropped only by a budget skip, never by a scoring bug); one case for `compactSummary:"host"` (pointer line only, no state block, `ctx_resume()` with no `seq` returns the 2,048 B block on demand) and one case for `compactSummary:"none"` (2,048 B D1 block injected through the agent's ADR-0009 §6 path), per DECISIONS-r6 D6 | `src/core/journal/`, `src/core/tools/resume.ts`, `src/core/compaction/`, `adapters/table.ts` |
 | `LV-COMPACT-<agent>.e2e.mjs` | LV-COMPACT | live case, one per agent (M3): confirms the host writes its own compact summary the model sees; when true, flips `adapters/table.ts` `compactSummary` row for that agent from `"none"` to `"host"` (DECISIONS-r6 D6) | `adapters/table.ts` |
 | `GP7-scope.e2e.mjs` | GP7 | scope, 2 worktrees × 2 sessions × 2 agents | `src/core/project/` |
@@ -157,6 +159,8 @@ Rules:
 Error case: a case file missing `covers` → the loader (inside `run.mjs`, already written) calls `.some()` on `undefined` and throws; this spec's case files must always include `covers`, even `[]"`, never omit it.
 
 **DECISIONS-r6 live cases.** `e2e/live/cases/memory-r6-eval-local.json` (kind `local`, free) runs deterministic checks from `tickets/memory-r6/eval` over the synthetic fixtures in `tickets/memory-r6/eval/fixtures/` — no transcript text, no model call. `e2e/live/cases/memory-r6-resume-quality.json` (kind `agent`) checks resume quality from one synthetic fixture, through the `run.mjs` `bin` branch. Both cover `src/core/compaction/` and `src/core/tools/search.ts`, so step mode runs them whenever those paths change. Per DECISIONS-r6 D3, no case here checks a `decision` row from free prose; `candidates.ts` does not select `decision` rows, so no golden file changes for D3.
+
+**DECISIONS-r7 live case.** `e2e/live/cases/memory-retrieval-local.json` (kind `local`, free) runs `tickets/memory-retrieval/eval/ci-smoke.mjs`, a deterministic recall@5 smoke check fixed to the DECISIONS-r7 measured values (BM25+RRF k=60; no MMR), over the 90-query fixture set from `tickets/memory-retrieval/eval`. Covers `src/core/tools/search.ts` and `tickets/memory-retrieval/`, so step mode runs it whenever those paths change. The GP5 golden cases for the `decision`/`errorfix`/`timeline` query types (§4 table) cite the same DECISIONS-r7 numbers.
 
 ## 7. KEEP-PASS v1 runner
 
