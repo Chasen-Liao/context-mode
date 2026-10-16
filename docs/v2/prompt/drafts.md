@@ -21,7 +21,7 @@ For small output of known size, such as git status, ls or a short file, and for 
 
 <!-- id: ctx_execute -->
 ```text
-Runs code in a sandboxed subprocess in the project directory and returns only what the code prints. Languages: shell, powershell, javascript, typescript, python, and other runtimes found on PATH. Use it when output may be long, for example tests, builds, logs, git history or API responses, and print just the lines or numbers you need. Set `file` to a local path to work on that file without reading it into the conversation; the code gets the path in the CTX_FILE environment variable. Set `intent` to a short phrase when output may be large: the matching sections come back and the full output is indexed for ctx_search. Stops after `timeoutMs` (default 120000) and kills the whole process tree.
+Runs code in a sandboxed subprocess in the project directory and returns only what the code prints. Languages: shell, powershell, javascript, typescript, python, and other runtimes found on PATH. Use it when output may be long, for example tests, builds, logs, git history or API responses, and print just the lines or numbers you need. Set `file` to a local path to work on that file without reading it into the conversation; the code gets the path in the CTX_FILE environment variable. Set `intent` to a short phrase when output may be large: the matching sections come back and the full output is indexed for ctx_search. Stops after `timeoutMs` (default and maximum 600000) and kills the whole process tree.
 ```
 
 <!-- id: ctx_batch -->
