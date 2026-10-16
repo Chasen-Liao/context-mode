@@ -14,11 +14,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { runHookFixture } from "../harness/hook-runner.mjs";
+import { normalize } from "../harness/normalize.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const FIXTURES_ROOT = path.join(REPO_ROOT, "e2e", "fixtures");
 const HOOK_BUNDLE = path.join(REPO_ROOT, "release-out", "hook.mjs");
+
+function loadGolden(name) {
+  const p = path.join(__dirname, "..", "golden", "GP3", `${name}.json`);
+  return JSON.parse(readFileSync(p, "utf8"));
+}
 
 function listDirs(dir) {
   if (!existsSync(dir)) return [];
@@ -60,10 +66,22 @@ for (const fx of fixtures) {
   test(`[M0] GP3/fixture-replay-${fx.agent}-${fx.event}`, async () => {
     const payload = JSON.parse(readFileSync(fx.filePath, "utf8"));
     const result = await runHookFixture(HOOK_BUNDLE, fx.agent, payload);
-    assert.equal(result.exitCode, 0, `hook-runner exit for ${fx.agent}/${fx.event}`);
     // Shared encode step 2, "allow" case: native stdout is "" on exit 0 for every adapter
     // (10-adapters.md §2 shared encode pseudocode); per-agent deny/hint shapes are out of
     // scope for this M0 smoke replay.
-    assert.equal(result.stdout, "", `native allow stdout for ${fx.agent}/${fx.event}`);
+    //
+    // stderr must also be checked: src/entries/hook.ts catches any decode/encode error and
+    // falls back to the same { stdout: "", exitCode: 0 } shape as a real allow. Without a
+    // stderr check, a broken decode()/encode() for this agent is indistinguishable from a
+    // working one (skeptic-M0, .impl/skeptic-M0.md). An empty stderr proves the catch branch
+    // was not taken, i.e. decode() actually parsed this fixture and encode() actually ran.
+    const normalized = normalize({
+      agent: fx.agent,
+      event: fx.event,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    });
+    assert.deepStrictEqual(normalized, loadGolden(`fixture-replay-${fx.agent}-${fx.event}`));
   });
 }

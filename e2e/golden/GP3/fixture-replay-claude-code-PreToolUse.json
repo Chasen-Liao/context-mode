@@ -2,5 +2,6 @@
   "agent": "claude-code",
   "event": "PreToolUse",
   "exitCode": 0,
-  "stdout": ""
+  "stdout": "",
+  "stderr": ""
 }

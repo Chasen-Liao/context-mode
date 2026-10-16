@@ -37,3 +37,13 @@ export function runHook(bundlePath, opts) {
     child.stdin.end();
   });
 }
+
+/**
+ * runHookFixture(bundlePath, agent, payload) -> same result as runHook.
+ * Thin wrapper for GP3 fixture replay (e2e/cases/GP3-hooks.e2e.mjs): the hook
+ * entry (src/entries/hook.ts) only reads --agent off argv, so no event name
+ * is needed to run the bundle.
+ */
+export function runHookFixture(bundlePath, agent, payload) {
+  return runHook(bundlePath, { agent, event: undefined, payload });
+}

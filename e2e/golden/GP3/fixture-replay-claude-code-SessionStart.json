@@ -2,5 +2,6 @@
   "agent": "claude-code",
   "event": "SessionStart",
   "exitCode": 0,
-  "stdout": ""
+  "stdout": "",
+  "stderr": ""
 }
