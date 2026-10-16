@@ -51,7 +51,7 @@ export function decodeClaudeShape(raw: unknown, agent: AgentId, ownPrefix: strin
 }
 
 // Deny exits 0: the reason travels in the JSON deny field, and Claude-shape hosts ignore stdout JSON on
-// exit 2 (only stderr is read there; HookOutput has no stderr). See the deviation note in the M0-T8 report.
+// exit 2 (only stderr is read there; HookOutput has no stderr). DEVIATIONS D-M0-T8-1.
 export function encodeClaudeShape(ev: CanonicalHookEvent, d: Decision, hasReplace: boolean): HookOutput {
   const out = (fields: Record<string, unknown>): HookOutput => ({
     stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: ev.event, ...fields } }),
