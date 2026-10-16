@@ -1,0 +1,546 @@
+{
+  "version": 1,
+  "moduleMilestone": {
+    "contracts": "M1",
+    "store": "M1",
+    "sandbox": "M2",
+    "tools-index": "M2",
+    "tools-exec": "M2",
+    "server": "M2",
+    "adapters": "M3",
+    "enforcement": "M3",
+    "hooks": "M3",
+    "tools-session": "M4",
+    "tools-ops": "M5",
+    "plugins": "M5",
+    "build-release": "M6",
+    "tests": "M0",
+    "v1-transition": "M7"
+  },
+  "files": {
+    "tests/adapters/antigravity.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/base-adapter-memory.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/claude-code-memory.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/claude-code.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/codex-usage.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/codex.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/copilot-base-cwd-consistency.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/copilot-cli.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/cursor-claude-compat-config-dir.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/cursor.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/gemini-cli.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/jetbrains-copilot.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/kimi-usage.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/kimi.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/kiro.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/memory-conventions.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/omp-usage.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/omp.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/openclaw-usage-handler.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/openclaw.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/opencode.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/pi-adapter.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/pi-extension-workspace-resolve.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/qwen-code-usage.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/qwen-code.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/vscode-copilot.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/zed.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/zod3tov4-e2e.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/zod3tov4-production.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/adapters/zod3tov4.test.ts": {
+      "module": "adapters",
+      "reason": ""
+    },
+    "tests/analytics/format-report.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js; statusline/analytics -> tools-session"
+    },
+    "tests/analytics/lifetime-stats-config-dir.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js"
+    },
+    "tests/analytics/metrics.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js"
+    },
+    "tests/analytics/price-per-token.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js"
+    },
+    "tests/cli/open-browser.test.ts": {
+      "module": "tools-ops",
+      "reason": "imports src/cli.js openInBrowser, an operational CLI helper closest to ctxDoctor/ctxUpgrade's ops surface"
+    },
+    "tests/core/auto-memory-adapter.test.ts": {
+      "module": "tools-index",
+      "reason": "imports src/search/auto-memory.js + adapters/*, auto-memory is a search-time behavior"
+    },
+    "tests/core/auto-memory-config-dir.test.ts": {
+      "module": "tools-index",
+      "reason": "imports src/search/auto-memory.js (also touches session/db.js for config dir); primary subject is auto-memory"
+    },
+    "tests/core/executor.test.ts": {
+      "module": "sandbox",
+      "reason": "executor/runtime -> sandbox"
+    },
+    "tests/core/fetch-cleanup.test.ts": {
+      "module": "sandbox",
+      "reason": "fetch -> sandbox/fetch.ts (safeFetch)"
+    },
+    "tests/core/search-flood-guard.test.ts": {
+      "module": "tools-index",
+      "reason": "store/search -> tools-index"
+    },
+    "tests/core/server-timeline-adapter.test.ts": {
+      "module": "tools-session",
+      "reason": "no src/ import; timeline aggregation is a tools-session (ctxStats/ctxResume) concern"
+    },
+    "tests/executor.test.ts": {
+      "module": "sandbox",
+      "reason": "executor/runtime -> sandbox"
+    },
+    "tests/executor/cwd-override.test.ts": {
+      "module": "sandbox",
+      "reason": "executor/runtime -> sandbox"
+    },
+    "tests/executor/win-sandbox-782-788.test.ts": {
+      "module": "sandbox",
+      "reason": "executor/runtime -> sandbox"
+    },
+    "tests/formatters.test.ts": {
+      "module": "hooks",
+      "reason": "imports hooks/core/formatters.mjs"
+    },
+    "tests/guidance-throttle.test.ts": {
+      "module": "hooks",
+      "reason": "imports hooks/core/routing.mjs, hook-side nudge throttle"
+    },
+    "tests/hook-runtime-resolution.test.ts": {
+      "module": "hooks",
+      "reason": "no src/ import; resolves the runtime hook command emission uses (issue #738), a hooks concern"
+    },
+    "tests/hooks/antigravity-cli-hooks.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/claude-stop.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/codex-goal-compact.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/codex-sessionstart-rule-capture.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/copilot-cli-hooks.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/cursor-hooks.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/ensure-deps.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/formatters.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/gemini-hooks.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/hook-latency.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/jetbrains-hooks.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/kimi-config-dir.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/kimi-hooks.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/kiro-hooks.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/hooks/platform-bridge-wire.test.ts": {
+      "module": "hooks",
+      "reason": ""
+    },
+    "tests/integration/commit-message-symmetry.test.ts": {
+      "module": "store",
+      "reason": "imports src/session/db.js"
+    },
+    "tests/integration/cross-project-attribution.test.ts": {
+      "module": "store",
+      "reason": "imports src/session/db.js + hooks/session-loaders.mjs; storage-side attribution"
+    },
+    "tests/integration/seed-parity-coverage.test.ts": {
+      "module": "store",
+      "reason": "imports src/session/db.js"
+    },
+    "tests/lifecycle.test.ts": {
+      "module": "server",
+      "reason": "lifecycle -> server"
+    },
+    "tests/plugins/codex-manifest.test.ts": {
+      "module": "build-release",
+      "reason": "manifest files are build-release's build/manifests.ts output"
+    },
+    "tests/runtime.test.ts": {
+      "module": "sandbox",
+      "reason": "executor/runtime -> sandbox"
+    },
+    "tests/scripts/assert-bundle.test.ts": {
+      "module": "build-release",
+      "reason": "post-build bundle invariant guardrail (issue #511), a build-release concern"
+    },
+    "tests/server-stdin-eof-exit.test.ts": {
+      "module": "server",
+      "reason": "tests lifecycle.ts stdin EOF handling -> server"
+    },
+    "tests/session-hooks-smoke.test.ts": {
+      "module": "hooks",
+      "reason": "smoke test for hook-driven session writes (src/session/db.js consumer is the hook path)"
+    },
+    "tests/session/classifier.test.ts": {
+      "module": "store",
+      "reason": "imports session/error-classifier.js, a raw-event classification helper feeding journal storage"
+    },
+    "tests/session/cleanup-preserves-live-uuid-events.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js, journal/event storage"
+    },
+    "tests/session/content-store-path-migration.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js, storage path migration"
+    },
+    "tests/session/continuity.test.ts": {
+      "module": "store",
+      "reason": "imports session/snapshot.js, session-state persistence"
+    },
+    "tests/session/cross-session-bleed.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js, cross-session storage isolation"
+    },
+    "tests/session/db-path-canonical-migration.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js, storage path migration"
+    },
+    "tests/session/event-emit.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js + session/event-emit.js, journal write path"
+    },
+    "tests/session/extract-agent-usage.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js, raw event extraction feeding journal"
+    },
+    "tests/session/extract-bash-outcome.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-bytes-retrieved.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-exit-plan-mode.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-exit-worktree.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-file-read-metadata.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-git-commit.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-multilang.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js + session/snapshot.js"
+    },
+    "tests/session/extract-plan-fallback.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-prompt-features.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-session-settings.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-transcript-usage-since.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-transcript-usage.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/extract-webfetch-metadata.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/format-cost.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js, report formatting exposed via ctxStats"
+    },
+    "tests/session/format-datetime.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js"
+    },
+    "tests/session/format-report-real-bytes.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js"
+    },
+    "tests/session/format-timeline.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js"
+    },
+    "tests/session/lifetime-stats.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js + session/db.js, lifetime stats surfaced by ctxStats"
+    },
+    "tests/session/multi-adapter-render.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js"
+    },
+    "tests/session/multi-adapter-stats.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js + session/db.js"
+    },
+    "tests/session/parse-gemini-usage.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js, raw usage extraction"
+    },
+    "tests/session/parse-git-invocation.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/parse-openclaw-usage.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/parse-opencode-usage.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/parse-pi-usage.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/pricing.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/pricing.js, cost numbers surfaced by ctxStats"
+    },
+    "tests/session/project-attribution.test.ts": {
+      "module": "store",
+      "reason": "imports session/project-attribution.js + types.js, storage-side attribution"
+    },
+    "tests/session/purge-session.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/db.js + session/purge.js; purge.js owns the behavior ctxPurge exposes"
+    },
+    "tests/session/real-bytes-stats.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js + session/db.js + store.js, stats surfaced by ctxStats"
+    },
+    "tests/session/resolve-session-path.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js, path resolution for storage"
+    },
+    "tests/session/resume-leg-boundary.test.ts": {
+      "module": "tools-session",
+      "reason": "no src/ import; name names resume-leg behavior, which ctxResume owns"
+    },
+    "tests/session/retrieval-marker.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/retrieval-marker.js, session-scoped retrieval bookkeeping ctxStats/ctxResume read"
+    },
+    "tests/session/server-tool-call-wiring.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js + session/persist-tool-calls.js, raw tool-call persistence"
+    },
+    "tests/session/session-db-bytes-migration.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js, storage migration"
+    },
+    "tests/session/session-db.test.ts": {
+      "module": "store",
+      "reason": "imports db-base.js + session/db.js"
+    },
+    "tests/session/session-extract.test.ts": {
+      "module": "store",
+      "reason": "imports session/extract.js"
+    },
+    "tests/session/session-goal.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js + session/extract.js + session/snapshot.js"
+    },
+    "tests/session/session-pipeline.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js + session/extract.js + session/snapshot.js"
+    },
+    "tests/session/session-snapshot.test.ts": {
+      "module": "store",
+      "reason": "imports session/snapshot.js"
+    },
+    "tests/session/stats-output-format.test.ts": {
+      "module": "tools-session",
+      "reason": "imports session/analytics.js, output format for ctxStats"
+    },
+    "tests/session/tool-calls-persistence.test.ts": {
+      "module": "store",
+      "reason": "imports session/db.js, raw persistence"
+    },
+    "tests/stale-detection.test.ts": {
+      "module": "store",
+      "reason": "imports src/store.js"
+    },
+    "tests/statusline-sqlite.test.ts": {
+      "module": "tools-session",
+      "reason": "statusline/analytics -> tools-session"
+    },
+    "tests/statusline.test.ts": {
+      "module": "tools-session",
+      "reason": "statusline/analytics -> tools-session"
+    },
+    "tests/store-directory.test.ts": {
+      "module": "store",
+      "reason": "imports src/store-directory.js"
+    },
+    "tests/store.test.ts": {
+      "module": "store",
+      "reason": "imports src/db-base.js + src/store.js"
+    },
+    "tests/tier2-smoke-assert.test.ts": {
+      "module": "tests",
+      "reason": "a cross-cutting smoke assertion over the test tier itself, not a single src/ module"
+    },
+    "tests/util/claude-config.test.ts": {
+      "module": "store",
+      "reason": "resolveConfigDir -> store"
+    },
+    "tests/util/codex-session-cwd-resolution.test.ts": {
+      "module": "store",
+      "reason": "session cwd resolution parallels resolveProject -> store"
+    },
+    "tests/util/isolated-env.test.ts": {
+      "module": "sandbox",
+      "reason": "buildChildEnv -> sandbox/env.ts"
+    },
+    "tests/util/no-dynamic-require.test.ts": {
+      "module": "build-release",
+      "reason": "bundle lint check, same family as assert-bundle.test.ts"
+    },
+    "tests/worktree-suffix.test.ts": {
+      "module": "store",
+      "reason": "worktree resolution parallels resolveProject -> store"
+    }
+  }
+}
