@@ -96,3 +96,16 @@ If both the v1 bare npm spec and the v2 git spec are present in `plugin`, OpenCo
 4. **Plugin distribution is file-drop or npm-module-string, not a documented git-ref install.** `opencode plugin <module>` and the config's `plugin: [...]` array are documented only for npm package names (plain or scoped); ADR-0011's planned v2 OpenCode entry (`"git+https://github.com/mksglu/context-mode.git#release"`) relies on OpenCode's installer (Bun) accepting a git specifier in that same string slot. No OpenCode doc page shows a git-ref example for `plugin`, so this is this guide's own inference from "Bun installs the array's entries," not a confirmed-live install path — test it against a real `release` branch before relying on it.
 
 None of these change `toolNamePrefix`, `installMode`, or the `eventMap`/matcher rows in `impl/10-adapters.md` — this file is not edited.
+
+## Verified
+
+No v2 src build exists on `v2-design` yet; verified the agent install and MCP/hook config steps only, with `node /private/tmp/cm-v2-impl/start.mjs` standing in for the context-mode server.
+
+| Step | Result | Agent version | Date |
+|---|---|---|---|
+| Install `opencode-ai` via npm into isolated prefix | worked (postinstall script skipped by npm's allow-scripts guard; bundled binary still runs) | opencode 1.19.3 | 2026-10-17 |
+| `opencode --version` | worked | 1.19.3 | 2026-10-17 |
+| Write `mcp.context-mode` block to `~/.config/opencode/opencode.json` per this guide | worked | 1.19.3 | 2026-10-17 |
+| Drop plugin file at `~/.config/opencode/plugins/context-mode.js` per this guide | ran (stub file; real hook names not tested live) | 1.19.3 | 2026-10-17 |
+| `opencode mcp list` shows the server connected | worked — `context-mode [connected]` | 1.19.3 | 2026-10-17 |
+| Live chat / `/ctx-doctor` | needs owner login | 1.19.3 | 2026-10-17 |
