@@ -30,7 +30,7 @@ MCP defines one portable channel for this: `InitializeResult.instructions`.
 Which agents pass `instructions` to the model is in TECH-SPEC §3.1. Summary:
 - **Confirmed** in source or by a live probe: Claude Code, Gemini CLI, Qwen Code, OpenCode 2, VS Code Copilot.
 - **Pi:** does not receive `instructions` over MCP in v2. v2 runs Pi as an in-process plugin, not over MCP (TECH-SPEC §3.1, §3.9; matches Decision 5 below), so it gets the same `instructions.md` bytes through its `before_agent_start` plugin hook instead.
-- **Codex:** the instructions are wired to the tool namespace, but a live probe saw nothing at session start.
+- **Codex:** the instructions are wired to the tool namespace, but a live probe saw nothing at session start. S-CODEX (closed 2026-10-17, `tickets/spikes-r5/S-CODEX.md`) confirms by live probe (3/3, ChatGPT login, `gpt-6-astra`) that this is deferred loading: the model sees no namespace marker and no tool description before it calls a tool, and sees the full description only once it looks up / calls the tool.
 - **Copilot CLI:** verified by live probe (`copilot plugin install` on Copilot CLI 1.0.60, same method v1 used in 9f34c6f1): a plugin can register MCP servers and hooks, and `InitializeResult.instructions` reaches the model. This replaces the earlier "probable; no source check" line.
 - **Not supported:** Kiro (kirodotdev/Kiro#11096 is still open).
 - **No evidence:** ZCode.
