@@ -1,100 +1,43 @@
-name: CI
+# v2 CI (docs/v2/impl/13-build-release.md §8, impl/14-tests.md §8, TECH-SPEC §6.6).
+# 3 OS x 2 Node lines. No live layer, no secrets, no key env (ADR-0012).
+# Pull requests are disabled on the repo (ADR-0014 §5), so push is the only event trigger.
+# release.yml reuses this job through workflow_call (impl/13 A10).
+name: ci
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main, next]
-  pull_request:
-    branches: [main, next]
+    branches: [main, v2, v2-design]
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  ci:
+    name: ci (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    name: test (${{ matrix.os }})
-
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        node: ["24.15.0", "26"]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: "22.5"
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "stable"
-          cache: false
-
-      - uses: erlef/setup-beam@v1
-        if: runner.os != 'Windows'
-        with:
-          elixir-version: "1.17"
-          otp-version: "27"
-
-      - name: Install Elixir (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: choco install elixir --yes --no-progress
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Typecheck
-        run: npx tsc -b --noEmit
-
-      - name: Build
-        run: npm run build
-
-      - name: Bundle
-        run: npm run bundle
-
-      - name: Assert bundle invariants (G3 — Issue #511 guardrail)
-        run: npm run assert-bundle
-
-      - name: Run all tests
-        shell: bash
-        run: |
-          # Run tests, capture output + exit code.
-          # Vitest fork workers can crash during cleanup on CI (native addon teardown race)
-          # even when all tests pass. We check the actual test results instead of relying
-          # solely on the exit code.
-          set +e
-          npx vitest run 2>&1 | tee /tmp/vitest-output.txt
-          VITEST_EXIT=$?
-          set -e
-
-          # Extract results from vitest output
-          if grep -q "Tests.*failed" /tmp/vitest-output.txt; then
-            echo "❌ Test failures detected"
-            exit 1
-          elif grep -q "Test Files.*failed" /tmp/vitest-output.txt; then
-            echo "❌ Test file failures detected"
-            exit 1
-          elif grep -q "Tests.*passed" /tmp/vitest-output.txt; then
-            echo "✅ All tests passed (exit code $VITEST_EXIT may reflect worker cleanup noise)"
-            exit 0
-          elif grep -q "Error: kill EPERM" /tmp/vitest-output.txt; then
-            # Vitest crashed during worker teardown (Windows-only kill EPERM race, errno -4048)
-            # BEFORE printing the summary line. Look for per-suite failure markers instead —
-            # if none, treat as pass (the same cleanup noise the comment above acknowledges).
-            if grep -qE "FAIL +tests/|⨯ +tests/" /tmp/vitest-output.txt; then
-              echo "❌ Per-suite failures detected before teardown crash"
-              exit 1
-            fi
-            echo "⚠️ Vitest worker teardown race (Windows kill EPERM) — no failures detected; treating as pass."
-            exit 0
-          else
-            echo "❌ Could not parse test results"
-            exit $VITEST_EXIT
-          fi
-
-      - name: Doctor (verify server starts)
-        run: npx tsx src/cli.ts doctor
-        continue-on-error: true
+          node-version: ${{ matrix.node }}
+      - run: npm install
+        name: dev tooling (npm is dev-only, never shipped)
+      - run: node build/build.mjs --out release-out
+        name: build (esbuild, no package.json in output)
+      - run: node docs/v2/prompt/lint.mjs drafts docs/v2/prompt/drafts.md
+        name: prompt lint (M0 mode, same rule as scripts/gate.mjs)
+      - run: node e2e/cases/run.mjs
+        name: GP cases
+      - run: npx vitest run --config tests/vitest.config.ts
+        name: KEEP-PASS v1 tests (DECISIONS-r9 G5)
+      - run: node scripts/gen-keep-pass.mjs --check
+        name: KEEP-PASS list is current
+      - run: node scripts/ci-gs4-lint.mjs
+        name: GS4 lint (no e2e import of src, ledger verdicts)
