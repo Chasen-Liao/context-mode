@@ -146,9 +146,13 @@ export function selectChunks(db: DbHandle, sourceId: number, intent: string, bud
 
 ```ts
 export const ctxSearchSchema: ZodType<CtxSearchInput>;
-export interface CtxSearchInput { queries: string[]; scope?: SearchScope; source?: string; offset?: number; }
+export interface CtxSearchInput { queries: string[]; scope?: SearchScope; source?: string; offset?: number; sort?: "relevance" | "timeline"; after?: number; }
 export const ctxSearch: ToolDef<CtxSearchInput> = { name: "ctx_search", readOnly: true, ... };
 ```
+
+**`sort` (ADR-0009 §8, Memory-R6):** `sort = input.sort ?? "relevance"`.
+- `"relevance"`: unchanged — ContentStore only, within `scope`, BM25-ranked, session-first tie-break (step 5 below).
+- `"timeline"`: merge ContentStore + SessionDB + auto-memory, each fetched at the full page size *before* merging (never clip a single source first), normalize every timestamp to one shape, sort ascending, tie-break by `seq` ascending, then cut the merged list to the page size. `scope` filters all three sources identically. `after` (an opaque `seq` cursor, present only in `"timeline"` mode) pages past the last row of the previous call instead of re-walking from the start.
 
 **Constants used:** `OUTPUT_CAP = 16384`. Page size: `SEARCH_PAGE_SIZE = 20` hits (Assumption A4).
 
@@ -157,7 +161,7 @@ export const ctxSearch: ToolDef<CtxSearchInput> = { name: "ctx_search", readOnly
 2. `scope = input.scope ?? "worktree"` (Q6 default).
 3. `offset = input.offset ?? 0`.
 4. Open DB read-only (`openDb(ctx.project, {readOnly:true})`).
-5. For each string in `queries` (in array order), call `ftsQuery(db, q, scope, ctx.project, ctx.sessionId, SEARCH_PAGE_SIZE, offset)`. Each call returns `Hit[]` already ranked by `store`'s BM25 query with the session-first tie-break (PRD §8 "Ranking inside a scope: session first", #895): rows whose `session_id === ctx.sessionId` are ranked ahead of equal-or-lower-scored rows from other sessions in the same scope, then by BM25 score descending, then by `sourceId`/`ord` ascending for determinism.
+5. For each string in `queries` (in array order), call `ftsQuery(db, q, scope, ctx.project, ctx.sessionId, SEARCH_PAGE_SIZE, offset)`. Each call returns `Hit[]` already ranked by `store`'s BM25 query with the session-first tie-break (PRD §8 "Ranking inside a scope: session first", #895): rows whose `session_id === ctx.sessionId` are ranked ahead of equal-or-lower-scored rows from other sessions in the same scope, then by BM25 score descending, then by `sourceId`/`ord` ascending for determinism. When `scope` is `"project"` and the caller wants cross-session relevance (not `sort:"timeline"`), fuse the BM25 rank list with a SessionDB recency rank list by Reciprocal Rank Fusion (`1/(60+rank)` per list, summed) rather than a second weighted score — ADR-0009 §8, research doc §4.
 6. Deduplicate: a `Hit` whose `(sourceId, ord)` pair was already returned by an earlier query **in this same call** is dropped from the later query's result (ADR text "An identical chunk returned by two queries inside the same batch call is deduped, not only across separate calls" — this module's own call also dedupes across its own `queries` array, which is the same rule applied one level down).
 7. If `input.source` is set, filter `ftsQuery`'s candidate set to sources whose `label === input.source` before ranking (push the filter into the `ftsQuery` call's own `source` argument — do not post-filter after scoring, or the page size and ranking order would be wrong).
 8. For every surviving `Hit`, build its `snippet` by calling `store`'s `highlight()`:

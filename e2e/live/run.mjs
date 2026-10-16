@@ -53,7 +53,7 @@ for (const c of selected) {
   if (!bin) { rows.push({ id: c.id, result: "SKIPPED", cost: 0, note: "no real claude binary on PATH" }); continue; }
   const r = spawnSync(bin, ["-p", c.prompt, "--model", MODEL, "--effort", EFFORT, "--max-budget-usd", BUDGET,
     "--no-session-persistence", "--setting-sources", "project", "--strict-mcp-config", "--output-format", "json",
-    "--allowedTools", ...c.tools], { cwd: ROOT, env, encoding: "utf8", timeout: 600000 });
+    ...(c.tools.length ? ["--allowedTools", ...c.tools] : ["--tools", ""])], { cwd: ROOT, env, encoding: "utf8", timeout: 600000 });
   let res; try { res = JSON.parse(r.stdout); } catch { res = { is_error: true, result: (r.stderr || r.stdout || "").slice(0, 200) }; }
   const text = String(res.result || "").trim();
   const ok = !res.is_error && text.startsWith(c.expect.firstLineStartsWith);

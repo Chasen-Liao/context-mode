@@ -79,6 +79,25 @@ Skills (user commands only, no routing text, `disable-model-invocation: true`): 
 | Storage | One `context.db` per project (git common dir hash), node:sqlite, WAL | ADR-0002 |
 | Hook budget | 40 ms wall, measured in CI (G26). The command-hook CPU sub-budget (GS6) is still open | TECH-SPEC §7, ADR-0008 "Open" |
 | Tool description cap | 1,024 chars each; instructions ≤ 2,048 chars; descriptions + schemas ≤ 8,000 chars | ADR-0005 |
+| Cross-session rank fusion | RRF, k = 60; current session first, then RRF, then `seq` ascending | DECISIONS-r6 D4 |
+| `sort:"timeline"` page cursor | `after` (opaque seq); `offset` is relevance-only | DECISIONS-r6 D2 |
+| `decision` row trigger | `AskUserQuestion` answer, or an option echo next turn — never message shape | DECISIONS-r6 D3 |
+| v1 extracted `category` values | 19, not 26 (the "26" was uncounted commit text) | DECISIONS-r6 D5 |
+
+## 5a. v1 memory → v2
+
+| v1 | v2 | Why |
+|---|---|---|
+| Resume snapshot, no real cap (up to ~196 KB) | Hard 2,048 B block; big rows become `ctx_resume(seq)` pointers | #1022, #1173; DECISIONS-r6 D1 |
+| Priority-based eviction | Append-only journal; nothing evicted before read | #902 |
+| Auto-injected `role`/`rule`/`intent`/`constraint`/`goal` memory, re-sent every turn | No injected memory; not extracted | #856, #1263 |
+| `decision` from message shape (comma, 15–500 chars) | Only `AskUserQuestion` answers and option echoes; `ctx_search(source:"decision")` | #535, #856; DECISIONS-r6 D3 |
+| 17 other extracted categories (`file`, `git`, `error`, `task`, `env`, …) | Journal kinds (`edit`, `cmd`, `toolerr`, `prompt`, `index`) keep the facts; category labels are gone | DECISIONS-r6 D5 |
+| Cross-project timeline/memory | Scoped to the current project; use `scope:"global"` + `sort:"relevance"` for other projects | #663, #664, #1214 |
+| `sort:"timeline"`, no paging | Kept; adds the `after` cursor | DECISIONS-r6 D2 |
+| Memory role tag `user` (Pi) | System/tool role only | #1263 |
+
+v1 rows are not migrated into v2 categories. v2 users are not asked to give up v1: each agent keeps a rollback command (§6, PRD §14) through the switch.
 
 ## 6. Running the keyless E2E-live harness
 
@@ -107,3 +126,7 @@ node e2e/live/run.mjs --model claude-sonnet-5 --effort low --budget 0.25   # def
 | G25 | Do hooks fire for MCP tools on Copilot CLI, ZCode, Pi and OpenCode 2? | Starts M0, closes M3, gates release |
 
 S-NODE, S-TIMEOUT and the ADR-0006 re-probe are closed; see `tickets/spikes-r5/`.
+
+## Changes
+
+- 2026-10-16 (r6, `docs/v2/review/DECISIONS-r6.md`): §5 gains the RRF, timeline-cursor and decision-trigger rows and the corrected v1 category count (19, not 26); new §5a table maps each v1 memory feature to its v2 replacement.

@@ -196,7 +196,7 @@ export type Decision =
 
 export interface HookOutput { stdout: string; exitCode: 0 | 2; } // native shape produced by adapter.encode
 
-export type EventKind = "prompt" | "edit" | "cmd" | "toolerr" | "index" | "cost"; // ADR-0009 §1 + GP10
+export type EventKind = "prompt" | "edit" | "cmd" | "toolerr" | "index" | "cost" | "decision"; // ADR-0009 §1 + GP10 + DECISIONS-r6 D3
 export interface JournalRow {
   seq: number; session_id: string; worktree: string; agent: AgentId;
   kind: EventKind; tool: string | null; key: string | null; path: string | null;
@@ -246,7 +246,7 @@ export interface AdapterRow {
 | `REPORT_CAP` | `4096` B | ADR-0014 |
 | `POINTER_MIN` | `640` B | ADR-0009 §4 |
 | `MAX_CANDIDATES` | `85` per section | ADR-0009 §3 |
-| `WEIGHT` | `{toolerr:900, prompt:500, edit:400, index:200}` | ADR-0009 |
+| `WEIGHT` | `{toolerr:900, prompt:500, edit:400, index:200}` — kept untuned; DECISIONS-r6 D1 measured a sweep and found no setting beats this on held-out cases | ADR-0009, DECISIONS-r6 D1 |
 | `DECAY_HALF_LIFE_TURNS` | `4`; table `DECAY_X1000[age]` = round(1000·(0.25+0.75·2^(−age/4))) | ADR-0009 |
 | `EXEC_TIMEOUT_MS` | `600000` (default and max) | S-TIMEOUT, Q8 |
 | `KILL_GRACE_MS` | `1000` (cancel teardown bound) | GP4 |
@@ -300,6 +300,8 @@ readSessionEvents(db: DbHandle, sessionId: string): JournalRow[];
 readEventBySeq(db: DbHandle, seq: number): JournalRow | null;
 ftsInsert(db: DbHandle, src: SourceRow, chunks: Chunk[]): void;
 ftsQuery(db: DbHandle, q: string, scope: SearchScope, ctx: ProjectContext, sessionId: string, limit: number, offset: number): Hit[];
+ftsQueryTimeline(db: DbHandle, scope: SearchScope, ctx: ProjectContext, sessionId: string, limit: number, after: number | null, source?: string): Hit[]; // DECISIONS-r6 D2; merges ContentStore + SessionDB + auto-memory, oldest first
+// ctx_search gains sort?: "relevance" | "timeline" (default "relevance") and after?: number (timeline only); source:"decision" is a reserved label over kind:"decision" journal rows (DECISIONS-r6 D2, D3)
 metaSet(db, key: string, v: string): void; metaTake(db, key: string): string | null; // DELETE ... RETURNING
 
 // sandbox
@@ -366,7 +368,7 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
    - **SessionStart**: `source=compact` and `compactDelivery=sessionstart` → open DB, `renderState(readSessionEvents)`, return as context. Else hint text about `ctx_resume`, once per session.
    - **UserPromptSubmit**: detached `appendEvent(kind:"prompt")`; if `pending-flag` agent, `metaTake("pending_compact:"+sid)` in `BEGIN IMMEDIATE` → deliver state once.
    - **PreToolUse**: no DB. `decide()` → allow / hint (throttled) / deny with rewrite. Subagent (`agentId` present) → `pickSubagentCase`.
-   - **PostToolUse**: detached append (`cmd`/`edit`/`toolerr` from `is_error`); case C → `selectChunks` and `replace`. Skip append for own `ctx_*` tools (server writes them).
+   - **PostToolUse**: detached append (`cmd`/`edit`/`toolerr` from `is_error`); case C → `selectChunks` and `replace`. Skip append for own `ctx_*` tools (server writes them). `AskUserQuestion` reply with a JSON `tool_response.answers` → also append `kind:"decision"` (DECISIONS-r6 D3 rule 1); no structural match → no `decision` row (fail-safe).
    - **PreCompact** (gemini, copilot-cli, vscode): `metaSet("pending_compact:"+sid,"1")`.
 4. `adapter.encode` → native stdout and exit code; Kiro prompt hook prints `""` (GP3).
 5. Any thrown error → allow with empty stdout, exit 0; log to stderr. Never block the host.
@@ -374,7 +376,7 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
 ### 5.4 Compaction and resume — GP6; covers `src/core/compaction/`
 1. Journal rows accrue via 5.2 step 5 and 5.3.
 2. Trigger per `compactDelivery` (PRD §11). Kiro: none.
-3. `renderState`: candidates (≤ 85/section) → integer score `WEIGHT × DECAY_X1000[age] × repeat` → lazy greedy by score/size within `STATE_BUDGET`; item > `POINTER_MIN` → `#<seq> (<bytes> B) ctx_resume(seq:<seq>)`; ties by seq desc; sections fixed order, lines in seq order.
+3. `renderState`: candidates (≤ 85/section; `kind:"decision"` rows are never a candidate — the `prompt` row already carries the text, DECISIONS-r6 D3) → integer score `WEIGHT × DECAY_X1000[age] × repeat` → lazy greedy by score/size within `STATE_BUDGET`; item > `POINTER_MIN` → `#<seq> (<bytes> B) ctx_resume(seq:<seq>)`; ties by seq desc; sections fixed order, lines in seq order.
 4. `ctx_resume(seq:N)` = `readEventBySeq`; `ctx_resume()` = summary ≤ `RESUME_CAP`.
 
 ### 5.5 Install, upgrade, uninstall — GP1, GP11; covers `src/core/tools/upgrade.ts`, `src/core/ops/`

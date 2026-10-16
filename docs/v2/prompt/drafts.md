@@ -36,12 +36,12 @@ Stores content so it can be searched later: a local file or folder (nested .giti
 
 <!-- id: ctx_search -->
 ```text
-Searches content stored with ctx_index and earlier sandbox output in this project. Pass several queries in one call. By default it searches the current worktree; set `scope` to `project` for all worktrees or `session` for this session only. Results from the current session rank first, and every hit names its source. When nothing matches, the reply states the scope and how many sources are indexed.
+Searches content stored with ctx_index and earlier sandbox output in this project. Pass several queries in one call. By default it searches the current worktree; set `scope` to `project` for all worktrees or `session` for this session only. Results from the current session rank first, then by relevance. Set `sort` to `timeline` for oldest-first order across this session, prior sessions and memory, paged with `after`; `offset` is for relevance order only. Set `source` to `decision` to search only rows where the user answered a question. Every hit names its source. When nothing matches, the reply states the scope and how many sources are indexed.
 ```
 
 <!-- id: ctx_resume -->
 ```text
-Returns a summary of up to 2 KB for this session: the last task and user request, files changed, open errors, decisions, and search terms for ctx_search. Set `seq` to a specific checkpoint number to resume from that point instead of the latest one — pointers returned by ctx_search go here, as `ctx_resume(seq: N)`, not back into ctx_search. Use it after the conversation was compacted or resumed, before you repeat earlier work.
+Returns a summary of up to 2 KB for this session: the last task and user request, files changed, open errors, and search terms for ctx_search. A large row is shown as a pointer line instead of its full text; call `ctx_resume(seq: N)` with that line's number to read the full row. Use it after the conversation was compacted or resumed, before you repeat earlier work.
 ```
 
 <!-- id: ctx_stats -->
@@ -98,4 +98,5 @@ Deletes stored data: one session, one indexed source, or everything stored for t
 
 r3: added the `seq` param to `ctx_resume` (PRD §7, decision A35), bumped status to r3.
 r4 fix pass: checked decisions A35 and B71 — `seq` is already in the `ctx_resume` text above, and B71 found no doc fix needed here (it is a process note about round-1's own notes field). No text changed.
+r6 (`DECISIONS-r6.md` D1-D3): `ctx_search` text now names `sort:"timeline"`, `after` paging, and `source:"decision"`; `ctx_resume` text drops "decisions" from the summary list and describes the pointer line, matching the 2,048 B budget rule. Both texts stay under the 1,024-char cap.
 

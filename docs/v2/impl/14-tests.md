@@ -1,5 +1,7 @@
 # 14 — Module `tests`
 
+Changes (DECISIONS-r6): GP6 now carries the D1 open-error golden case; added `memory-r6-eval-local.json` and `memory-r6-resume-quality.json` live cases for the compaction fixtures; no case checks a prose `decision` row, per D3.
+
 Owner: `tests` (see `00-architecture.md` §2). Scope: everything under `e2e/` except `e2e/live/cases/v1-migration-*.json` (owner: `v1-transition`, spec'd separately), plus the `tests/` v1 runner config. This module imports nothing from `src/` except the 131 KEEP-PASS files, which keep their existing `src/` imports (ADR-0003 r2, TECH-SPEC §6.1 hard rule).
 
 Sources: TECH-SPEC §6 (all), ADR-0003, ADR-0012, ADR-0017, DECISIONS-r4, `docs/v2/review/TEST-TRIAGE-r2.md`, `e2e/live/run.mjs` (already on disk — this spec keeps its CLI contract), `00-architecture.md` §1 e2e/ table.
@@ -81,7 +83,7 @@ import assert from "node:assert/strict";
 | `GP3-hooks.e2e.mjs` | GP3 | hooks ×10 adapters × 4 events | `src/core/hooks/`, `src/entries/hook.ts`, `src/core/policy/` |
 | `GP4-execute.e2e.mjs` | GP4 | `ctx_execute` | `src/core/tools/execute.ts`, `src/core/sandbox/` |
 | `GP5-index-search.e2e.mjs` | GP5 | `ctx_index` → `ctx_search` | `src/core/tools/{index,search}.ts`, `src/core/index/` |
-| `GP6-journal-resume.e2e.mjs` | GP6 | journal + resume | `src/core/journal/`, `src/core/tools/resume.ts` |
+| `GP6-journal-resume.e2e.mjs` | GP6 | journal + resume; golden case for the DECISIONS-r6 D1 miss (open-error row dropped only by a budget skip, never by a scoring bug) | `src/core/journal/`, `src/core/tools/resume.ts`, `src/core/compaction/` |
 | `GP7-scope.e2e.mjs` | GP7 | scope, 2 worktrees × 2 sessions × 2 agents | `src/core/project/` |
 | `GP8-concurrency.e2e.mjs` | GP8 | 4 servers + hooks, one DB | `src/core/store/` |
 | `GP9-lifecycle.e2e.mjs` | GP9 | stdin EOF, parent kill, 3 OS | `src/core/lifecycle/exit.ts` |
@@ -152,6 +154,8 @@ Rules:
 - `e2e/live/routing-tasks.json`: an array of 20 objects `{ id, size: "small"|"large", prompt, expect }`, 10 each, each with a machine-checkable `expect` (TECH-SPEC §6.5). Referenced by `routing` cases via their `prompt` field — a routing case's `prompt` field is populated from this file at case-build time, not duplicated by hand.
 
 Error case: a case file missing `covers` → the loader (inside `run.mjs`, already written) calls `.some()` on `undefined` and throws; this spec's case files must always include `covers`, even `[]"`, never omit it.
+
+**DECISIONS-r6 live cases.** `e2e/live/cases/memory-r6-eval-local.json` (kind `local`, free) runs deterministic checks from `tickets/memory-r6/eval` over the synthetic fixtures in `tickets/memory-r6/eval/fixtures/` — no transcript text, no model call. `e2e/live/cases/memory-r6-resume-quality.json` (kind `agent`) checks resume quality from one synthetic fixture, through the `run.mjs` `bin` branch. Both cover `src/core/compaction/` and `src/core/tools/search.ts`, so step mode runs them whenever those paths change. Per DECISIONS-r6 D3, no case here checks a `decision` row from free prose; `candidates.ts` does not select `decision` rows, so no golden file changes for D3.
 
 ## 7. KEEP-PASS v1 runner
 
