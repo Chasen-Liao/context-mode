@@ -227,6 +227,7 @@ export interface AdapterRow {
   toolNamePrefix: string;  // e.g. "mcp__context-mode__", gemini "mcp_context-mode_", opencode "context-mode_"
   eventMap: Partial<Record<CanonicalEventName | AuxEventName, string>>; // canonical → native name
   compactDelivery: "sessionstart" | "pending-flag" | "pi-flag" | "opencode-cache" | "none";
+  compactSummary: "host" | "none";  // "host": host writes its own compact summary (verified by LV-COMPACT, M3); "none": inject the 2,048 B D1 block via the ADR-0009 §6 path. DECISIONS-r6 D6.
   hookTimeoutMs: number;
   denyChannel: "deny-reason" | "hint-only";
   decode(raw: unknown): CanonicalHookEvent;
@@ -242,6 +243,7 @@ export interface AdapterRow {
 | `TOOL_ORDER` | `["ctx_execute","ctx_batch","ctx_index","ctx_search","ctx_resume","ctx_stats","ctx_doctor","ctx_upgrade","ctx_purge"]` | PRD §8, Q3b |
 | `OUTPUT_CAP` | `16384` B | Q2, ADR-0008, ADR-0016 |
 | `STATE_BUDGET` | `2048` B | ADR-0009 §4 |
+| `COMPACT_POINTER_LINE` | `"context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:\"session\", sort:\"timeline\")."` | DECISIONS-r6 D6; byte-stable, no clock, no counts |
 | `RESUME_CAP` | `2048` B | ADR-0009, GP6 |
 | `REPORT_CAP` | `4096` B | ADR-0014 |
 | `POINTER_MIN` | `640` B | ADR-0009 §4 |
@@ -365,7 +367,7 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
 1. Host spawns `node <root>/hook.mjs --agent <id>`; read stdin JSON.
 2. `adapter.decode(raw)` → `CanonicalHookEvent`.
 3. Per event:
-   - **SessionStart**: `source=compact` and `compactDelivery=sessionstart` → open DB, `renderState(readSessionEvents)`, return as context. Else hint text about `ctx_resume`, once per session.
+   - **SessionStart**: `source=compact` and `compactDelivery=sessionstart` → if `compactSummary=="host"` (Claude Code), return only `COMPACT_POINTER_LINE`, no state block; `ctx_resume()` with no `seq` still returns the full `STATE_BUDGET` block on demand. If `compactSummary=="none"` (every other agent, until its LV-COMPACT check passes at M3), open DB, `renderState(readSessionEvents)`, return the state block as context (DECISIONS-r6 D6). Else hint text about `ctx_resume`, once per session.
    - **UserPromptSubmit**: detached `appendEvent(kind:"prompt")`; if `pending-flag` agent, `metaTake("pending_compact:"+sid)` in `BEGIN IMMEDIATE` → deliver state once.
    - **PreToolUse**: no DB. `decide()` → allow / hint (throttled) / deny with rewrite. Subagent (`agentId` present) → `pickSubagentCase`.
    - **PostToolUse**: detached append (`cmd`/`edit`/`toolerr` from `is_error`); case C → `selectChunks` and `replace`. Skip append for own `ctx_*` tools (server writes them). `AskUserQuestion` reply with a JSON `tool_response.answers` → also append `kind:"decision"` (DECISIONS-r6 D3 rule 1); no structural match → no `decision` row (fail-safe).
@@ -377,7 +379,7 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
 1. Journal rows accrue via 5.2 step 5 and 5.3.
 2. Trigger per `compactDelivery` (PRD §11). Kiro: none.
 3. `renderState`: candidates (≤ 85/section; `kind:"decision"` rows are never a candidate — the `prompt` row already carries the text, DECISIONS-r6 D3) → integer score `WEIGHT × DECAY_X1000[age] × repeat` → lazy greedy by score/size within `STATE_BUDGET`; item > `POINTER_MIN` → `#<seq> (<bytes> B) ctx_resume(seq:<seq>)`; ties by seq desc; sections fixed order, lines in seq order.
-4. `ctx_resume(seq:N)` = `readEventBySeq`; `ctx_resume()` = summary ≤ `RESUME_CAP`.
+4. `ctx_resume(seq:N)` = `readEventBySeq`; `ctx_resume()` = summary ≤ `RESUME_CAP`. The D1 algorithm and constants in step 3 are unchanged by delivery mode; only the SessionStart payload (5.3) differs by `compactSummary` (DECISIONS-r6 D6).
 
 ### 5.5 Install, upgrade, uninstall — GP1, GP11; covers `src/core/tools/upgrade.ts`, `src/core/ops/`
 1. Install: host's own mechanism from the `release` branch (marketplace, extension, `config.toml` entry, git checkout). Node < `NODE_MIN` → hard fail.
@@ -402,3 +404,7 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
 - A7: `cost` event kind added for GP10 turn-keyed stats; ADR-0009 lists only 5 kinds.
 - A8: DB opens on a non-MCP session use session id `"mcp:"+server-id` when request `_meta` has none.
 - A14: ADR-0005's caps/doubt regex rules (PR1, PR2) are each one check, so `lintPromptText` returns one `LintResult` per rule, not a single pass/fail. `docs/v2/prompt/lint.mjs` §4 step 4 calls it once per tool/instructions text and fails the run on any `ok: false` row. This owning function was missing before this edit.
+
+## Changes
+
+- `AdapterRow` gains `compactSummary: "host" | "none"`; `COMPACT_POINTER_LINE` constant added; §5.3/§5.4 flows now branch by `compactSummary` (DECISIONS-r6 D6, tickets/memory-r6/eval/results.md).

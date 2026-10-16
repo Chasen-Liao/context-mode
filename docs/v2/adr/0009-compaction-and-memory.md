@@ -16,6 +16,7 @@
 - **Time-aware retrieval** (LongMemEval, arXiv:2410.10813): normalize timestamps to one shape before ordering or comparing. Used for `sort:"timeline"`, §8.
 - **Mem0** (arXiv:2504.19413): update-beats-duplicate idea for memory rows, taken without its LLM step. Used for the `decision` tag design, §8.
 - Measured, not preference: a 12-case deterministic sweep, 0 model calls, backs the unchanged weights below (`tickets/memory-r6/eval/results.md`; `docs/v2/review/DECISIONS-r6.md` D1).
+- Delivery mode per agent (DECISIONS-r6 D6) is measured, not preference: `tickets/memory-r6/eval/run2.mjs`, 20 real compaction points, 6 projects, scored in `tickets/memory-r6/eval/results.md`.
 
 ## v1 failures this fixes
 
@@ -102,6 +103,8 @@ more: ctx_search(queries:[…], scope:"session")
 
 ### 6. Delivery: one path per agent
 
+Delivery now also depends on `compactSummary` (`adapters/table.ts`: `"host" | "none"`), per DECISIONS-r6 D6. `"host"` means the agent writes its own compact summary: after compaction, inject one pointer line only (no state block): `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").` The 2,048 B block (§4, unchanged) is still computed on demand — `ctx_resume()` with no `seq` returns it. `"none"` means the full 2,048 B block is injected through the agent's row below, as before. Claude Code is `"host"`, verified on measured evidence (`tickets/memory-r6/eval/run2.mjs`, `tickets/memory-r6/eval/results.md`): pointer-only scored 0.85 vs 0.75 for block-only or summary+block. Every other agent stays `"none"` until its own LV-COMPACT live check (one per agent, M3) shows the host writes a summary the model sees; then that row's column flips to `"host"`. One path per agent, no fallback.
+
 | Agent | Path |
 |---|---|
 | Claude Code, Codex, Qwen, ZCode | computed inside SessionStart(compact). No PreCompact hook, no precomputing |
@@ -128,6 +131,7 @@ Qwen sits in the `SessionStart(compact)` row above, not a separate "no PreCompac
 - not the user role (#1263), bare tool names (#1028), no "directive" text (#911, #1259)
 - a failed `ctx_execute` call with no `PostToolUse` fixture still produces a journal row (the server writes it at handler-return time, per §0)
 - the one measured open-error miss (12-case sweep, DECISIONS-r6 D1) is a budget skip, not a scoring bug — if a future run shows a scoring bug, fix the bug; do not raise B
+- an agent with `compactSummary: "host"` (DECISIONS-r6 D6) receives the pointer line only, never the 2,048 B block, unless `ctx_resume()` is called; an agent with `"none"` always receives the full block
 
 ## Open
 
@@ -216,3 +220,4 @@ This reuses the RRF fusion already in v1's `store.ts` (`const K = 60`, `bm25(chu
 - 2026-10-15: status set to Accepted. Folded r3's Q12 into the OpenCode 2 delivery row and Q2 into the budget line in §4; removed the standalone r3 section.
 - 2026-10-16 (Memory-R6): added §8 — `sort:"timeline"` semantics, the literal-cue `decision` tag, and RRF-based cross-session ranking, sourced from `tickets/memory-r6/research-memory.md`.
 - 2026-10-16 (DECISIONS-r6): rewrote §8 to the structural `decision` rule (tool answer + option echo only, no marker-word list); added the exact `CtxSearchInput` contract and reserved `source:"decision"`; added citations (Cormack SIGIR '09, LongMemEval arXiv:2410.10813, Mem0 arXiv:2504.19413) to the sources list; noted `decision` rows are not compaction candidates in §2; added the GP6 budget-skip case and the §8.4 GP6 extension.
+- 2026-10-16 (DECISIONS-r6 D6): §6 delivery now keys on `compactSummary` (`"host" | "none"`); Claude Code is `"host"` and gets a pointer line only, every other agent stays `"none"` until its LV-COMPACT check (M3); added the matching GP6 case; cited `run2.mjs`/`results.md` in Sources.

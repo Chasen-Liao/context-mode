@@ -73,10 +73,10 @@ export async function handleHook(agent: AgentId, raw: unknown, env: NodeJS.Proce
 ### 4.3 `SessionStart`
 
 1. `if (ev.source === "compact" && row.compactDelivery === "sessionstart")`:
-   1. `openDb(project)`.
-   2. `rows = readSessionEvents(db, ev.sessionId)`.
-   3. `text = renderState(rows, ev.turn ?? 0)` (tools-session export, 00 §4; proves GP6).
-   4. `decision = { kind: "hint", text, onceKey: "compact-state" }` — delivered unconditionally this one time; `onceKey` is set so a second `SessionStart(compact)` inside the same session id (should not happen per ADR-0009 "exactly once") would still be throttled by §2 if it somehow fired twice (Assumption A23: ADR-0009 says "once" but does not say what guards a duplicate event; reusing the throttle marker is the one mechanism this module already owns).
+   1. `if (row.compactSummary === "host")` (D6: the host already writes its own compact summary; verified only for Claude Code today): `decision = { kind: "hint", text: POINTER_LINE, onceKey: "compact-state" }`, where `POINTER_LINE` is the fixed, byte-stable string `"context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:\"session\", sort:\"timeline\")."`. No state block is rendered or opened here; `ctx_resume()` with no `seq` still computes and returns the 2,048 B block on demand, on its own call path, not from this step. Skip steps 2–3 below.
+   2. `else` (`row.compactSummary === "none"`: the host has no own summary, or LV-COMPACT (M3) has not yet verified it for this agent): `openDb(project)`.
+   3. `rows = readSessionEvents(db, ev.sessionId)`; `text = renderState(rows, ev.turn ?? 0)` (tools-session export, 00 §4; proves GP6); `decision = { kind: "hint", text, onceKey: "compact-state" }` — the full 2,048 B block (D1 algorithm, unchanged), delivered through this agent's existing ADR-0009 §6 `sessionstart` path.
+   4. `onceKey` is set in both branches so a second `SessionStart(compact)` inside the same session id (should not happen per ADR-0009 "exactly once") would still be throttled by §2 if it somehow fired twice (Assumption A23: ADR-0009 says "once" but does not say what guards a duplicate event; reusing the throttle marker is the one mechanism this module already owns).
    5. Go to §4.2 step 6.
 2. Else (`ev.source` is `"startup" | "resume" | "clear"`, or this agent's delivery is not `sessionstart`): `fire = shouldHint(db, ev.sessionId, "resume-hint")` (requires `openDb` first; if `openDb` throws `DB_GONE`, treat as `fire = false`, no hint — step 3 of §4.2 already caught non-project cases, this catches a DB that vanished after project resolution).
 3. `if (fire)`: `decision = { kind: "hint", text: "This session may have run before. Call ctx_resume for a summary of what happened.", onceKey: "resume-hint" }`. Else `decision = { kind: "allow" }`.
@@ -88,8 +88,9 @@ export async function handleHook(agent: AgentId, raw: unknown, env: NodeJS.Proce
 2. `if (row.compactDelivery === "pending-flag")`:
    1. `openDb(project)`.
    2. Inside `withWrite` (`BEGIN IMMEDIATE`): `pending = metaTake(db, "pending_compact:" + ev.sessionId)` — a `DELETE … RETURNING` so this fires exactly once even under a retried hook call (ADR-0009 §6).
-   3. `if (pending)`: `rows = readSessionEvents(db, ev.sessionId); text = renderState(rows, ev.turn ?? 0); decision = { kind: "hint", text, onceKey: "pending-compact" }`.
-   4. `else`: fall through to step 3.
+   3. `if (pending && row.compactSummary === "host")` (D6; none of today's pending-flag agents — gemini, copilot-cli, vscode — are verified, so this branch is not live until a future LV-COMPACT pass flips one of their rows): `decision = { kind: "hint", text: POINTER_LINE, onceKey: "pending-compact" }` (same fixed string as §4.3 step 1.1; no state block).
+   4. `else if (pending)` (`row.compactSummary === "none"`, the current case for every pending-flag agent): `rows = readSessionEvents(db, ev.sessionId); text = renderState(rows, ev.turn ?? 0); decision = { kind: "hint", text, onceKey: "pending-compact" }` — the full 2,048 B block, through this agent's existing ADR-0009 §6 `pending-flag` path.
+   5. `else`: fall through to step 3.
 3. `decision = { kind: "allow" }` when no pending-compact delivery fired.
 4. Go to §4.2 step 6.
 
@@ -200,3 +201,7 @@ ADR-0017 `covers`: `src/core/hooks/`, `src/entries/hook.ts`.
 - A26: a non-`ctx_*` journal row's stored `body` is capped at `POINTER_MIN` (640 B); this is a storage bound only, unrelated to the full-text `ctx_resume`/pointer mechanism which reads from the host's own result, not from this copy.
 - A27: an adapter whose `eventMap` has no `PreCompact` entry never produces a `PreCompact`-shaped `CanonicalHookEvent`; `dispatch.ts` has no agent-name branch for this, it is purely adapter-table-driven.
 - A28: the Kiro `stdout == ""` rule lives inside `adapters/kiro.ts`'s `encode`, never as an agent-name special case inside `hook.ts` or `dispatch.ts`.
+
+## Changes
+
+- D6 (`docs/v2/review/DECISIONS-r6.md`; measured in `tickets/memory-r6/eval/results.md`): `SessionStart` (§4.3 step 1) and the pending-flag path (§4.4 step 2) now branch on `row.compactSummary`; `"host"` sends the fixed pointer line only, `"none"` sends the full 2,048 B block through the agent's existing ADR-0009 §6 path.

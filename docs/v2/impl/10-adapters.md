@@ -46,20 +46,20 @@ export function getAdapter(id: AgentId): AdapterRow;
 
 One row per agent, PRD §3 agent list order. `installMode`, `projectSource` and `toolNamePrefix` values are fixed below; `eventMap` values are fixed in §2–§11 per agent together with decode/encode. Columns match the `AdapterRow` fields (00-architecture.md §3.1).
 
-| id | installMode | projectSource (Q11) | toolNamePrefix | compactDelivery | hookTimeoutMs | denyChannel |
-|---|---|---|---|---|---|---|
-| `claude-code` | `"marketplace"` | `"env:CLAUDE_PROJECT_DIR"` | `"mcp__plugin_context-mode_context-mode__"` | `"sessionstart"` | `5000` | `"deny-reason"` |
-| `codex` | `"config-mcp"` | `"arg:--agent+cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `5000` | `"deny-reason"` |
-| `gemini` | `"extension"` | `"spawn-cwd"` | `"mcp_context-mode_"` | `"pending-flag"` | `5000` | `"deny-reason"` |
-| `qwen` | `"extension"` | `"spawn-cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `5000` | `"deny-reason"` |
-| `copilot-cli` | `"plugin"` | `"arg:--agent+cwd"` | `"mcp_context-mode_"` | `"pending-flag"` | `5000` | `"deny-reason"` |
-| `vscode` | `"mcp-entry"` | `"arg:workspaceFolder"` | `"mcp_context-mode_"` | `"pending-flag"` | `5000` | `"deny-reason"` |
-| `kiro` | `"mcp-entry"` | `"arg:--agent+cwd"` | `"mcp_context-mode_"` | `"none"` | `5000` | `"hint-only"` |
-| `zcode` | `"hooks+mcp"` | `"spawn-cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `5000` | `"deny-reason"` |
-| `pi` | `"in-process"` | `"pi:ctx.cwd"` | `""` | `"pi-flag"` | n/a (in-process, no spawn) | `"deny-reason"` |
-| `opencode` | `"in-process"` | `"spawn-cwd"` | `""` | `"opencode-cache"` | n/a (in-process, no spawn) | `"deny-reason"` |
+| id | installMode | projectSource (Q11) | toolNamePrefix | compactDelivery | compactSummary | hookTimeoutMs | denyChannel |
+|---|---|---|---|---|---|---|---|
+| `claude-code` | `"marketplace"` | `"env:CLAUDE_PROJECT_DIR"` | `"mcp__plugin_context-mode_context-mode__"` | `"sessionstart"` | `"host"` | `5000` | `"deny-reason"` |
+| `codex` | `"config-mcp"` | `"arg:--agent+cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `"none"` | `5000` | `"deny-reason"` |
+| `gemini` | `"extension"` | `"spawn-cwd"` | `"mcp_context-mode_"` | `"pending-flag"` | `"none"` | `5000` | `"deny-reason"` |
+| `qwen` | `"extension"` | `"spawn-cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `"none"` | `5000` | `"deny-reason"` |
+| `copilot-cli` | `"plugin"` | `"arg:--agent+cwd"` | `"mcp_context-mode_"` | `"pending-flag"` | `"none"` | `5000` | `"deny-reason"` |
+| `vscode` | `"mcp-entry"` | `"arg:workspaceFolder"` | `"mcp_context-mode_"` | `"pending-flag"` | `"none"` | `5000` | `"deny-reason"` |
+| `kiro` | `"mcp-entry"` | `"arg:--agent+cwd"` | `"mcp_context-mode_"` | `"none"` | `"none"` | `5000` | `"hint-only"` |
+| `zcode` | `"hooks+mcp"` | `"spawn-cwd"` | `"mcp__context-mode__"` | `"sessionstart"` | `"none"` | `5000` | `"deny-reason"` |
+| `pi` | `"in-process"` | `"pi:ctx.cwd"` | `""` | `"pi-flag"` | `"none"` | n/a (in-process, no spawn) | `"deny-reason"` |
+| `opencode` | `"in-process"` | `"spawn-cwd"` | `""` | `"opencode-cache"` | `"none"` | n/a (in-process, no spawn) | `"deny-reason"` |
 
-Citations: `installMode` — PRD §3 agent table. `projectSource` — PRD §5 table (Q11, ADR-0007); Kiro row — DECISIONS-r3 Q24 item 2. `toolNamePrefix` — TECH-SPEC §3.8 (Claude Code, Codex, Gemini, Qwen, OpenCode 2, VS Code, Pi rows are `[V]`; Copilot CLI, Kiro, ZCode are `[U]`, S-NAMES, resolved here as Assumption A1 below). `compactDelivery` — PRD §11 delivery table. `denyChannel` — spike-hooks-verified.md §1 (Kiro: "any exit ≠0" with no structured decision field in the matrix; every other agent carries a `permissionDecision`/`decision`/`{block,reason}`/`Tool.Error` reason channel).
+Citations: `installMode` — PRD §3 agent table. `projectSource` — PRD §5 table (Q11, ADR-0007); Kiro row — DECISIONS-r3 Q24 item 2. `toolNamePrefix` — TECH-SPEC §3.8 (Claude Code, Codex, Gemini, Qwen, OpenCode 2, VS Code, Pi rows are `[V]`; Copilot CLI, Kiro, ZCode are `[U]`, S-NAMES, resolved here as Assumption A1 below). `compactDelivery` — PRD §11 delivery table. `denyChannel` — spike-hooks-verified.md §1 (Kiro: "any exit ≠0" with no structured decision field in the matrix; every other agent carries a `permissionDecision`/`decision`/`{block,reason}`/`Tool.Error` reason channel). `compactSummary` — DECISIONS-r6 D6, `tickets/memory-r6/eval/results.md` ("Resume-quality eval on real compaction points"). Rule: Claude Code is `"host"` — it writes its own compact summary, so after compaction the adapter injects one pointer line only, no state block: `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").` The 2,048 B block stays available on demand through `ctx_resume()` with no `seq`. Every other agent is `"none"` — the adapter injects the 2,048 B D1 block through its own `compactDelivery` path (ADR-0009 §6) — until a per-agent live check LV-COMPACT (milestone M3) shows that agent's host writes its own summary, at which point its row flips to `"host"`. The D1 algorithm and constants (`COMPACTION_BUDGET_BYTES` etc., see `impl/06-tools-session.md`) do not change for either value.
 
 ### 1.4 `eventMap` per row (native hook/channel name per canonical event)
 
@@ -339,3 +339,9 @@ In-process glue only, same reasoning as Pi.
 - A2: `hookTimeoutMs = 5000` for every spawn-based agent. `00-architecture.md` §3.2 defines no `HOOK_TIMEOUT_MS` constant and PRD §10.1/spike-hooks-verified.md leave each host's own default disputed or docs-only. 5 s sits under every host's own default (Claude Code 600 s, Gemini 60 s, Qwen/Kiro/VS Code 30–60 s, ZCode 60 s) and comfortably above `HOOK_P95_MS`/`HOOK_COMBINED_P95_MS` (40/60 ms, GS6), so it never fires on a healthy hook. Add `HOOK_TIMEOUT_MS = 5000` to `constants.ts` alongside this file.
 - A3: `denyChannel: "hint-only"` is set only for Kiro, because it is the one agent in the matrix with no structured reason field for either hint or deny (plain stdout/stderr). Gemini, Pi and OpenCode 2 lack a `PreToolUse` **hint** field but do carry a structured **deny** field (`decision`, `{block,reason}`, `Tool.Error`), so they keep `"deny-reason"`; their missing hint is handled per-agent in the encode table ("dropped"), not by a second enum value.
 - A4: Codex's `SessionStart.source` value `"fork"` (spike §1, Codex row) maps to canonical `"resume"`. ADR-0001's canonical `source` union has no `"fork"` value and no ADR text picks one; `"resume"` is the nearest existing value (a fork continues a prior session) and keeps the canonical type closed per `types.ts` §3.1.
+
+---
+
+## Changes
+
+- DECISIONS-r6 D6: added `compactSummary: "host" | "none"` to the `ADAPTERS` table (§1.3). Claude Code = `"host"` (one pointer line, no state block). Every other agent = `"none"` (full 2,048 B block through its ADR-0009 §6 path) until its own LV-COMPACT live check (M3) passes.

@@ -164,16 +164,25 @@ Data: v1 rows are not migrated into v2 categories (rule changes, research-check 
 - `PRD-v2.md` §8 and README table: D5 rows; correct "26" to 19.
 - `TECH-SPEC.md` GP5/GP6: the golden cases in D1, D2, D3, D4.
 
-## D6. Measured resume quality (2026-10-16), pending owner decision
+## D6. Compaction delivery depends on whether the host writes its own summary (accepted 2026-10-16)
 
-`tickets/memory-r6/eval/run2.mjs`, 20 real compaction points, Sonnet low actor + judge:
+Owner: "ok guncelle tum docslari o zaman ona gore".
 
-| Condition | Mean score (0-2) | Context bytes |
+Measured (`tickets/memory-r6/eval/run2.mjs`, 20 real compaction points, 6 projects, Sonnet low actor + judge, keyless, $3.79):
+
+| Context after compaction | Mean score (0-2) | Bytes |
 |---|---|---|
 | Claude Code compact summary only | 0.85 | 19,703 |
 | Claude Code summary + v2 block | 0.75 | 21,704 |
 | v2 block only | 0.75 | 1,999 |
+| v1 snapshot | every call failed (290-335 KB) | - |
 
-- On Claude Code the v2 block adds no measurable resume quality (2 better, 4 worse, 14 same; not significant).
-- The v2 block alone reaches about the same score as Claude Code's own summary at about one tenth of the bytes.
-- Proposed (not yet applied): on agents that write their own compact summary (Claude Code), inject only a one-line `ctx_resume` pointer; on agents without one, inject the 2,048 B block. Waiting for the owner.
+Paired cc+v2 vs cc: 2 better, 4 worse, 14 same (not significant, sign test p ~0.69).
+
+**Decision.**
+1. **Host writes its own compact summary (verified: Claude Code):** after compaction, inject one pointer line only, no state block:
+   `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").`
+   The 2,048 B block is still computed on demand: `ctx_resume()` with no `seq` returns it.
+2. **Host has no own summary, or it is not yet verified:** inject the 2,048 B block (D1 algorithm, unchanged), through the ADR-0009 §6 delivery path of that agent.
+3. Which mode an agent uses is one column in `adapters/table.ts`: `compactSummary: "host" | "none"`. Claude Code = `"host"`. Every other agent = `"none"` until a live check (LV-COMPACT, one per agent, M3) shows the host writes a summary the model sees; then the row flips to `"host"`. One path per agent, no fallback.
+4. The pointer line is byte-stable (no clock, no counts), bare tool names, framed as data.

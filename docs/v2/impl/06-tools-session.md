@@ -225,7 +225,7 @@ export async function ctxResume(
 2. Resolve `sessionId = input.session ?? currentSessionIdFromMeta(project)`. A missing session id with no current-session fallback returns `{isError: true, text: "ctx_resume: no session id — pass session or call from an active session."}`.
 3. Open `db = openDb(project)` read-only.
 4. If `input.seq` is a number: run `SELECT * FROM events WHERE session_id = :sessionId AND seq = :seq`. Zero rows → `{isError: true, text: "ctx_resume: no row at seq <seq> for this session."}`. One row → return `{text: row.body}` verbatim (this is the primary-key pointer read, ADR-0009 §4 "`ctx_resume(seq:N)` is a primary-key read of the whole row").
-5. Otherwise (no `seq`): find `upToSeq = MAX(seq) FROM events WHERE session_id = :sessionId`. No rows at all → `{text: "ctx_resume: no journal rows for this session yet."}` (not an error — a fresh session has nothing to resume).
+5. Otherwise (no `seq`): this is the on-demand path for the 2,048 B state block (DECISIONS-r6 D6). Find `upToSeq = MAX(seq) FROM events WHERE session_id = :sessionId`. No rows at all → `{text: "ctx_resume: no journal rows for this session yet."}` (not an error — a fresh session has nothing to resume). `ctx_resume()` with no `seq` is the single call every agent uses to get the block: a `"host"` adapter (`compactSummary: "host"`, e.g. Claude Code) calls it only when the model asks, after its one pointer line; a `"none"` adapter (every other agent, per `impl/10-adapters.md` §1.3) calls it through its own `compactDelivery` path (ADR-0009 §6) right after compaction. The D1 algorithm and constants below (steps 6-9) are the same call either way.
 6. `candidates = buildCandidates(db, sessionId, upToSeq)`.
 7. `currentTurn = the `turn` value of the row at `upToSeq``.
 8. `scored = scoreCandidates(candidates, currentTurn)`.
@@ -340,3 +340,9 @@ None beyond the DB layer's own timeout constant (owned by `store`, not redefined
 - A-stats-dedup-mechanism: I1-14 requires turn-keyed idempotency but does not name the SQL mechanism. This spec uses `INSERT OR IGNORE` on a `(session_id, turn)` partial unique index for `kind = 'cost'` rows, in `appendEvent()` (owned by `store`, not this module) — `stats.ts` itself does no de-duplication at read time.
 - A-purge-no-dual-hash: v1's `purgeSession()` swept both a canonical and a legacy raw-casing hash because of a mid-life case-fold migration (v1 commit history). v2's single `projectKey` scheme (A5, 00-architecture.md) has no legacy variant, so `purge.ts` deletes rows by SQL `WHERE`, not by sweeping files on disk — v2 has one `context.db` per project, not per-session sidecar files, so the whole file-sweep shape of v1's module does not carry over; this is a deliberate simplification, not a gap.
 - A-render-more-line-fit: step 7 of `render.ts` asserts the `more:` line always fits. This holds because steps 1–5 only fill up to `COMPACTION_BUDGET_BYTES` minus nothing reserved for the `more:` line; to make the assertion true, `render.ts` must reserve `64` bytes (an empty `more: ctx_search(queries:[],scope:"session")` line's exact byte length) before running the greedy walk in step 5 — i.e. step 5's budget check uses `COMPACTION_BUDGET_BYTES - 64`, not the raw constant. This 64-byte reservation is not named in ADR-0009 and is this file's own addition to make the renderer always terminate successfully.
+
+---
+
+## Changes
+
+- DECISIONS-r6 D6: `ctx_resume()` called with no `seq` (§4 step 5) is now named as the on-demand path for the 2,048 B block, used by both `compactSummary: "host"` agents (after their own one-line pointer) and `compactSummary: "none"` agents (through their ADR-0009 §6 delivery path). The D1 algorithm and constants are unchanged.

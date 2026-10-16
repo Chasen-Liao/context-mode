@@ -47,6 +47,7 @@ Rules per field, each citing its source:
 | `ProjectContext` | `source` | one `ProjectSourceKind`, never inferred by trying more than one | Q11, Q24, PRD §5 |
 | `ToolDef<I>` | `alwaysLoad` | `true` only for `ctx_execute` | ADR-0006 |
 | `AdapterRow` | `denyChannel` | `"deny-reason"` for hosts that read a hard deny reason; `"hint-only"` for hosts with no deny channel | ADR-0001 §4, README §6 Gaps |
+| `AdapterRow` | `compactSummary` | `"host"` (Claude Code, verified): inject only `COMPACT_POINTER_LINE` after compaction, no state block — `ctx_resume()` with no `seq` returns the 2,048 B block on demand. `"none"` (every other agent): inject the 2,048 B D1 block through that agent's ADR-0009 §6 delivery path, until its LV-COMPACT live check (M3) proves the host writes its own summary | DECISIONS-r6 D6, tickets/memory-r6/eval/results.md |
 
 No type in this file has an optional field that is also used to pick between two runtime paths (P1): optionality here only ever means "this event/host does not carry this field," never "pick path A or B."
 
@@ -196,4 +197,8 @@ ADR-0017 `covers`: `src/core/contracts/errors.ts`.
 - A-C1: `DECAY_X1000` is built for ages `0`–`64` turns. No source gives this bound; a session realistically never reaches it, and the score module clamps beyond it, so the table only needs to be finite. Reason: ADR-0009 names the formula, not an array length.
 - A-C2: `UNKNOWN_FIELD`'s fixed `Fix: use "queries".` text is kept as the one generic unknown-field message, because Q19 and PRD §8 name exactly one tool (`ctx_search`) with this behavior; v2 has no second case that needs a different fix hint.
 - A-C3: `formatError` throws a plain (non-`CtxError`) `Error` on a missing var, because that path is a programmer mistake caught by tests, not a user-facing error with its own line in `ERROR_TEXT`.
+
+## Changes
+
+- `AdapterRow.compactSummary` row added to the field table (DECISIONS-r6 D6, tickets/memory-r6/eval/results.md).
 - A-C4: `MCP_HINT_EVERY`'s env override (`CTX_MCP_HINT_EVERY`) falls back to `10` on a non-numeric or non-positive value, since Q1 names the default and the override but not its own validation rule.

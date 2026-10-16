@@ -83,6 +83,7 @@ Skills (user commands only, no routing text, `disable-model-invocation: true`): 
 | `sort:"timeline"` page cursor | `after` (opaque seq); `offset` is relevance-only | DECISIONS-r6 D2 |
 | `decision` row trigger | `AskUserQuestion` answer, or an option echo next turn — never message shape | DECISIONS-r6 D3 |
 | v1 extracted `category` values | 19, not 26 (the "26" was uncounted commit text) | DECISIONS-r6 D5 |
+| `compactSummary` (`adapters/table.ts`) | `"host"` or `"none"`, per agent. Claude Code = `"host"`: one pointer line, no state block. Every other agent = `"none"`: the 2,048 B D1 block, until LV-COMPACT (M3) flips its row | DECISIONS-r6 D6 |
 
 ## 5a. v1 memory → v2
 

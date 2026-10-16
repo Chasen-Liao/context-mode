@@ -257,7 +257,11 @@ The post-compaction block is a deterministic function of this session's journal 
 - Score: `weight (open error 900, prompt 500, edit 400, index 200) × decay (0.25 + 0.75 · 2^(−age/4), half-life 4 turns) × bonus (1 + ⌊log2(repeat_count)⌋)`, integers only. Ratio for selection: `score × 0.7^k / bytes`, where k is lines already taken from that section.
 - Selection: budgeted lazy greedy by ratio, budget **2,048 UTF-8 bytes**. An item over 640 B is never cut; it becomes a pointer line `#<seq> (<bytes> B) ctx_resume(seq:<seq>)`. The same rows give byte-identical output, computed once per turn, never re-rendered mid-turn. These constants are unchanged from a deterministic 12-case sweep and a 6/6 train, 6/6 held-out tuning sweep (DECISIONS-r6 D1): no tested variant beat the baseline on held-out cases. A full actor/judge live eval (120 calls) is an open item before any future weight change; one golden case (GP6) asserts the one measured miss is a budget skip, not a scoring bug.
 - A journal row gets `kind:"decision"` only from an `AskUserQuestion` tool answer or a plain option echo of its option list on the next user turn — never from message shape or an English marker-word list (DECISIONS-r6 D3). It is searchable with `ctx_search(source:"decision")` and is not a compaction candidate.
-- Delivery, one path per agent:
+- `compactSummary` column (`adapters/table.ts`): `"host"` or `"none"`, per agent (DECISIONS-r6 D6).
+  - `"host"` (Claude Code only, verified): the host writes its own compact summary. After compaction, inject one pointer line only, no state block: `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").` The 2,048 B block stays on demand: `ctx_resume()` with no `seq` returns it.
+  - `"none"` (every other agent, until a live check): inject the 2,048 B block (D1 formula, unchanged) through that agent's own ADR-0009 §6 delivery path.
+  - LV-COMPACT (milestone M3) is the per-agent live check: it proves a host writes its own summary before that agent's row flips to `"host"`.
+- Delivery, one path per agent (how the block or pointer line reaches the model):
   - Claude Code, Codex, Qwen, ZCode: computed inside `SessionStart(source=compact)`.
   - Gemini, Copilot CLI, VS Code: the compaction hook writes a pending flag; the next prompt hook delivers it exactly once.
   - Pi: a `session_compact` flag, then `before_agent_start`, once.
@@ -346,3 +350,4 @@ The module structure, dependency rules, constants, and per-module file map for i
 - 2026-10-15 (r5 spikes): S-NODE (Node 24.15.0), S-TIMEOUT (600,000 ms), and the ADR-0006 alwaysLoad re-probe on Opus 5.5 and Sonnet 5 — all folded into §4, §7 and §8 above.
 - 2026-10-15: this document rewritten as one consistent design, with history moved into this section.
 - 2026-10-16 (r6, `docs/v2/review/DECISIONS-r6.md` D1–D4): §8 `ctx_search` row rewritten for the D2 timeline contract, the D3 `decision` rule and the D4 RRF (k=60) cross-session order; §11 compaction gains the full D1 formula with its constants unchanged and the `decision` row rule.
+- 2026-10-16 (r6, `DECISIONS-r6.md` D6): §11 compaction delivery now depends on `adapters/table.ts` column `compactSummary`. Claude Code = `"host"`: inject one pointer line only. Every other agent = `"none"`: inject the 2,048 B D1 block, unchanged, through its ADR-0009 §6 path, until LV-COMPACT (M3) proves that agent's host writes its own summary. See `tickets/memory-r6/eval/results.md`.

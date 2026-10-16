@@ -1,6 +1,6 @@
 # 14 — Module `tests`
 
-Changes (DECISIONS-r6): GP6 now carries the D1 open-error golden case; added `memory-r6-eval-local.json` and `memory-r6-resume-quality.json` live cases for the compaction fixtures; no case checks a prose `decision` row, per D3.
+Changes (DECISIONS-r6): GP6 now carries the D1 open-error golden case; added `memory-r6-eval-local.json` and `memory-r6-resume-quality.json` live cases for the compaction fixtures; no case checks a prose `decision` row, per D3. Per D6 (`tickets/memory-r6/eval/results.md`): GP6 adds one case per `compactSummary` mode (`"host"`, `"none"`); added `LV-COMPACT-<agent>.e2e.mjs`, one live case per agent, run in M3.
 
 Owner: `tests` (see `00-architecture.md` §2). Scope: everything under `e2e/` except `e2e/live/cases/v1-migration-*.json` (owner: `v1-transition`, spec'd separately), plus the `tests/` v1 runner config. This module imports nothing from `src/` except the 131 KEEP-PASS files, which keep their existing `src/` imports (ADR-0003 r2, TECH-SPEC §6.1 hard rule).
 
@@ -83,7 +83,8 @@ import assert from "node:assert/strict";
 | `GP3-hooks.e2e.mjs` | GP3 | hooks ×10 adapters × 4 events | `src/core/hooks/`, `src/entries/hook.ts`, `src/core/policy/` |
 | `GP4-execute.e2e.mjs` | GP4 | `ctx_execute` | `src/core/tools/execute.ts`, `src/core/sandbox/` |
 | `GP5-index-search.e2e.mjs` | GP5 | `ctx_index` → `ctx_search` | `src/core/tools/{index,search}.ts`, `src/core/index/` |
-| `GP6-journal-resume.e2e.mjs` | GP6 | journal + resume; golden case for the DECISIONS-r6 D1 miss (open-error row dropped only by a budget skip, never by a scoring bug) | `src/core/journal/`, `src/core/tools/resume.ts`, `src/core/compaction/` |
+| `GP6-journal-resume.e2e.mjs` | GP6 | journal + resume; golden case for the DECISIONS-r6 D1 miss (open-error row dropped only by a budget skip, never by a scoring bug); one case for `compactSummary:"host"` (pointer line only, no state block, `ctx_resume()` with no `seq` returns the 2,048 B block on demand) and one case for `compactSummary:"none"` (2,048 B D1 block injected through the agent's ADR-0009 §6 path), per DECISIONS-r6 D6 | `src/core/journal/`, `src/core/tools/resume.ts`, `src/core/compaction/`, `adapters/table.ts` |
+| `LV-COMPACT-<agent>.e2e.mjs` | LV-COMPACT | live case, one per agent (M3): confirms the host writes its own compact summary the model sees; when true, flips `adapters/table.ts` `compactSummary` row for that agent from `"none"` to `"host"` (DECISIONS-r6 D6) | `adapters/table.ts` |
 | `GP7-scope.e2e.mjs` | GP7 | scope, 2 worktrees × 2 sessions × 2 agents | `src/core/project/` |
 | `GP8-concurrency.e2e.mjs` | GP8 | 4 servers + hooks, one DB | `src/core/store/` |
 | `GP9-lifecycle.e2e.mjs` | GP9 | stdin EOF, parent kill, 3 OS | `src/core/lifecycle/exit.ts` |
