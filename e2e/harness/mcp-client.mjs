@@ -31,7 +31,18 @@ export function spawnBundle(bundlePath, env) {
     child.once("exit", (code, signal) => {
       exited = true;
       resolve({ code, signal });
+      for (const { reject } of pending.values()) {
+        reject(new Error(`mcp-client: bundle exited (code ${code}, signal ${signal}) before replying`));
+      }
+      pending.clear();
     });
+  });
+
+  child.once("error", (err) => {
+    for (const { reject } of pending.values()) {
+      reject(new Error(`mcp-client: bundle failed to start: ${err.message}`));
+    }
+    pending.clear();
   });
 
   child.stdout.setEncoding("utf8");

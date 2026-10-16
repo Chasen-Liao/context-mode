@@ -1,28 +1,7 @@
-{
-  "version": 1,
-  "note": "Pre-existing failures on the untouched v1 tree, observed by running `npx vitest run --config tests/vitest.config.ts` at impl/M0-T3-keep-pass before any src/ change. These files are kept in tests/keep-pass.list.json unedited and undeleted per the task's instruction; a later module owner fixes the underlying v1 behavior when that module is rewritten.",
-  "command": "npx vitest run --config tests/vitest.config.ts",
-  "failures": [
-    {
-      "file": "tests/adapters/zod3tov4-production.test.ts",
-      "error": "Error: Cannot find module '/private/tmp/cm-v2-impl-wt/M0-T3-keep-pass/build/adapters/opencode/zod3tov4.js' imported from tests/adapters/zod3tov4-production.test.ts:24:27"
-    },
-    {
-      "file": "tests/server-stdin-eof-exit.test.ts",
-      "error": "AssertionError: server survived the uncaught exception storm: expected false to be true (tests/server-stdin-eof-exit.test.ts:203)"
-    },
-    {
-      "file": "tests/statusline-sqlite.test.ts",
-      "error": "AssertionError: non-zero byte total derived from SessionDB rows — expected /\\d+(\\.\\d+)?\\s*(B|KB|MB|GB)/, received \"context-mode  ●  saves ~98% of context window\" (tests/statusline-sqlite.test.ts:205); 2 more assertions in the same file fail the same way (lines 265, 394)"
-    },
-    {
-      "file": "tests/statusline.test.ts",
-      "error": "AssertionError: resolver landed on pid-90001 → SessionDB had matching events — expected /this chat/, received \"context-mode  ●  saves ~98% of context window\" (tests/statusline.test.ts:276); 3 more assertions in the same file fail the same way (lines 311, 327, 360, 371)"
-    },
-    {
-      "file": "tests/hooks/ensure-deps.test.ts",
-      "error": "Error: Test timed out in 5000ms. (tests/hooks/ensure-deps.test.ts:293, \"graceful degradation: does not throw when probe and rebuild both fail\")"
-    }
-  ],
-  "summary": "5 failed files, 10 failed tests, 126 passed files, 2416 passed tests, 27 skipped, out of 131 KEEP-PASS files"
-}
+[
+  "tests/adapters/zod3tov4-production.test.ts",
+  "tests/hooks/ensure-deps.test.ts",
+  "tests/server-stdin-eof-exit.test.ts",
+  "tests/statusline-sqlite.test.ts",
+  "tests/statusline.test.ts"
+]
