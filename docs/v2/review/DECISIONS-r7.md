@@ -19,7 +19,7 @@ By type (BM25+RRF vs v1): decision 0.76 vs 0.24; earlier error 0.59 vs 0.55 (BM2
 ## Decisions
 
 - **R1. Ranking = BM25 per scope (session, worktree, project) fused with RRF, k = 60.** Best overall; 1.8× v1. k is insensitive (20–100 equal), so the published default stays.
-- **R2. No MMR.** No gain, about 2× latency.
+- **R2. No MMR.** No gain. Cost: about 2× latency at p50 (5.78 vs 2.99 ms), equal at p95 (27.28 vs 27.21 ms).
 - **R3. Decision tag stays structural (D3).** v1's shape rule writes about 10× more false decision rows. `source:"decision"` stays as a filter for the user; it gives no ranking gain.
 - **R4. `sort:"timeline"` with the `after` cursor stays as D2.** Paging is complete on real data.
 - **R5. Latency budget:** `ctx_search` p95 ≤ 30 ms on node:sqlite FTS5 with up to 17k journal rows (measured 27 ms).

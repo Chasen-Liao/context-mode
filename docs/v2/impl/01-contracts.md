@@ -81,7 +81,7 @@ Exports every row of the table below, by the exact name in column 1. No other mo
 | `HOOK_P95_MS` | `number` | `40` | G26, GS6 |
 | `HOOK_CPU_OVER_NODE_MS` | `number` | `20` | GS6 |
 | `HOOK_COMBINED_P95_MS` | `number` | `60` | GS6, A31 |
-| `READ_HINT_BYTES` | `number` | `51200` | PRD §10.2 |
+| `READ_HINT_BYTES` | retired | was `51200` | ADR-0008 "Read: hint to deny" retires this in favor of `OUTPUT_CAP` for both the Read deny threshold and the ranged-Read hint threshold, so there is one cap, not two |
 | `MCP_HINT_EVERY` | `number` | `10`, overridden by env `CTX_MCP_HINT_EVERY` if that env parses as a positive integer, else `10` | Q1 |
 | `EXIT_SIGTERM_MS` | `number` | `2000` | GP9, #862 |
 | `EXIT_SIGKILL_MS` | `number` | `5000` | GP9, #862 |

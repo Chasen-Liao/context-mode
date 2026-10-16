@@ -261,7 +261,7 @@ export interface AdapterRow {
 | `HOOK_P95_MS` | `40` (Claude Code wall) | G26, GS6 |
 | `HOOK_CPU_OVER_NODE_MS` | `20` | GS6 |
 | `HOOK_COMBINED_P95_MS` | `60` | GS6, A31 |
-| `READ_HINT_BYTES` | `51200` | PRD §10.2 |
+| `READ_MAX_LINES` | `200` (hint text only, not enforced) | DECISIONS-r8 |
 | `MCP_HINT_EVERY` | `10` (env `CTX_MCP_HINT_EVERY`) | Q1 |
 | `EXIT_SIGTERM_MS` | `2000`; `EXIT_SIGKILL_MS` `5000` | GP9, #862 |
 | `COLD_START_MS` | `1000` | GP4 |
@@ -372,7 +372,7 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
 3. Per event:
    - **SessionStart**: `source=compact` and `compactDelivery=sessionstart` → if `compactSummary=="host"` (Claude Code), return only `COMPACT_POINTER_LINE`, no state block; `ctx_resume()` with no `seq` still returns the full `STATE_BUDGET` block on demand. If `compactSummary=="none"` (every other agent, until its LV-COMPACT check passes at M3), open DB, `renderState(readSessionEvents)`, return the state block as context (DECISIONS-r6 D6). Else hint text about `ctx_resume`, once per session.
    - **UserPromptSubmit**: detached `appendEvent(kind:"prompt")`; if `pending-flag` agent, `metaTake("pending_compact:"+sid)` in `BEGIN IMMEDIATE` → deliver state once.
-   - **PreToolUse**: no DB. `decide()` → allow / hint (throttled) / deny with rewrite. Subagent (`agentId` present) → `pickSubagentCase`.
+   - **PreToolUse**: no DB. `decide()` → allow / hint (throttled) / deny with rewrite. Read (and, on hosts with no Read tool, a one-file shell dump): deny when the call has no `offset`/`limit` (no bound argument for a shell dump) and `fs.stat(file).size > OUTPUT_CAP`; a ranged Read or a bounded dump is always allowed; no truncation (DECISIONS-r8 VR). Subagent (`agentId` present) → `pickSubagentCase`.
    - **PostToolUse**: detached append (`cmd`/`edit`/`toolerr` from `is_error`); case C → `selectChunks` and `replace`. Skip append for own `ctx_*` tools (server writes them). `AskUserQuestion` reply with a JSON `tool_response.answers` → also append `kind:"decision"` (DECISIONS-r6 D3 rule 1); no structural match → no `decision` row (fail-safe).
    - **PreCompact** (gemini, copilot-cli, vscode): `metaSet("pending_compact:"+sid,"1")`.
 4. `adapter.encode` → native stdout and exit code; Kiro prompt hook prints `""` (GP3).
@@ -411,3 +411,4 @@ export function lintPromptText(text: string): LintResult[]; // ADR-0005: PR1 cap
 ## Changes
 
 - `AdapterRow` gains `compactSummary: "host" | "none"`; `COMPACT_POINTER_LINE` constant added; §5.3/§5.4 flows now branch by `compactSummary` (DECISIONS-r6 D6, tickets/memory-r6/eval/results.md).
+- `READ_HINT_BYTES` retired, `READ_MAX_LINES` added; §5.3 PreToolUse now denies an unranged Read (or a one-file shell dump with no bound) over `OUTPUT_CAP` instead of hinting (DECISIONS-r8).

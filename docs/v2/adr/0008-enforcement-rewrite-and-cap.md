@@ -11,12 +11,25 @@
 | curl/wget whose body goes to stdout | `modify` to an `echo` (works as a deny) | **deny** |
 | inline HTTP in a shell command (`fetch(`, `requests.get(` …) | `modify` to an `echo` | **deny** |
 | build tools (gradle, mvn, sbt) | `modify` to an `echo` that suggests `… \| tail -30` | **deny**; the alternative is `ctx_execute` with `intent` (no `tail`, nothing cut) |
-| Read of a file > 50 KB | hint | hint |
+| Read, no `offset`/`limit`, file > `OUTPUT_CAP` (16384 B) | hint | **deny**; alternative is the same `Read` call with `offset`/`limit`, or `ctx_execute` with `file` |
+| Read, `offset`/`limit` given, any size | hint (once per session) | hint (once per session) — never denied, this is the escape hatch |
 | Grep, other Bash | hint, once per session | hint, once per session |
 | user `permissions.deny` | deny, incl. ctx_execute / ctx_execute_file / ctx_batch_execute input | deny, same scope (Q5) |
 | large output of other MCP servers' tools (`mcp__<other>__*`) | routed (#529) | routed: ADR-0016 case C replace; hints as PRD:103 (Q1) |
 
-No new deny categories are added. The r2 deny of any Bash call whose predicted output is too large is dropped, so Read-before-Edit and ordinary commands behave as they did in v1.
+No new deny categories are added. The r2 deny of any Bash call whose predicted output is too large is dropped, so ordinary commands behave as they did in v1.
+
+**Read is the one line in this table that changed from v1's behaviour (see "Read: hint to deny" below).** v1 only ever hinted on Read (#1267: the hint re-fires on every over-size Read and never blocks it), so Read carried 62% of all large-output bytes in the 322k-call measurement (`tickets/final-review/e1-deny.mjs`) while the deny rules above caught 0.11% of large bytes total (REVIEW-final.md A2). v2 denies the first Read of an over-size file and names the ranged-Read alternative in the deny reason; because `offset`/`limit` reads are never denied, Read-before-Edit still works — the model just reads a slice instead of the whole file.
+
+### Read: hint to deny
+
+- Rule: on `canonical === "Read"`, if `!input.offset && !input.limit` and the real file size is `> OUTPUT_CAP` (reusing the existing cap, not a separate `READ_HINT_BYTES` — Q2 below), return `{kind:"deny", reason: "context-mode: this file is {size} bytes, more than the {cap} byte limit for one read. Pick one: read part of it with Read(file_path, offset, limit), for example limit 200; or run code on it with ctx_execute(language, code, file=\"{path}\"), which gives your code the path in CTX_FILE and returns only stdout, up to {cap} bytes; or search it with a bounded command such as grep -n or tail.", onceKey: none}`. This is a stateless per-call deny (ADR-0008 item 7), not a once-per-session hint, because the real bytes must never reach the model even on retry.
+- Escape hatch: any Read call that already sets `offset` or `limit` is never denied, regardless of file size — this is what keeps `#1267`-style loops from becoming a dead end and what keeps the read-before-edit workflow legal (v1 issue history, see `docs/v2/review/out/read-fix/archaeology-read.md`).
+- `READ_MAX_LINES = 200` is text only, named in the deny reason as the example `limit`. It is not enforced: on denied reads the median line is 48,848 B, so a 200-line slice still exceeds `OUTPUT_CAP` in 30.8% of them (`DECISIONS-r8.md`). It is a suggestion in the reason string, nothing more.
+- Shell file dumps on hosts with no `Read` tool get the same test: the command parser (no regex) reads argv0 for `cat`, `head`, `tail`, `sed -n`, `less`, `jq`, `bat`, `more` on one file argument, runs `fs.stat` on it, and applies the same size test and reason as Read. A dump with an explicit bound (`head -n N`, `tail -n N`, `sed -n 'a,bp'`) is the shell form of a ranged Read and is allowed.
+- Non-goal: this does not predict size before the call; the hook has the real byte count already (`PreToolUse` for Claude Code's `Read` fires after the file is resolved but the server denies before it is returned to the model — same point v1 denied WebFetch at, item 10 above). No new deny categories, no regex: the rule is `size > OUTPUT_CAP && !offset && !limit`, an `if`, not a pattern.
+- Open (new): `READ_HINT_BYTES` (`51200`, `impl/01-contracts.md:84`) is retired in favor of `OUTPUT_CAP` for the deny threshold, so there is one cap, not two. The hint on ranged reads keeps using `OUTPUT_CAP` too, for the same reason.
+- Open (T4, `DECISIONS-r8.md`): live recovery through `ctx_execute(file)` or a ranged Read in >= 8/10 forced-read runs is unmeasured at the needed sample size (4/4 runs used bash grep instead, which the updated reason text now also names as a legal path). Owner decides whether to re-run at n=10 or accept bash grep as a third named success path.
 
 ## What changes, and which issues each change fixes
 

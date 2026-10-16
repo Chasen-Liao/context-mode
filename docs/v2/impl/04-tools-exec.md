@@ -39,7 +39,9 @@ export type ExecuteInput = z.infer<typeof ExecuteInput>;
 
 ### 2.2 Description (from `drafts.md` id `ctx_execute`, verbatim, used as-is in `registry.ts`; do not alter wording)
 
-> Runs code in a sandboxed subprocess in the project directory and returns only what the code prints. Languages: shell, powershell, javascript, typescript, python, and other runtimes found on PATH. Use it when output may be long, for example tests, builds, logs, git history or API responses, and print just the lines or numbers you need. Set `file` to a local path to work on that file without reading it into the conversation; the code gets the path in the CTX_FILE environment variable. Set `intent` to a short phrase when output may be large: the matching sections come back and the full output is indexed for ctx_search. Stops after `timeoutMs` (default 120000) and kills the whole process tree.
+> Runs code in a sandboxed subprocess in the project directory and returns only what the code prints. Languages: shell, powershell, javascript, typescript, python, and other runtimes found on PATH. Use it when output may be long, for example tests, builds, logs, git history or API responses, and print just the lines or numbers you need. For a large file, set `file` to its local path instead of reading it: the code gets the path in the CTX_FILE environment variable, and only what the code prints comes back. Set `intent` to a short phrase when output may be large: the matching sections come back and the full output is indexed for ctx_search. Stops after `timeoutMs` (default 120000) and kills the whole process tree.
+
+This is one of the two paths named in the Read deny reason (ADR-0008 "Read: hint to deny", `08-enforcement.md` step 6): a denied Read of a file over `OUTPUT_CAP` points here, with `file` set and the real content never entering the conversation; stdout stays capped at `OUTPUT_CAP` same as any other call.
 
 This text is frozen (ADR-0005, PR1–PR12 lint); do not fix the "default 120000" mismatch with the 600000 constant in this file — that correction belongs to the prompt-drafts owner, not to this module (Assumption A10). `registry.ts` sets `readOnly: false` (TECH-SPEC §8).
 
@@ -161,3 +163,7 @@ Indexing in steps 7–8 runs on a worker thread / child process per ADR-0016 ("s
 - A17: `ctx_batch` has no separate GPn id; it shares GP4's case file since TECH-SPEC §6.2 lists no GP row naming `ctx_batch` alone.
 - A18: the wrapper's own timeout exit code is 124 (POSIX `timeout` convention); no source names one.
 - A19: step-7/8 indexing runs via `node:worker_threads`, the only built-in matching ADR-0016's "worker thread (or child process)" note without a new dependency.
+
+## Changes
+
+- r8 (`DECISIONS-r8.md` VR): §2.2 description text now matches `drafts.md`'s `ctx_execute` wording (large file via `file`/`CTX_FILE`, not read first); added the note that a denied Read points here.

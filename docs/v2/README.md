@@ -34,7 +34,7 @@ This is the map. Start here, then follow the links.
 | 0005 | Prompt text follows plain, non-caps rules, checked by `lint.mjs`. | Accepted |
 | 0006 | On Claude Code, `ctx_execute` loads up front; routing text carries the rest. | Accepted (after re-probe) |
 | 0007 | Builds to MCP spec 2026-07-28; still serves older clients. | Accepted |
-| 0008 | Enforcement keeps v1's deny rules; replaces the mechanisms that caused v1's bugs. | Accepted (GS6 hook-budget number still open) |
+| 0008 | Enforcement keeps v1's deny rules; replaces the mechanisms that caused v1's bugs, including a Read deny (was hint-only). | Accepted (GS6 hook-budget number still open) |
 | 0009 | State after compaction: a deterministic, budgeted pick from the session journal. | Accepted |
 | 0010 | `ctx_doctor` and `ctx_upgrade` stay, rebuilt with one path per install mode. | Accepted |
 | 0011 | Branch, release, and v1-to-v2 transition order. | Accepted for the order; some agent rows still open |
@@ -132,3 +132,4 @@ S-NODE, S-TIMEOUT and the ADR-0006 re-probe are closed; see `tickets/spikes-r5/`
 
 - 2026-10-16 (r6, `docs/v2/review/DECISIONS-r6.md`): §5 gains the RRF, timeline-cursor and decision-trigger rows and the corrected v1 category count (19, not 26); new §5a table maps each v1 memory feature to its v2 replacement.
 - 2026-10-16 (r7, `docs/v2/review/DECISIONS-r7.md`): §5 RRF row gains the measured recall@5 numbers (0.48 vs v1's 0.27) and states that MMR gave no gain.
+- 2026-10-16 (r8, `docs/v2/review/DECISIONS-r8.md`): ADR-0008 row now reads "replaces the mechanisms that caused v1's bugs, including a Read deny (was hint-only)"; deny rules now stop 87.64% of large-output bytes, up from 0.11%.

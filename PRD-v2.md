@@ -225,7 +225,8 @@ Deny scope stays v1's in full (decision Q5): the user's own deny rules also chec
 | curl/wget writing to a file, or ending in a bounded sink (`head -c N`, `wc`, `grep -c`, a scalar `jq`) | allow (#166, #1125) |
 | inline HTTP in a shell command | deny |
 | build tools (gradle, mvn, sbt) | deny; the alternative is `ctx_execute` with `intent`, full output, nothing cut |
-| Read of a file > 50 KB | hint |
+| Read, no `offset`/`limit`, file > `OUTPUT_CAP` (16,384 B) | deny; alternative: the same `Read` call with `offset`/`limit`, or `ctx_execute` with `file` |
+| Read with `offset` or `limit`, any size | hint, once per session — never denied |
 | other Bash, Grep | hint, once per session |
 | large output from another MCP server's tool (`mcp__<other>__*`) | routed under the §10.3 rules; the hint re-fires every 10 calls by default, env-tunable (decision Q1) |
 
@@ -352,3 +353,4 @@ The module structure, dependency rules, constants, and per-module file map for i
 - 2026-10-16 (r6, `docs/v2/review/DECISIONS-r6.md` D1–D4): §8 `ctx_search` row rewritten for the D2 timeline contract, the D3 `decision` rule and the D4 RRF (k=60) cross-session order; §11 compaction gains the full D1 formula with its constants unchanged and the `decision` row rule.
 - 2026-10-16 (r6, `DECISIONS-r6.md` D6): §11 compaction delivery now depends on `adapters/table.ts` column `compactSummary`. Claude Code = `"host"`: inject one pointer line only. Every other agent = `"none"`: inject the 2,048 B D1 block, unchanged, through its ADR-0009 §6 path, until LV-COMPACT (M3) proves that agent's host writes its own summary. See `tickets/memory-r6/eval/results.md`.
 - 2026-10-16 (r7, `docs/v2/review/DECISIONS-r7.md` R1, R2): §8 `ctx_search` row states the measured recall gain for BM25+RRF (k=60) over v1 (0.48 vs 0.27) and drops MMR, which gave no gain.
+- 2026-10-16 (r8, `docs/v2/review/DECISIONS-r8.md` VR): §10.2 Read row changed from hint to deny. An unranged Read of a file over `OUTPUT_CAP` is now denied; a ranged Read (`offset`/`limit`) stays a hint and is never denied.

@@ -292,11 +292,26 @@ Only called for `PreToolUse`; `hooks/dispatch.ts` (module `hooks`) is the only c
       BASH_HINT, onceKey: "bash:"+ev.sessionId}`) — `hooks/throttle.ts` (module `hooks`) is what actually enforces
       "once per session" by `onceKey`; `decide.ts` always returns the hint decision, never checks the marker
       itself.
-6. If `canonical === "Read"`: file size `> READ_HINT_BYTES` → `{kind:"hint", text: READ_HINT, onceKey:
-   "read:"+ev.sessionId}` (hint, not deny — ADR-0008 "Read of a file > 50 KB | hint | hint"). Case-B/C subagent
-   whose tool set lacks `Read`'s large-file alternative is not possible — `Read` presence in `toolSet` is what let
-   it reach `decide.ts` at all for a subagent; the hint text names `offset`/`limit` for every agent (not a ctx
-   tool), since `Read` is a host-native tool subagents can always call if they have it.
+6. If `canonical === "Read"`: when `input.offset` and `input.limit` are both absent and file size `> OUTPUT_CAP` →
+   `{kind:"deny", reason: READ_DENY_MESSAGE(path, size), onceKey: none}` (stateless, every call — ADR-0008 "Read:
+   hint to deny"). `READ_DENY_MESSAGE(path, size)` returns: `"context-mode: this file is {size} bytes, more than
+   the {cap} byte limit for one read. Pick one: read part of it with Read(file_path, offset, limit), for example
+   limit {READ_MAX_LINES}; or run code on it with ctx_execute(language, code, file=\"{path}\"), which gives your
+   code the path in CTX_FILE and returns only stdout, up to {cap} bytes; or search it with a bounded command such
+   as grep -n or tail."` — three named legal alternatives, in this order: ranged Read, `ctx_execute` with `file`,
+   a bounded shell search. `READ_MAX_LINES` (`200`) is text only in this string; it is never checked against the
+   call. When `input.offset` or `input.limit` is set, Read is never denied regardless of
+   size → `{kind:"hint", text: READ_HINT, onceKey: "read:"+ev.sessionId}` (hint only, once per session — this is
+   the escape hatch, kept exactly as v1's hint so a ranged Read is never blocked). Case-B/C subagent whose tool set
+   lacks `Read`'s large-file alternative is not possible — `Read` presence in `toolSet` is what let it reach
+   `decide.ts` at all for a subagent; the deny/hint text names `offset`/`limit` for every agent (not a ctx tool),
+   since `Read` is a host-native tool subagents can always call if they have it.
+6a. **Shell-dump branch (hosts with no `Read` tool):** if `canonical === "Bash"` and `unwrapped` resolves to one
+   simple command whose `argv0` is in `{cat, head, tail, sed -n, less, jq, bat, more}` with exactly one file
+   argument and no explicit bound flag (`-n`/`-c` count, `sed -n 'a,bp'` range) → run `fs.stat` on that argument
+   and apply the same test as step 6: `size > OUTPUT_CAP` denies with `READ_DENY_MESSAGE(path, size)`; a bounded
+   form (`head -n N`, `tail -n N`, `sed -n 'a,bp'`) is the shell form of a ranged Read and always allows. This
+   check runs before the generic Bash hint in step 5d.
 7. If `canonical === "Grep"`: `{kind:"hint", text: GREP_HINT, onceKey: "grep:"+ev.sessionId}`.
 8. If `canonical` starts with `"mcp:"` and the server id is not `context-mode` (another MCP server's tool,
    ADR-0016 Q1): `{kind:"hint", text: MCP_HINT, onceKey: "mcp:"+ev.sessionId}`, but re-fires every
@@ -370,7 +385,10 @@ model used the exact alternative" (`[V] live on Haiku`). `covers: src/core/polic
 | `echo "$(curl -s https://x.io/a.json)"` | deny (unwrap: $()) |
 | `` echo `curl -s https://x.io/a.json` `` | deny (unwrap: backticks) |
 | WebFetch of a claude.ai artifact URL | allow |
-| Read of a 300 KB file | hint |
+| Read of a 300 KB file, no offset/limit | deny, `READ_DENY_MESSAGE` (ranged Read / `ctx_execute(file)` / grep) |
+| Read of a 300 KB file with offset/limit | hint, never denied |
+| `tail -c 200 big.log` (no Read tool host) | allow (bounded shell dump) |
+| `cat big.log` (no Read tool host, file > `OUTPUT_CAP`) | deny, same `READ_DENY_MESSAGE` |
 | `curl … \| jq '.data'` | allow (§2.4) |
 | `curl … \| jq 'length'` | allow (§2.4) |
 | a `[[ ... ]]` command containing `curl` | deny per Q4 (a deny pattern could match an unparsed construct) |

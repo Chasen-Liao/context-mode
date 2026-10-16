@@ -4,6 +4,8 @@ Changes (DECISIONS-r6): GP6 now carries the D1 open-error golden case; added `me
 
 Changes (DECISIONS-r7): GP5 adds one golden recall@5 case per query type (`decision`, `errorfix`, `timeline`), fixed to the measured BM25+RRF (k=60, no MMR) numbers; the existing `e2e/live/cases/memory-retrieval-local.json` live case is cited as the free deterministic check for the same numbers.
 
+Changes (DECISIONS-r8): GP3 adds four golden cases for the Read-deny rule — unranged `Read` over `OUTPUT_CAP` denied with the ADR-0008 reason text; ranged `Read` (`offset` or `limit` set) over `OUTPUT_CAP` never denied; unbounded shell dump (`cat`/`head`/`tail`/`sed -n`/`less`/`jq`/`bat`/`more`, one file) over `OUTPUT_CAP` denied; bounded shell dump (`head -n N`, `tail -n N`, `sed -n 'a,bp'`) never denied; added `LV-READ-EDIT.e2e.mjs`, one live case: `Read` denied on an over-cap file, then `Read` with `offset`/`limit` on the same file, then `Edit` on the same file, asserting the edit still succeeds (T3).
+
 Owner: `tests` (see `00-architecture.md` §2). Scope: everything under `e2e/` except `e2e/live/cases/v1-migration-*.json` (owner: `v1-transition`, spec'd separately), plus the `tests/` v1 runner config. This module imports nothing from `src/` except the 131 KEEP-PASS files, which keep their existing `src/` imports (ADR-0003 r2, TECH-SPEC §6.1 hard rule).
 
 Sources: TECH-SPEC §6 (all), ADR-0003, ADR-0012, ADR-0017, DECISIONS-r4, `docs/v2/review/TEST-TRIAGE-r2.md`, `e2e/live/run.mjs` (already on disk — this spec keeps its CLI contract), `00-architecture.md` §1 e2e/ table.
@@ -82,11 +84,12 @@ import assert from "node:assert/strict";
 |---|---|---|---|
 | `GP1-install.e2e.mjs` | GP1 | install + handshake, ×10 adapters | `src/adapters/`, `build/manifests.ts`, `src/core/ops/plugin-root.ts` |
 | `GP2-prompt-surface.e2e.mjs` | GP2 | `initialize`, `tools/list`, Pi system prompt | `src/prompt/`, `docs/v2/prompt/lint.mjs` |
-| `GP3-hooks.e2e.mjs` | GP3 | hooks ×10 adapters × 4 events | `src/core/hooks/`, `src/entries/hook.ts`, `src/core/policy/` |
+| `GP3-hooks.e2e.mjs` | GP3 | hooks ×10 adapters × 4 events; Read-deny and shell-dump-deny golden cases (DECISIONS-r8) | `src/core/hooks/`, `src/entries/hook.ts`, `src/core/policy/` |
 | `GP4-execute.e2e.mjs` | GP4 | `ctx_execute` | `src/core/tools/execute.ts`, `src/core/sandbox/` |
 | `GP5-index-search.e2e.mjs` | GP5 | `ctx_index` → `ctx_search`; one golden recall@5 case per query type (`decision`, `errorfix`, `timeline`), fixed to the DECISIONS-r7 measured values (BM25+RRF k=60; no MMR) | `src/core/tools/{index,search}.ts`, `src/core/index/` |
 | `GP6-journal-resume.e2e.mjs` | GP6 | journal + resume; golden case for the DECISIONS-r6 D1 miss (open-error row dropped only by a budget skip, never by a scoring bug); one case for `compactSummary:"host"` (pointer line only, no state block, `ctx_resume()` with no `seq` returns the 2,048 B block on demand) and one case for `compactSummary:"none"` (2,048 B D1 block injected through the agent's ADR-0009 §6 path), per DECISIONS-r6 D6 | `src/core/journal/`, `src/core/tools/resume.ts`, `src/core/compaction/`, `adapters/table.ts` |
 | `LV-COMPACT-<agent>.e2e.mjs` | LV-COMPACT | live case, one per agent (M3): confirms the host writes its own compact summary the model sees; when true, flips `adapters/table.ts` `compactSummary` row for that agent from `"none"` to `"host"` (DECISIONS-r6 D6) | `adapters/table.ts` |
+| `LV-READ-EDIT.e2e.mjs` | LV-READ-EDIT | live case (M3): deny an unranged `Read` on an over-cap file, then `Read` the same file with `offset`/`limit`, then `Edit` the same file; asserts the edit still succeeds after the deny (DECISIONS-r8 T3) | `src/core/policy/` |
 | `GP7-scope.e2e.mjs` | GP7 | scope, 2 worktrees × 2 sessions × 2 agents | `src/core/project/` |
 | `GP8-concurrency.e2e.mjs` | GP8 | 4 servers + hooks, one DB | `src/core/store/` |
 | `GP9-lifecycle.e2e.mjs` | GP9 | stdin EOF, parent kill, 3 OS | `src/core/lifecycle/exit.ts` |

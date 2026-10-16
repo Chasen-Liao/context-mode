@@ -17,11 +17,13 @@ Search for and use these tools when output may be longer than about 20 lines, or
 - ctx_resume: a short summary of this session, after the conversation was compacted or resumed.
 
 For small output of known size, such as git status, ls or a short file, and for editing files, use your normal tools: they are faster there.
+
+A large file's Read is denied. Use Read with offset/limit, or ctx_execute with file set.
 ```
 
 <!-- id: ctx_execute -->
 ```text
-Runs code in a sandboxed subprocess in the project directory and returns only what the code prints. Languages: shell, powershell, javascript, typescript, python, and other runtimes found on PATH. Use it when output may be long, for example tests, builds, logs, git history or API responses, and print just the lines or numbers you need. Set `file` to a local path to work on that file without reading it into the conversation; the code gets the path in the CTX_FILE environment variable. Set `intent` to a short phrase when output may be large: the matching sections come back and the full output is indexed for ctx_search. Stops after `timeoutMs` (default and maximum 600000) and kills the whole process tree.
+Runs code in a sandboxed subprocess in the project directory and returns only what the code prints. Languages: shell, powershell, javascript, typescript, python, and other runtimes found on PATH. Use it when output may be long, for example tests, builds, logs, git history or API responses, and print just the lines or numbers you need. For a large file, set `file` to its local path instead of reading it: the code gets the path in the CTX_FILE environment variable, and only what the code prints comes back. Set `intent` to a short phrase when output may be large: the matching sections come back and the full output is indexed for ctx_search. Stops after `timeoutMs` (default and maximum 600000) and kills the whole process tree.
 ```
 
 <!-- id: ctx_batch -->
@@ -101,4 +103,5 @@ r4 fix pass: checked decisions A35 and B71 — `seq` is already in the `ctx_resu
 r6 (`DECISIONS-r6.md` D1-D3): `ctx_search` text now names `sort:"timeline"`, `after` paging, and `source:"decision"`; `ctx_resume` text drops "decisions" from the summary list and describes the pointer line, matching the 2,048 B budget rule. Both texts stay under the 1,024-char cap.
 r6 (`DECISIONS-r6.md` D6): `ctx_resume` text adds the no-`seq` call: it returns the state block on demand (Claude Code's pointer line reads from it after compaction). Still under the 1,024-char cap.
 r7 (`DECISIONS-r7.md` R1, R2): `ctx_search` text notes the measured recall gain over plain keyword search. Still under the 1,024-char cap (716).
+r8 (`DECISIONS-r8.md` VR): `instructions` and `ctx_execute` texts state that a large file goes through `ctx_execute` with `file` set, or Read with offset/limit; a plain Read of it is now denied, not just hinted. Both texts stay under the 1,024-char cap (1,015 and 732).
 

@@ -97,7 +97,7 @@ export async function handleHook(agent: AgentId, raw: unknown, env: NodeJS.Proce
 ### 4.5 `PreToolUse`
 
 1. No DB open on this path (00 rule: "no DB open on the PreToolUse path", PRD P4). All state this step needs — `userDeny` rules — comes from `userDeny = readUserDeny(env, agent)` (`enforcement`'s `user-deny.ts`, synchronous, reads the host's already-loaded policy file bytes, no DB).
-2. `decision0 = decide(ev, row, userDeny)` (`enforcement` export, 00 §4).
+2. `decision0 = decide(ev, row, userDeny)` (`enforcement` export, 00 §4). For Read (and, on hosts with no Read tool, a one-file shell dump), `decide()` now returns `deny` when the call has no `offset`/`limit` (no bound argument for a dump) and the file is over `OUTPUT_CAP`; a ranged Read or a bounded dump stays `allow` (DECISIONS-r8 VR; rule logic owned by `enforcement`, 08-enforcement.md step 6).
 3. `if (ev.agentId)` (subagent marker, Q23): `subCase = pickSubagentCase(ev, toolSetForAgentType(ev.agentType))`. `toolSetForAgentType` resolution (frontmatter / built-in row / plugin manifest) is `enforcement`'s own responsibility per ADR-0016 "How the subagent's tools are known"; this module only calls `pickSubagentCase` and never resolves tool sets itself.
    - Case A: `decision = decision0` unchanged (same deny as the main session).
    - Case B: if `decision0.kind === "deny"`, rewrite its reason to the `run.mjs` wrapper command: `wrapped = "node " + resolvePluginRoot(row, env) + "/run.mjs " + base64(ev.tool.input.command) + " " + base64(JSON.stringify(userDeny)) + " " + base64(ev.tool.description ?? "")`; `decision = { kind: "deny", reason: denyTemplateFor(ev, row, wrapped), rewritten: wrapped }`. If `decision0.kind !== "deny"` (an `allow` for a subagent with Bash but no ctx tools still must not let a large output through unchecked) — Case B's budget enforcement happens on `PostToolUse` instead (§4.6 step 4), because `PreToolUse` cannot know the output size yet; `decision` stays `decision0` here.
@@ -188,7 +188,7 @@ ADR-0017 `covers`: `src/core/hooks/`, `src/entries/hook.ts`.
 
 ## 9. Constants this module reads (`constants.ts`, 00 §3.2)
 
-`MCP_HINT_EVERY`, `OUTPUT_CAP`, `POINTER_MIN`, `HOOK_P95_MS`, `HOOK_CPU_OVER_NODE_MS`, `HOOK_COMBINED_P95_MS`, `READ_HINT_BYTES`. No other constant in the table is read by `hooks`.
+`MCP_HINT_EVERY`, `OUTPUT_CAP`, `POINTER_MIN`, `HOOK_P95_MS`, `HOOK_CPU_OVER_NODE_MS`, `HOOK_COMBINED_P95_MS`, `READ_MAX_LINES`. No other constant in the table is read by `hooks`.
 
 ## Assumptions
 
@@ -204,4 +204,5 @@ ADR-0017 `covers`: `src/core/hooks/`, `src/entries/hook.ts`.
 
 ## Changes
 
+- `READ_HINT_BYTES` retired, `READ_MAX_LINES` added; §4.5 step 2 now denies an unranged Read (or unbounded one-file shell dump) over `OUTPUT_CAP` instead of hinting (DECISIONS-r8).
 - D6 (`docs/v2/review/DECISIONS-r6.md`; measured in `tickets/memory-r6/eval/results.md`): `SessionStart` (§4.3 step 1) and the pending-flag path (§4.4 step 2) now branch on `row.compactSummary`; `"host"` sends the fixed pointer line only, `"none"` sends the full 2,048 B block through the agent's existing ADR-0009 §6 path.

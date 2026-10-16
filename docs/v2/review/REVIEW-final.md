@@ -11,7 +11,7 @@
 | A1a deny FP rate on small calls | E1 offline, 322,358 real calls | ≤ 2% | v2 port 0.98% (sidechain 0.70%); v1 0.89% | holds (port only) | Claude Code transcripts |
 | A1b recall on large WebFetch | E1 | ≥ 95% | 100% (24/24). Note: also denies 800/800 small WebFetch calls (FP rate 100% within WebFetch, by design) | holds (port only) | Claude Code transcripts |
 | A1c recall on large curl/wget/build | E1 | ≥ 95% | 0 large curl/wget (of 179), 0 large build (of 1) in corpus | not tested: no large exemplars | Claude Code transcripts |
-| A2 deny set covers most large-output bytes | E1 | deny catches ≥ 50% of large bytes | **0.11%** (819,036 / 744,427,447 B), v1 and v2 equal. Read = 5,829 of 9,309 FN. Skeptic re-ran: same figures | **falsified** | Claude Code transcripts |
+| A2 deny set covers most large-output bytes | E1 | deny catches ≥ 50% of large bytes | **0.11%** (819,036 / 744,427,447 B), v1 and v2 equal. Read = 5,829 of 9,309 FN. Skeptic re-ran: same figures. Changed by DECISIONS-r8 (VR, Read deny): **87.64%** on 322,908 calls, once the Read rule above moves from hint to deny | **falsified** (changed by DECISIONS-r8) | Claude Code transcripts |
 | A3 model switches to `ctx_execute` after deny | E2 live | per arm switch ≥ 8/10, bypass+give_up ≤ 1/10, correct ≥ 9/10 | CC Sonnet low: 2/2 switch, 2/2 correct (WebFetch task never called WebFetch). Codex: 6/6 switch, 0 retry/bypass/give_up, 6/6 correct. Opus arm not run | not tested: n = 2 and 6, below n = 10 | Claude Code, Codex |
 | A4 own parser, wrappers unwrapped | E1 golden cases | all GP3 golden cases pass | 18/18 on the reference port | holds (port only, not real v2 code) | offline |
 | A5 every call in a parallel batch checked | E2 parallel case | 0 large calls slip | not run | not tested: budget/time | none |
@@ -24,7 +24,7 @@
 | B3 2 KB block on `"none"` hosts | E3 | arm (d) correct ≥ 70% | not run | not tested | none |
 | B4 Codex `SessionStart(source=compact)` | E3 Codex | fires + marker echoed 3/3 | `compact` is in the Codex 0.156.1 schema enum; live `startup` and `resume` fired 2/2 with marker echoed; `compact` never observed | not tested: compaction not reached in 16 runs | Codex |
 | B5 `ctx_resume(seq)` never a dead end | E3 | 10/10 | no run reached the case | not tested | Codex (stub only) |
-| C1 offline: sandbox saves bytes | E4 offline, 8,417 sessions | median saving ≥ 20% | **median 0.00%, p90 0.00%, corpus 0.03%** | **falsified** | Claude Code transcripts |
+| C1 offline: sandbox saves bytes | E4 offline, 8,417 sessions | median saving ≥ 20% | **median 0.00%, p90 0.00%, corpus 0.03%**. Changed by DECISIONS-r8 (VR, Read deny): not re-run on E4; the byte-stopped share it reports is the A2 figure above, not a re-measured E4 saving | **falsified** (changed by DECISIONS-r8) | Claude Code transcripts |
 | C1 live: ON ≤ 0.7 × OFF tokens | E4 live | ON ≤ 0.7 × OFF, ON correct ≥ OFF | 3,507 vs 3,504 input tokens, n = 1. Skeptic: task had 1-line output, so the ON rules said not to route | not tested: setup flaw (wrong task) | Claude Code |
 | C2 16 KB cap is enough | none | none | not run | not tested | none |
 | C3 first large call uses `ctx_execute` | E4 live | under-routing ≤ 1/10 | 1/1 not routed, but the task was small by the ON rules | not tested: setup flaw, n = 1 | Claude Code |
@@ -41,7 +41,7 @@ Counts: 3 hold (all on a port, none on real code), 6 falsified, 17 not tested.
 
 | Claim | Change or test | Where | When |
 |---|---|---|---|
-| A2, C1 offline | Stop claiming that denies save context. Read carries 62% of large calls (5,829 / 9,334) and is hint-only by design. Either (a) restate the goal as "denies stop the worst single calls", with no byte-saving number, or (b) add a Read cap/deny option and measure it with `e1-deny.mjs` before it enters the design. | ADR-0008 "Same scope as v1" and "Open"; TECH-SPEC.md:163 and :355-365 (C1 text); PRD-v2.md:228-229 | before M1 code |
+| A2, C1 offline | Done (DECISIONS-r8, VR): added a Read cap/deny, measured with `e1-deny.mjs` and `e8-read.mjs` before it entered the design. Deny now stops 87.64% of large bytes, up from 0.11%. T4 (live routing to the named alternative) still fails; owner must re-run the 10/10 forced-read and edit cases named in DECISIONS-r8 before this closes. | ADR-0008 "Read: hint to deny"; DECISIONS-r8.md; PRD-v2.md §10.2 | T4 re-run before close |
 | X2 | Re-run E1 with real `permissions.deny` files. Add the top parse-error shapes (9.9% of all calls fail to parse) as GP3 golden cases, then raise parser coverage until large parse-error allows ≤ 1%. | ADR-0008 "Parse errors"; impl/08-enforcement.md §2.2-2.3 and §6.3 | M1 |
 | F1 | Codex `toolNamePrefix` = `mcp__context_mode__`. Re-check TECH-SPEC.md:192 `[V]` citation against `codex-rs`. Re-check Qwen and ZCode rows, which use the same hyphen form. | impl/10-adapters.md §1.3 row `codex`; TECH-SPEC.md §3.8 | M1 |
 | F2 | Codex PreToolUse matcher must match `Bash` plus the MCP prefix. Add a live case that runs curl on Codex and asserts a deny. Also record two deploy needs found live: `--dangerously-bypass-hook-trust` in `exec`, and `annotations.readOnlyHint = true` on `ctx_execute` (without it every call failed with "requires approval"). | impl/10-adapters.md §1.5 row `codex` and §3 `codex.ts`; impl/14-tests.md §6 | M1 |
@@ -83,3 +83,7 @@ Counts: 3 hold (all on a port, none on real code), 6 falsified, 17 not tested.
 - **Q22 "2× latency" for MMR?** The r7 table shows 27 ms for both. The "2×" text is not backed by the table; fix DECISIONS-r7 R2 wording.
 - **Q24 GS6?** TECH-SPEC.md:39: CC mcp_tool hook p95 ≤ 40 ms wall; command hooks ≤ 20 ms CPU over bare Node; combined ≤ 60 ms p95. Not measured.
 - **Q25 When does an agent's `compactSummary` flip?** Per agent, by one LV-COMPACT live case at M3 (TECH-SPEC.md:429). Claude Code starts as `"host"` with no live check of its own; §2 asks for one at M2.
+
+## Changes
+
+- r8 (`DECISIONS-r8.md` VR): A2 and C1 offline rows gain the new measured value (87.64% large-byte stop, up from 0.11%) and are marked changed by DECISIONS-r8; the §2 A2/C1 row is marked done, pending the T4 re-run.
