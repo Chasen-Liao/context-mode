@@ -98,7 +98,10 @@
     "test:compare": "npx tsx tests/context-comparison.ts",
     "test:ecosystem": "npx tsx tests/ecosystem-benchmark.ts",
     "install:openclaw": "node -e \"if(process.platform==='win32'){console.error('OpenClaw install requires bash (Git Bash or WSL)');process.exit(1)}else{require('child_process').execSync('bash scripts/install-openclaw-plugin.sh',{stdio:'inherit'})}\"",
-    "postinstall": "node scripts/postinstall.mjs"
+    "postinstall": "node scripts/postinstall.mjs",
+    "gate": "node scripts/gate.mjs",
+    "e2e": "node e2e/cases/run.mjs",
+    "keep-pass": "vitest run --config tests/vitest.config.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.0.1",
@@ -111,10 +114,11 @@
     "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.19.11",
     "@types/turndown": "^5.0.5",
-    "esbuild": "^0.27.3",
+    "esbuild": "0.24.0",
     "tsx": "^4.21.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.18"
