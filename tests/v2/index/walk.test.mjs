@@ -94,3 +94,48 @@ test("walkDir returns a deterministic directory-then-name sort order", () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// M2-R5: 14a issue cases owned by walk.ts. impl/05 §1 step 3: a pattern not starting with "/"
+// matches at any depth; a trailing "**" matches one or more segments (DEVIATIONS D-M2-R5-1).
+function build(files) {
+  const root = mkdtempSync(join(tmpdir(), "cm-walk-r5-"));
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(join(root, rel, ".."), { recursive: true });
+    writeFileSync(join(root, rel), body);
+  }
+  return root;
+}
+const rels = (root) => walkDir(root, root).map((f) => f.relPath.split("\\").join("/"));
+
+test("[M2] GP5/globstar-zero-depth: docs/**/*.md matches docs/top.md (zero dirs) and docs/a/b/deep.md (#1291)", () => {
+  const root = build({ ".gitignore": "docs/**/*.md\n", "docs/top.md": "t", "docs/top.txt": "t", "docs/a/b/deep.md": "d", "x/docs/top.md": "x", "x/keep.txt": "k" });
+  try {
+    assert.deepEqual(rels(root), [".gitignore", "docs/top.txt", "x/keep.txt"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("[M2] GP5/nested-gitignore-negation: a/.gitignore ignoring x drops a/x; negation re-includes (#1292)", () => {
+  const root = build({
+    "a/.gitignore": "x\n*.log\n!keep.log\n",
+    "a/x": "1", "a/y": "2", "a/b/x": "3", "a/keep.log": "k", "a/drop.log": "d",
+    "x": "top-level x is outside a/.gitignore's base",
+    ".gitignore": "build/**\n!build/keep.txt\n",
+    "build/keep.txt": "k", "build/drop.txt": "d",
+  });
+  try {
+    assert.deepEqual(rels(root), [".gitignore", "x", "a/.gitignore", "a/keep.log", "a/y", "build/keep.txt"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("walkDir: a negation cannot re-include a file whose parent directory is excluded", () => {
+  const root = build({ ".gitignore": "build/\n!build/keep.txt\n", "build/keep.txt": "k", "a.txt": "a" });
+  try {
+    assert.deepEqual(rels(root), [".gitignore", "a.txt"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

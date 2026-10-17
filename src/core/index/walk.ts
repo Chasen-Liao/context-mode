@@ -137,11 +137,14 @@ function matches(r: Rule, segs: string[]): boolean {
   return false;
 }
 
-// Whole-path match: every pattern segment against every remaining path segment; "**" takes zero or more.
+// Whole-path match: every pattern segment against every remaining path segment. "**" takes zero or
+// more segments; a trailing "**" takes one or more ("everything inside", so "build/**" leaves the
+// directory itself walkable and "!build/keep.txt" can re-include, DEVIATIONS D-M2-R5-1).
 function matchSegs(pat: string[], p: number, segs: string[], s: number): boolean {
   if (p === pat.length) return s === segs.length;
   if (pat[p] === "**") {
-    for (let k = s; k <= segs.length; k += 1) if (matchSegs(pat, p + 1, segs, k)) return true;
+    const first = p === pat.length - 1 ? s + 1 : s;
+    for (let k = first; k <= segs.length; k += 1) if (matchSegs(pat, p + 1, segs, k)) return true;
     return false;
   }
   return s < segs.length && globSeg(pat[p], segs[s]) && matchSegs(pat, p + 1, segs, s + 1);
