@@ -2,7 +2,7 @@
 // Unit tests may import src/ (TECH-SPEC §6.2a); e2e/ never does (GS4).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -186,4 +186,123 @@ test("[M2] types.ts declares ToolReply.journal, TimelineRow and the four M2 tool
     assert.ok(src.includes(name), name);
   }
   assert.ok(src.includes("journal?: JournalFacts"), "ToolReply.journal (D-M2-2)");
+});
+
+// M3 (impl/08 §1.1, §2.1, §2.3 step 2a, §2.4, §6.1 steps 3, 5b, 5d, 6, §6.2; DECISIONS-r9 E2, E4, P2;
+// DEVIATIONS D-M3-arch-5: every M3 policy constant and text template lives in constants.ts).
+test("[M3] MAX_NEST_DEPTH is 32 (impl/08 §2.3 step 2a, ADR-0008 Parse errors)", () => {
+  assert.equal(C.MAX_NEST_DEPTH, 32);
+});
+
+test("[M3] READ_DENY_MESSAGE(path, size) is the impl/08 §6.1 step 6 text with OUTPUT_CAP and READ_MAX_LINES", () => {
+  assert.equal(typeof C.READ_DENY_MESSAGE, "function");
+  const want = "context-mode: this file is 307200 bytes, more than the 16384 byte limit for one read. Pick one: " +
+    "read part of it with Read(file_path, offset, limit), for example limit 200; or run code on it with " +
+    'ctx_execute(language, code, file="/repo/big.log"), which gives your code the path in CTX_FILE and returns ' +
+    "only stdout, up to 16384 bytes; or search it with a bounded command such as grep -n or tail.";
+  assert.equal(C.READ_DENY_MESSAGE("/repo/big.log", 307200), want);
+  const line = C.READ_DENY_MESSAGE("a b.txt", 16385);
+  assert.equal(line.includes("\n"), false);
+  assert.ok(line.includes('file="a b.txt"'));
+  // three named alternatives, in this order: ranged Read, ctx_execute with file, bounded shell search
+  const a = line.indexOf("Read(file_path, offset, limit)"), b = line.indexOf("ctx_execute("), c = line.indexOf("grep -n");
+  assert.ok(a > 0 && a < b && b < c);
+});
+
+test("[M3] deny templates carry the ADR-0008 'Deny message' text per kind (impl/08 §6.2)", () => {
+  assert.deepEqual({ ...C.DENY_WHAT }, {
+    curl: "This curl/wget call", http: "This inline HTTP call", build: "This build command", webfetch: "WebFetch",
+  });
+  assert.ok(Object.isFrozen(C.DENY_WHAT));
+  assert.equal(C.DENY_PREFIX, "context-mode: ");
+  assert.equal(C.DENY_WHAT_SUFFIX, " sends its body into the conversation.");
+  assert.equal(C.DENY_RUN_HERE_LINE, "Run it here instead; the full output is indexed and only the part that matches your intent comes back.");
+  assert.equal(C.DENY_TOOL_LABEL, "Tool: ");
+  assert.equal(C.DENY_INTENT_DEFAULT, "state what you need");
+  assert.equal(C.DENY_EXEC_TOOL, "ctx_execute");
+  assert.equal(C.DENY_WEBFETCH_TOOLS.length, 2);
+  assert.deepEqual([...C.DENY_WEBFETCH_TOOLS], ["ctx_index", "ctx_search"]); // impl/08 B1: v2 names, not ctx_fetch_and_index
+  assert.ok(Object.isFrozen(C.DENY_WEBFETCH_TOOLS));
+  for (const t of [C.DENY_EXEC_TOOL, ...C.DENY_WEBFETCH_TOOLS]) assert.ok(C.TOOL_ORDER.includes(t), t);
+});
+
+test("[M3] user-deny, policy-unreadable and parse-error deny lines (impl/08 §6.1 steps 3, 5b; DECISIONS-r9 E2)", () => {
+  assert.equal(C.USER_DENY_REASON_PREFIX, "Blocked by security policy: matches deny pattern ");
+  assert.equal(C.POLICY_UNREADABLE_LINE, "context-mode: your deny rules could not be read. Fix: run ctx_doctor.");
+  assert.equal(C.PARSE_ERROR_DENY_LINE, "context-mode: could not parse this command; it may be blocked by your own rules. Run it through ctx_execute instead.");
+});
+
+test("[M3] structurally bounded command set is the DECISIONS-r9 E4 list (impl/08 §6.1 step 5d)", () => {
+  assert.deepEqual([...C.BOUNDED_COMMANDS], ["pwd", "whoami", "uname", "id", "realpath", "ln"]);
+  assert.deepEqual([...C.BOUNDED_GIT_SUBCOMMANDS], ["status"]);
+  assert.deepEqual([...C.VERSION_PROBE_FLAGS], ["--version", "-v"]);
+  assert.deepEqual([...C.BOUNDED_UNLESS_VERBOSE], ["cp", "mv", "rm"]);
+  assert.deepEqual([...C.VERBOSE_FLAGS], ["-v", "--verbose"]);
+  for (const k of ["BOUNDED_COMMANDS", "BOUNDED_GIT_SUBCOMMANDS", "VERSION_PROBE_FLAGS", "BOUNDED_UNLESS_VERBOSE", "VERBOSE_FLAGS"]) {
+    assert.ok(Object.isFrozen(C[k]), k);
+  }
+  assert.equal("CONTEXT_MODE_BASH_NUDGE_MIN_COMMAND_BYTES" in C, false, "E3: not ported");
+});
+
+test("[M3] jq filter whitelist is the closed impl/08 §2.4 set", () => {
+  assert.deepEqual({ ...C.JQ_WHITELIST }, { identity: ".", length: "length", pipeLength: "| length", fieldSep: "." });
+  assert.ok(Object.isFrozen(C.JQ_WHITELIST));
+});
+
+test("[M3] types.ts declares Token, TokenKind, SimpleCommand, ParseResult, ParseErrorConstruct, DenyKind", () => {
+  const src = readFileSync(join(SRC, "types.ts"), "utf8");
+  for (const name of ['export type TokenKind = "word" | "op" | "io" | "unhandled";',
+    "export interface Token { kind: TokenKind; text: string; start: number; end: number; }",
+    "export interface SimpleCommand", "export type ParseResult", "export type ParseErrorConstruct", "export type DenyKind"]) {
+    assert.ok(src.includes(name), name);
+  }
+  for (const c of ["process-substitution", "unterminated-quote", "unterminated-heredoc", "coproc", "select", "nesting-too-deep"]) {
+    assert.ok(src.includes(`"${c}"`), c);
+  }
+  for (const f of ["argv0: string;", "args: string[];", "redirectsToFile: boolean;", "endsInBoundedSink: boolean;", "raw: string;",
+    "insideConstruct?: string;", "wrappedBy?: string[];"]) {
+    assert.ok(src.includes(f), `SimpleCommand ${f}`);
+  }
+});
+
+// no-literal-number lint on src/core/policy (impl/08 header: "Every number used below is a name from constants.ts;
+// no literal numbers"). CI-side check, so a regex is fine here. 0 and 1 stay legal (index start and step, not tunable values).
+const POLICY = join(SRC, "../policy");
+function numberLiterals(src) {
+  const out = [];
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const ch = src[i];
+    if (ch === "/" && src[i + 1] === "/") { while (i < n && src[i] !== "\n") i++; continue; }
+    if (ch === "/" && src[i + 1] === "*") { const e = src.indexOf("*/", i + 2); i = e < 0 ? n : e + 2; continue; }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      i++;
+      while (i < n && src[i] !== ch) i += src[i] === "\\" ? 2 : 1;
+      i++;
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(ch)) { while (i < n && /[\w$]/.test(src[i])) i++; continue; }
+    if (/[0-9]/.test(ch) || (ch === "." && /[0-9]/.test(src[i + 1] ?? ""))) {
+      const m = /^(0[xXbBoO][0-9a-fA-F_]+|[0-9_]*\.?[0-9_]+(?:[eE][+-]?[0-9]+)?n?)/.exec(src.slice(i));
+      const lit = m ? m[0] : ch;
+      if (lit !== "0" && lit !== "1") out.push(`${lit}@${src.slice(0, i).split("\n").length}`);
+      i += lit.length;
+      continue;
+    }
+    i++;
+  }
+  return out;
+}
+
+test("[M3] no-literal-number lint: the scanner flags numbers, not strings, comments or names", () => {
+  assert.deepEqual(numberLiterals('const a = 32; // 64\nconst b = "128"; /* 7 */ const c2 = x[0] + 1; f(0.7, 1e3);'),
+    ["32@1", "0.7@2", "1e3@2"]);
+});
+
+test("[M3] no-literal-number lint on src/core/policy (only 0 and 1)", () => {
+  const files = existsSync(POLICY) ? readdirSync(POLICY).filter((f) => f.endsWith(".ts")) : [];
+  for (const f of files) {
+    assert.deepEqual(numberLiterals(readFileSync(join(POLICY, f), "utf8")), [], `${f}: use a constants.ts name`);
+  }
 });
