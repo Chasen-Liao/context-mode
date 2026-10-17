@@ -1,0 +1,10 @@
+{
+  "id": "T-SUB",
+  "kind": "agent",
+  "covers": ["src/core/tools/run-wrapper.ts", "src/core/hooks/"],
+  "prompt": "Spawn a subagent with only the Bash tool, have it run a command whose output would exceed the cap, then report only the exit code and whether a more: line was present.",
+  "tools": ["mcp__context-mode__ctx_execute"],
+  "expect": {
+    "firstLineStartsWith": "exit"
+  }
+}

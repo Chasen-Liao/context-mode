@@ -1,0 +1,10 @@
+{
+  "id": "T-CAP",
+  "kind": "agent",
+  "covers": ["src/core/tools/execute.ts", "src/core/sandbox/", "src/core/index/select.ts"],
+  "prompt": "Run a command whose answer sits past the 16,384 B output cap, then print only the number of lines in the result.",
+  "tools": ["mcp__context-mode__ctx_execute", "mcp__context-mode__ctx_search"],
+  "expect": {
+    "firstLineStartsWith": "exit"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "T-SAVE",
+  "kind": "agent",
+  "covers": ["src/core/tools/execute.ts", "src/core/sandbox/cap.ts", "src/session/analytics.ts"],
+  "prompt": "Run the same large-output command twice, once directly and once through ctx_execute, then report only the byte counts of what entered the conversation each time.",
+  "tools": ["mcp__context-mode__ctx_execute", "mcp__context-mode__ctx_stats"],
+  "expect": {
+    "firstLineStartsWith": "exit"
+  }
+}
