@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openDb, closeDb } from "../../../src/core/store/db.ts";
-import { appendEvent } from "../../../src/core/journal/append.ts";
+import { appendEvent, canonicalKey } from "../../../src/core/journal/append.ts";
 import { readSessionEvents, readEventBySeq } from "../../../src/core/journal/read.ts";
 
 function fakeProject(root, projectKey) {
@@ -160,4 +160,15 @@ test("appendEvent propagates withWrite errors unchanged (no retry, no swallow)",
     closeDb(db);
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ADR-0009 §1, DEVIATIONS D-M2-2: key = tool + canonical command, quote-aware whitespace fold.
+test("canonicalKey folds whitespace outside quotes only and prefixes the tool", () => {
+  assert.equal(canonicalKey("ctx_execute", "  ls   -la\t\n /tmp  "), "ctx_execute:ls -la /tmp");
+  assert.equal(canonicalKey("ctx_execute", "echo 'a   b'   \"c\t d\""), "ctx_execute:echo 'a   b' \"c\t d\"");
+  assert.equal(canonicalKey("ctx_execute", "echo a\\   b"), "ctx_execute:echo a\\  b"); // escaped space kept
+  assert.equal(canonicalKey("ctx_execute", "echo \"x \\\"  y\"   z"), "ctx_execute:echo \"x \\\"  y\" z");
+  assert.equal(canonicalKey("ctx_execute", "echo 'open   quote"), "ctx_execute:echo 'open   quote");
+  assert.equal(canonicalKey("ctx_batch", ""), "ctx_batch:");
+  assert.equal(canonicalKey("ctx_execute", "ls -la"), canonicalKey("ctx_execute", "ls\t-la "));
 });

@@ -23,3 +23,35 @@ export function appendEvent(db: DbHandle, row: NewJournalRow): number {
     return res.seq;
   });
 }
+
+// ADR-0009 §1 ("cmd: key = tool + canonical command"), DEVIATIONS D-M2-2: a quote-aware state machine
+// that folds whitespace outside quotes only (no regex). Outside quotes every whitespace run becomes
+// one space and the ends are dropped; text inside '...' or "..." stays byte-identical; a backslash
+// outside single quotes keeps the next character as it is. An open quote runs to the end.
+export function canonicalKey(tool: string, code: string): string {
+  let out = "";
+  let quote = "";
+  let escaped = false;
+  let gap = false;
+  for (const ch of code) {
+    if (quote === "" && !escaped && ch.trim() === "") {
+      gap = out !== "";
+      continue;
+    }
+    if (gap) {
+      out += " ";
+      gap = false;
+    }
+    out += ch;
+    if (escaped) {
+      escaped = false;
+    } else if (ch === "\\" && quote !== "'") {
+      escaped = true;
+    } else if (quote === "" && (ch === "'" || ch === '"')) {
+      quote = ch;
+    } else if (ch === quote) {
+      quote = "";
+    }
+  }
+  return tool + ":" + out;
+}
