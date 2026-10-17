@@ -34,3 +34,19 @@ M2-O1 measured O1 (toolerr session weight) and O2 (turn prompt on edit rows) aga
 ## Gate after fixes
 
 tsc clean; v2-unit 297/297; `node scripts/gate.mjs --milestone M2` exit 0: keep-pass 58/58, gp-cases PASS, prompt-lint PASS, check-removed SKIP until M6, live PASS (T-CAP, T-SAVE now run against the real server).
+
+## Re-review: b7371056..525d3518 (M2-E1/E2/E3/O1/C1/F1)
+
+Scope: no src/ change in this range; only e2e cases + goldens, KEEP-PASS test harness, tests/v2 realpath, CI glob, DEVIATIONS rows.
+
+| # | Sev | File | Finding | Action |
+|---|---|---|---|---|
+| 16 | info | e2e/cases/* | No file under e2e/ imports src/. GP5 repeats `RETENTION_SIZE_CAP_BYTES` as a literal with a comment naming constants.ts (GS4 forbids the import). | OK. |
+| 17 | info | tests/vitest.config.ts | KEEP-PASS runner copies only the v1 run envelope and sets `retry: 0`, so the gate sees flakes. No v1 test deleted. | OK (D-M2-F1-3). |
+| 18 | info | tests/executor.test.ts, lifecycle, server-stdin-eof-exit, win-sandbox | Wall-clock waits replaced by child events; `until` loops have no own bound but sit under the vitest per-test timeout. | OK (D-M2-F1-1..6). |
+| 19 | minor | e2e/cases/GP4-execute.e2e.mjs `hung-execute-cancel-kills-tree` | Keeps a 2000 ms wall-clock bound; 14a #959 names "within 2 s", so it is the spec'd check, but it is the same flake class as D-M2-F1-4 on a loaded host. | Not changed (spec'd number). Watch at M3. |
+| 20 | minor | e2e/cases/GP5-index-search.e2e.mjs `batch-index-byte-budget` | Runs at the real 500 MB cap: slow, disk-heavy in TMPDIR. Spec'd (D-M2-R4-1, no test knob). | Not changed. |
+
+No blocker, no major. No fix needed.
+
+Gate (re-run at 525d3518): keep-pass 58/58, v2-unit 297/297, gp-cases PASS, prompt-lint PASS, check-removed SKIP (M6), live PASS (step mode, 0/16 cases changed). Exit 0.
