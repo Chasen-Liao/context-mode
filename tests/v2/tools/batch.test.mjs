@@ -69,3 +69,42 @@ test("ctxBatch summary line reports command and query counts plus last exit code
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("runPool capped === (jobs >= concurrency) (TECH-SPEC §5, #915, #932)", async () => {
+  const { runPool } = await import("../../../src/core/tools/batch.ts");
+  const job = (v) => () => Promise.resolve(v);
+  assert.equal((await runPool([job(1)], 2, () => false)).capped, false);
+  assert.equal((await runPool([job(1), job(2)], 2, () => false)).capped, true);
+  const r = await runPool([job(1), job(2), job(3)], 1, (v) => v === 2);
+  assert.deepEqual(r.results, [1, 2]); // a job after a stop never starts
+  assert.equal(r.capped, true);
+});
+
+test("ctx_batch: one deadline bounds the whole handler, later commands never start (Q8, #947)", async () => {
+  const { runBatch } = await import("../../../src/core/tools/batch.ts");
+  const root = mkdtempSync(join(tmpdir(), "cm-ba6-"));
+  try {
+    const start = Date.now();
+    const out = await runBatch({ commands: ["echo before-xyz", "sleep 5", "echo after-xyz"], queries: ["before-xyz", "after-xyz"] }, ctxFor(root), 800);
+    assert.ok(Date.now() - start < 3000);
+    assert.equal(out.isError, false);
+    assert.ok(out.text.includes("Timed out after 800 ms"));
+    assert.ok(out.text.includes("before-xyz"));
+    assert.equal(out.text.includes("\nafter-xyz"), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ctx_batch: reply stays inside OUTPUT_CAP and every output byte is indexed", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cm-ba7-"));
+  try {
+    const out = await ctxBatch.handler({ commands: ["for i in $(seq 1 3000); do echo \"row $i needle\"; echo; done"], queries: ["needle", "row"] }, ctxFor(root));
+    assert.ok(Buffer.byteLength(out.text) <= 16384);
+    assert.ok(out.text.startsWith("1 command(s), 2 querie(s), exit 0"));
+    assert.ok(out.text.trimEnd().endsWith('source:"ctx_batch:1"})'));
+    assert.ok(out.sandboxBytes > 16384);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
