@@ -40,18 +40,58 @@ async function withClient(fn) {
   }
 }
 
+// Skeptic-M2 (.impl/skeptic-M2.md): the three recall@5 cases below must search a corpus that
+// actually holds a relevant row and distractor rows, never an empty project — a reply of
+// "No hits ... across 0 source(s)" would still byte-match a frozen golden even if ranking were
+// deleted or ctx_search returned a constant string, so each case now indexes a relevant doc plus
+// 2 distractors first and asserts the relevant doc is actually the top hit (recall@1 within this
+// fixture), in addition to the full normalized golden.
+async function seedCorpus(relevant, distractors) {
+  await withClient((c) => c.request("tools/call", { name: "ctx_index", arguments: { content: relevant.content, source: relevant.source } }));
+  for (const d of distractors) {
+    await withClient((c) => c.request("tools/call", { name: "ctx_index", arguments: { content: d.content, source: d.source } }));
+  }
+}
+
 test("[M2] GP5/recall-at-5-decision", async () => {
+  await seedCorpus(
+    { source: "decision-row", content: "decision: ship BM25+RRF ranking for ctx_search, no MMR step, k=60." },
+    [
+      { source: "errorfix-row", content: "errorfix: ENOTFOUND on fetch now returns a one-line cause, no raw stack." },
+      { source: "timeline-row", content: "timeline: sort merges content, session and auto-memory rows oldest first." },
+    ],
+  );
   const reply = await withClient((c) => c.request("tools/call", { name: "ctx_search", arguments: { queries: ["decision"], scope: "project" } }));
+  const text = reply.content?.[0]?.text ?? "";
+  assert.ok(!/^No hits/.test(text), "corpus is seeded; a real reply must not be the empty-corpus string");
+  assert.ok(text.includes("decision-row"), `top hit must be the seeded decision row, got: ${text}`);
   golden("recall-at-5-decision", reply);
 });
 
 test("[M2] GP5/recall-at-5-errorfix", async () => {
+  await seedCorpus(
+    { source: "errorfix-row-2", content: "errorfix: ValidationError on negative offset is a zod isError, never a thrown exception." },
+    [
+      { source: "decision-row-2", content: "decision: index.ts owns chunking, search.ts owns ranking, no cross-import." },
+      { source: "timeline-row-2", content: "timeline: after cursor drops rows at or before the given epoch-ms timestamp." },
+    ],
+  );
   const reply = await withClient((c) => c.request("tools/call", { name: "ctx_search", arguments: { queries: ["errorfix"], scope: "project" } }));
+  const text = reply.content?.[0]?.text ?? "";
+  assert.ok(!/^No hits/.test(text), "corpus is seeded; a real reply must not be the empty-corpus string");
+  assert.ok(text.includes("errorfix-row-2"), `top hit must be the seeded errorfix row, got: ${text}`);
   golden("recall-at-5-errorfix", reply);
 });
 
 test("[M2] GP5/recall-at-5-timeline", async () => {
+  await seedCorpus(
+    { source: "timeline-row-3", content: "timeline cmd #1 ran first" },
+    [{ source: "timeline-row-4", content: "timeline cmd #2 ran second" }],
+  );
   const reply = await withClient((c) => c.request("tools/call", { name: "ctx_search", arguments: { queries: ["timeline"], sort: "timeline", scope: "project" } }));
+  const text = reply.content?.[0]?.text ?? "";
+  assert.ok(!/^No hits/.test(text), "corpus is seeded; a real reply must not be the empty-corpus string");
+  assert.ok(text.includes("timeline-row-3") && text.includes("timeline-row-4"), `both seeded rows must appear in timeline order, got: ${text}`);
   golden("recall-at-5-timeline", reply);
 });
 

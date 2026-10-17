@@ -6,7 +6,8 @@
 // until those land — never a syntax error in this file.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -39,6 +40,9 @@ test("[M2] GP2/stable-prefix-across-requests", async () => {
   await c1.close();
   const { client: c2, init: i2 } = await handshake();
   await c2.close();
+  // Skeptic-M2: two empty strings are also "stable", so an empty instructions field would pass
+  // this check trivially even with the prompt-surface feature removed. Require real content.
+  assert.ok(typeof i1.instructions === "string" && i1.instructions.length > 0, "instructions must be non-empty prose, not an empty/missing field");
   assert.deepStrictEqual(normalize({ instructions: i1.instructions }), normalize({ instructions: i2.instructions }), "instructions bytes must be stable across separate requests");
 });
 
@@ -64,12 +68,30 @@ test("[M2] GP2/lint-exit-zero", () => {
   assert.ok(existsSync(lintScript), `lint.mjs not found: ${lintScript}`);
   const outDir = path.join(REPO_ROOT, "release-out");
   let exitCode = 0;
+  let stdout = "";
   try {
-    execFileSync(process.execPath, [lintScript, "--out", outDir], { stdio: "pipe" });
+    stdout = execFileSync(process.execPath, [lintScript, "--out", outDir], { stdio: ["ignore", "pipe", "pipe"] }).toString("utf8");
   } catch (err) {
     exitCode = err.status ?? 1;
+    stdout = (err.stdout ?? "").toString("utf8");
   }
   assert.equal(exitCode, 0, "lint.mjs --out release-out must exit 0");
+  // Skeptic-M2: exit code alone passes even for a no-op script (`process.exit(0)`), which proves
+  // nothing was linted. Require evidence the script actually named the checks it ran.
+  assert.match(stdout.trim(), /^lint: .+ OK$/, "lint.mjs must print which checks it ran, not just exit clean");
+
+  // And the reverse direction: an over-budget description must make it fail, so a constant
+  // "always pass" lint.mjs cannot hide behind this test either.
+  const tmp = mkdtempSync(path.join(tmpdir(), "cm-gp2-lint-bad-"));
+  mkdirSync(path.join(tmp, "release-out"), { recursive: true });
+  writeFileSync(path.join(tmp, "release-out", "server.mjs"), "export const __tools = [{ name: 'ctx_execute', description: 'x'.repeat(100000) }];\n");
+  let badExit = 0;
+  try {
+    execFileSync(process.execPath, [lintScript, "--out", path.join(tmp, "release-out")], { stdio: "pipe" });
+  } catch (err) {
+    badExit = err.status ?? 1;
+  }
+  assert.notEqual(badExit, 0, "lint.mjs must fail a bundle whose description is far over budget");
 });
 
 test("[M2] GP2/initialize-and-discover-identical-bytes", async () => {
@@ -86,5 +108,7 @@ test("[M2] GP2/initialize-and-discover-identical-bytes", async () => {
     },
   });
   await modern.close();
+  // Skeptic-M2: two empty strings are also "identical", so this check must also require content.
+  assert.ok(typeof init.instructions === "string" && init.instructions.length > 0, "instructions must be non-empty prose, not an empty/missing field");
   assert.deepStrictEqual(normalize({ bytes: init.instructions }), normalize({ bytes: discover.instructions }), "initialize and server/discover must return identical instruction bytes (GS9)");
 });

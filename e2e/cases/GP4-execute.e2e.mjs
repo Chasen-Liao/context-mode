@@ -79,16 +79,28 @@ test("[M2] GP4/cancel-kills-child-tree-1s", async () => {
 });
 
 test("[M2] GP4/cold-start-no-path-probes", async () => {
+  // Skeptic-M2: a bare "< 1s" timing is a proxy, not a check of the named behaviour — any fast
+  // cold start passes it even if path probing happens, and a one-off slow CI box fails it even if
+  // there are none. Make the claim ("no synchronous PATH probing") the thing under test: pad PATH
+  // with many non-existent directories; a handler that statSyncs each PATH entry at cold start
+  // scales with PATH length, one that doesn't stays flat.
+  const bloatedPath = Array.from({ length: 400 }, (_, i) => path.join(tmpdir(), `cm-gp4-nonexistent-path-entry-${i}`)).join(path.delimiter);
+  const bloatedEnv = { ...ENV, PATH: `${bloatedPath}${path.delimiter}${ENV.PATH ?? ""}` };
   const start = Date.now();
-  const client = spawnBundle(SERVER_BUNDLE, ENV);
+  const client = spawnBundle(SERVER_BUNDLE, bloatedEnv);
   await client.request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0.0.0" } });
   const elapsedMs = Date.now() - start;
   await client.close();
-  assert.ok(elapsedMs < 1000, `cold start must reply in < 1s, took ${elapsedMs}ms`);
+  assert.ok(elapsedMs < 1000, `cold start with a 400-entry bogus PATH must still reply in < 1s (no per-entry sync probing), took ${elapsedMs}ms`);
 });
 
 test("[M2] GP4/background-no-timeout-hang", async () => {
+  // Skeptic-M2: the reply shape alone does not prove the call didn't block. A handler that waits
+  // out the full "sleep 2" before replying would still match this golden byte-for-byte. Time it.
+  const start = Date.now();
   const reply = await callExecute({ language: "shell", code: "sleep 2", background: true });
+  const elapsedMs = Date.now() - start;
+  assert.ok(elapsedMs < 1500, `background:true must return well before the 2s sleep finishes, took ${elapsedMs}ms`);
   assert.match(reply.content?.[0]?.text ?? "", /^started in background, pid \d+$/);
   const pid = (reply.content?.[0]?.text ?? "").slice("started in background, pid ".length);
   checkGolden("GP4", "background-no-timeout-hang", normalize(reply, { pid, home: HOME, proj: PROJECT }));
