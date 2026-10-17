@@ -24,14 +24,28 @@ test("installExitGuard registers nothing on stdin when isTTY is true", () => {
 });
 
 test("installExitGuard attaches an 'end' listener when isTTY is false", () => {
-  const before = process.stdin.listenerCount("end");
+  const beforeListeners = process.stdin.listeners("end");
   installExitGuard({ onShutdown: () => {}, isTTY: false });
-  assert.equal(process.stdin.listenerCount("end"), before + 1);
+  const afterListeners = process.stdin.listeners("end");
+  assert.equal(afterListeners.length, beforeListeners.length + 1);
+  // Remove the listener this test added, so a later 'end' emit does not fire it (D-M2-F1-1).
+  process.stdin.removeListener("end", afterListeners.find((l) => !beforeListeners.includes(l)));
 });
 
-test("installExitGuard calls onShutdown on stdin 'end'", () => {
+// The real guard sends SIGTERM to process.pid on 'end' (impl/11 §4 step 4), which would kill
+// this test runner. So process.kill and setTimeout are mocked: the test checks onShutdown, the
+// SIGTERM sent at once, and the SIGKILL sent after EXIT_SIGKILL_MS (D-M2-F1-1).
+test("installExitGuard calls onShutdown on stdin 'end', then SIGTERM, then SIGKILL", (t) => {
+  const kills = [];
+  t.mock.method(process, "kill", (pid, sig) => { kills.push([pid, sig]); return true; });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   let called = false;
   installExitGuard({ onShutdown: () => { called = true; }, isTTY: false });
   process.stdin.emit("end");
   assert.equal(called, true);
+  assert.deepEqual(kills, [[process.pid, "SIGTERM"]]);
+  t.mock.timers.tick(C.EXIT_SIGKILL_MS - 1);
+  assert.deepEqual(kills, [[process.pid, "SIGTERM"]]);
+  t.mock.timers.tick(1);
+  assert.deepEqual(kills, [[process.pid, "SIGTERM"], [process.pid, "SIGKILL"]]);
 });
