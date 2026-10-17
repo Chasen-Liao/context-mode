@@ -90,7 +90,7 @@ test("[M1] GP8/cleanup-live-owner-kept (V22): sweepDeadProjects never deletes a 
   const root = mkdtempSync(join(tmpdir(), "cm-sweep-"));
   const configDir = join(root, "cm-config");
   try {
-    const project = fakeProject(root, "d".repeat(16));
+    const project = fakeProjectUnderConfig(configDir, "d".repeat(16));
     const db = await openDb(project);
     writeOwnerPid(configDir, project.projectKey, "srv-live");
     const oldTs = Date.now() - (C.PROJECT_DEAD_IDLE_DAYS + 100) * C.MS_PER_DAY;
@@ -109,7 +109,7 @@ test("[M1] GP8/cleanup-dead-owner-old-deleted (V22): sweepDeadProjects deletes a
   const root = mkdtempSync(join(tmpdir(), "cm-sweep-"));
   const configDir = join(root, "cm-config");
   try {
-    const project = fakeProject(root, "e".repeat(16));
+    const project = fakeProjectUnderConfig(configDir, "e".repeat(16));
     const db = await openDb(project);
     const oldTs = Date.now() - (C.PROJECT_DEAD_IDLE_DAYS + 1) * C.MS_PER_DAY;
     insertSource(db, { session_id: "s1", accessed_ts: oldTs });
@@ -128,7 +128,7 @@ test("sweepDeadProjects does not delete a dead-PID project whose last access is 
   const root = mkdtempSync(join(tmpdir(), "cm-sweep-"));
   const configDir = join(root, "cm-config");
   try {
-    const project = fakeProject(root, "f".repeat(16));
+    const project = fakeProjectUnderConfig(configDir, "f".repeat(16));
     const db = await openDb(project);
     const recentTs = Date.now() - 1 * C.MS_PER_DAY;
     insertSource(db, { session_id: "s1", accessed_ts: recentTs });
