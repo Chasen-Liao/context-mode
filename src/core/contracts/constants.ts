@@ -93,6 +93,22 @@ export const DATA_ROOT = "~/.context-mode"; // PRD §4; the store module expands
 export const INTERNAL_ERROR_LINE = "Internal error. Fix: run ctx_doctor."; // impl/11 §5 step 7d, §7 table
 export const REQUIRE_SECURITY_ENV = "CONTEXT_MODE_REQUIRE_SECURITY"; // v1 a4ab72eb #468; DECISIONS-r9 E2
 
+// Subagent tool-set sources (impl/08 §5.2, ADR-0016 "How the subagent's tools are known", DEVIATIONS D-M3-E3-1)
+export const HOST_CONFIG_DIR_NAME = ".claude"; // project and user agents: <root>/.claude/agents/<type>.md
+export const AGENTS_DIR_NAME = "agents"; // also the plugin's own agents/ dir under its installPath
+export const AGENT_FILE_EXT = ".md";
+export const HOST_PLUGINS_DIR_NAME = "plugins"; // ~/.claude/plugins/installed_plugins.json
+export const INSTALLED_PLUGINS_FILE = "installed_plugins.json";
+export const PLUGIN_AGENT_SEPARATOR = ":"; // plugin agent type "<plugin>:<agent>"
+export const PLUGIN_KEY_SEPARATOR = "@"; // installed_plugins.json key "<plugin>@<marketplace>"
+export const FRONTMATTER_FENCE = "---";
+export const FRONTMATTER_TOOLS_KEY = "tools";
+export const FRONTMATTER_DISALLOWED_KEY = "disallowedTools";
+export const MCP_SERVER_TOOL_PREFIX = "mcp__"; // Claude-shape MCP name; a bare "mcp__<server>" rule covers all its tools
+export const MCP_NAME_JOIN = "__"; // Claude-shape join between server and tool name
+export const GEMINI_MCP_PREFIX = "mcp_"; // generateValidName(): "mcp_" + server + "_" + tool (ADR-0016 Gemini row)
+export const GEMINI_NAME_EXTRA_CHARS = "_-.:"; // kept besides A-Z a-z 0-9; any other char becomes "_"
+
 // MCP_HINT_EVERY: 10, or env CTX_MCP_HINT_EVERY when it is a positive safe integer (Q1, A-C4).
 // Read once at process start (impl/09 A20).
 const MCP_HINT_EVERY_DEFAULT = 10;
