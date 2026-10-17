@@ -1,7 +1,7 @@
 // impl/11 §4. Exit on stdin EOF only; no timer, probe or `ps` call while idle (PRD P5, GP9).
 // Parent death closes the stdin pipe on every OS, so it reaches this same `end` path
 // (Assumptions A1, A2; DECISIONS-r9 F6: no Job Object, no ppid polling).
-import { EXIT_SIGKILL_MS, EXIT_SIGTERM_MS } from "../contracts/constants.js";
+import { EXIT_SIGKILL_MS, EXIT_SIGTERM_MS } from "../contracts/constants.ts";
 
 export function installExitGuard(opts: { onShutdown: () => void; isTTY: boolean }): void {
   // §4 step 1: TTY gate (#534, #236). A terminal run never exits on idle.

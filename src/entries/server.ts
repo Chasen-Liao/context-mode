@@ -1,15 +1,21 @@
 // impl/11 §5, impl/00 §5.1. MCP server entry; build/build.mjs bundles it as server.mjs with the prompt
-// inlined (src/prompt/_generated.ts, impl/13 §2.2 step 3). M0 imports only contracts: store (M1),
-// adapters (M3) and the tool modules (M2-M5) are wired in by their own milestones (DEVIATIONS rows
-// for src/entries/server.ts).
+// inlined (src/prompt/_generated.ts, impl/13 §2.2 step 3). M1 wires the store (DEVIATIONS D-M1-10,
+// D-M1-11, D-M1-T10-1); adapters (M3) and the tool modules (M2-M5) come with their own milestones.
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { McpServer, type ServerContext, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import { AGENT_IDS, type AgentId } from "../core/contracts/agents.js";
 import { INTERNAL_ERROR_LINE, NODE_MIN, SERVER_KEY, TOOLS_TTL_MS } from "../core/contracts/constants.js";
 import { CtxError } from "../core/contracts/errors.js";
-import type { ProjectContext, ToolContext } from "../core/contracts/types.js";
+import type { DbHandle, ProjectContext, ToolContext, ToolReply } from "../core/contracts/types.js";
+import { appendEvent } from "../core/journal/append.js";
 import { installExitGuard } from "../core/lifecycle/exit.js";
+import { resolveConfigDir } from "../core/project/config-dir.js";
+import { resolveProject } from "../core/project/resolve.js";
+import { cleanupProject, sweepDeadProjects } from "../core/store/cleanup.js";
+import { closeDb, openDb } from "../core/store/db.js";
+import { removeOwnerPid, writeOwnerPid } from "../core/store/owners.js";
 import { TOOLS, type RegisteredTool } from "../core/tools/registry.js";
 import { INSTRUCTIONS } from "../prompt/_generated.js";
 
@@ -58,22 +64,97 @@ function metaNumber(meta: Record<string, unknown> | undefined, key: string): num
   return typeof v === "number" && Number.isSafeInteger(v) ? v : undefined;
 }
 
+// §5 step 7d: one line to the client, the stack to stderr only.
+function errorReply(err: unknown): ToolReply {
+  if (err instanceof CtxError) return { text: err.toLine(), isError: true, sandboxBytes: 0 };
+  console.error(err);
+  return { text: INTERNAL_ERROR_LINE, isError: true, sandboxBytes: 0 };
+}
+
 export async function startServer(argv: string[], env: NodeJS.ProcessEnv): Promise<void> {
   const serverId = randomUUID(); // 00 Assumption A8: process-local, generated once
   const degraded = await isDegraded();
   // §5 step 3: degraded mode serves ctx_doctor only (PRD §13).
   const tools = degraded ? TOOLS.filter((t) => t.name === "ctx_doctor") : TOOLS;
 
+  // The server's own DB handles, one per project it has written to, opened on the first call for
+  // that project (§5 step 6, 00 §5.1 step 5) and closed at shutdown (§5 step 9a). These hold
+  // resources, not identity: the ProjectContext itself is resolved again on every call (§5 step 5b).
+  const pending = new Map<string, Promise<DbHandle>>(); // dbPath -> open in progress or done
+  const held: DbHandle[] = [];
+  let cleaned = false; // D-M1-11: cleanup runs once per process, never on a timer
+
+  // §5 step 6b, D-M1-11, D-M1-T7-1: openDb, then cleanupProject (before our own owner file, else
+  // its live-owner check always sees us), then writeOwnerPid, then sweepDeadProjects.
+  async function openOwn(project: ProjectContext): Promise<DbHandle> {
+    const db = await openDb(project);
+    // D-M1-T3-5: the config dir comes from the process env, the same one resolveProject used.
+    const configDir = resolveConfigDir(process.env);
+    try {
+      if (!cleaned) cleanupProject(db, configDir);
+      writeOwnerPid(configDir, project.projectKey, serverId);
+    } catch (err) {
+      closeDb(db);
+      throw err;
+    }
+    held.push(db);
+    if (!cleaned) {
+      cleaned = true;
+      sweepDeadProjects(configDir);
+    }
+    return db;
+  }
+
+  // ADR-0002 decision 3: a held handle whose path has vanished is a hard error, never a recreate.
+  async function ownDb(project: ProjectContext): Promise<DbHandle> {
+    let opening = pending.get(project.dbPath);
+    if (opening === undefined) {
+      opening = openOwn(project);
+      pending.set(project.dbPath, opening);
+      // A failed open leaves no entry, so the next call opens again (one attempt per call, no loop).
+      opening.catch(() => pending.delete(project.dbPath));
+    }
+    const db = await opening;
+    if (!existsSync(db.path)) throw new CtxError("DB_GONE");
+    return db;
+  }
+
+  // impl/00 §5.2 step 5, ADR-0009 §0: one journal row per own call (D-M1-10).
+  async function journal(project: ProjectContext, ctx: ToolContext, name: string, reply: ToolReply): Promise<void> {
+    const db = await ownDb(project);
+    appendEvent(db, {
+      session_id: ctx.sessionId,
+      worktree: project.worktree,
+      agent: project.agent,
+      kind: reply.isError ? "toolerr" : "cmd",
+      tool: name,
+      key: null, // D-M1-T10-1: the key rule comes with the real handlers (ADR-0009 §1)
+      path: null,
+      ok: reply.isError ? 0 : 1,
+      exit_code: null,
+      bytes: reply.sandboxBytes,
+      body: reply.text,
+      turn: ctx.turn,
+      sandbox_bytes: reply.sandboxBytes,
+      returned_bytes: Buffer.byteLength(reply.text, "utf8"),
+    });
+  }
+
   // §5 steps 5-7: stateless dispatch; ToolContext is built fresh from each request.
   function dispatch(server: McpServer, tool: RegisteredTool<unknown>) {
     return async (input: unknown, req: ServerContext) => {
       const meta = req.mcpReq._meta as Record<string, unknown> | undefined;
       const agent = resolveAgent(argv, env);
+      // §5 step 6a, 7a: resolved lazily, at most once per call, never cached across calls.
+      let project: ProjectContext | undefined;
+      const projectOf = (): ProjectContext => {
+        if (agent === undefined) throw new CtxError("NO_PROJECT", { kind: "--agent" });
+        project ??= resolveProject(agent, { env, argv, cwd: process.cwd(), piCwd: undefined });
+        return project;
+      };
       const ctx: ToolContext = {
-        // §5 step 6a: the project is resolved lazily, on first read. The store module (M1)
-        // replaces this getter with resolveProject(agent, { env, argv, cwd, piCwd }).
         get project(): ProjectContext {
-          throw new CtxError("NO_PROJECT", { kind: agent === undefined ? "--agent" : "store(M1) for " + agent });
+          return projectOf();
         },
         sessionId: metaString(meta, "sessionId") ?? "mcp:" + serverId,
         turn: metaNumber(meta, "turn") ?? 0,
@@ -81,15 +162,31 @@ export async function startServer(argv: string[], env: NodeJS.ProcessEnv): Promi
         clientInfo: server.server.getClientVersion(),
         protocolVersion: server.server.getNegotiatedProtocolVersion() ?? "",
       };
+      let reply: ToolReply;
       try {
-        const reply = await tool.handler(input, ctx);
-        return { content: [{ type: "text" as const, text: reply.text }], isError: reply.isError };
+        reply = await tool.handler(input, ctx);
       } catch (err) {
-        // §5 step 7d: one line to the client, the stack to stderr only.
-        if (err instanceof CtxError) return { content: [{ type: "text" as const, text: err.toLine() }], isError: true };
-        console.error(err);
-        return { content: [{ type: "text" as const, text: INTERNAL_ERROR_LINE }], isError: true };
+        reply = errorReply(err);
       }
+      // D-M1-T10-1: degraded mode has no node:sqlite, and an unresolved project has no DB, so
+      // neither writes a row (a handler that needs the project already surfaced NO_PROJECT).
+      // A failure on a resolved project (DB_GONE, DB_CORRUPT, busy) becomes the call's result.
+      if (!degraded) {
+        let resolved: ProjectContext | undefined;
+        try {
+          resolved = projectOf();
+        } catch (err) {
+          console.error("context-mode: no journal row: " + (err instanceof Error ? err.message : String(err)));
+        }
+        if (resolved !== undefined) {
+          try {
+            await journal(resolved, ctx, tool.name, reply);
+          } catch (err) {
+            reply = errorReply(err);
+          }
+        }
+      }
+      return { content: [{ type: "text" as const, text: reply.text }], isError: reply.isError };
     };
   }
 
@@ -125,8 +222,16 @@ export async function startServer(argv: string[], env: NodeJS.ProcessEnv): Promi
   // §5 step 9, then step 10 (stdio last). No other timer (§5 step 9c).
   let handle: StdioServerHandle | undefined;
   installExitGuard({
+    // §5 step 9a, impl/02 §7.2: removeOwnerPid, then closeDb, each best-effort (never blocks shutdown).
     onShutdown: () => {
-      // M1 adds closeDb and removal of owners/<server-id>.pid here (§5 step 9a).
+      for (const db of held) {
+        try {
+          removeOwnerPid(resolveConfigDir(process.env), db.projectKey, serverId);
+        } catch (err) {
+          console.error(err);
+        }
+        closeDb(db); // never throws (impl/02 §6.3)
+      }
       handle?.close().catch((err: unknown) => console.error(err));
     },
     isTTY: process.stdin.isTTY === true,
