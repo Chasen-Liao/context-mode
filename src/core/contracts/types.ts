@@ -58,7 +58,10 @@ export interface ProjectContext {
 export type ProjectSourceKind = "env:CLAUDE_PROJECT_DIR" | "arg:--agent+cwd" | "arg:workspaceFolder" | "spawn-cwd" | "pi:ctx.cwd";
 
 export interface ToolContext { project: ProjectContext; sessionId: string; turn: number; signal: AbortSignal; clientInfo?: { name: string; version: string }; protocolVersion: string; }
-export interface ToolReply { text: string; isError: boolean; sandboxBytes: number; }
+// DEVIATIONS D-M2-2: the handler supplies the journal facts only it knows; the server stays the one
+// write path and uses the D-M1-T10-1 defaults when `journal` is absent.
+export interface JournalFacts { kind: EventKind; key: string | null; path: string | null; exit_code: number | null; }
+export interface ToolReply { text: string; isError: boolean; sandboxBytes: number; journal?: JournalFacts; }
 export interface ToolDef<I> { name: string; description: string; schema: import("zod").ZodType<I>; readOnly: boolean; alwaysLoad: boolean; handler(input: I, ctx: ToolContext): Promise<ToolReply>; }
 
 export interface AdapterRow {
@@ -94,3 +97,40 @@ export interface SourceRow {
 export interface Chunk { ord: number; text: string; bytes: number; }
 export type SearchScope = "session" | "worktree" | "project";
 export interface Hit { sourceId: number; label: string; ord: number; snippet: string; score: number; }
+
+// ctx_search sort:"timeline" rows (ADR-0009 §8.1, DECISIONS-r9 M14-M18, DEVIATIONS D-M2-3).
+// One row shape for the three sources the timeline merges: ContentStore ("content"), SessionDB
+// ("session", journal rows) and the host's auto-memory files ("memory").
+export type SearchSort = "relevance" | "timeline";
+export type TimelineOrigin = "content" | "session" | "memory";
+export interface TimelineRow {
+  origin: TimelineOrigin;
+  ts: number;               // epoch ms UTC (M16: events created_at, sources created_at, memory file mtime)
+  seq: number | null;       // journal seq; null for content and memory rows (M17)
+  sourceId: number | null;  // content rows only; tie-break after seq (M17)
+  path: string | null;      // memory rows: file path; tie-break after seq (rule 5)
+  label: string;            // "<source>" field of the output line (rule 8)
+  text: string;             // row body; the reply shows its first line (rule 8)
+}
+
+// M2 tool inputs: the TS shapes of the zod schemas in src/core/tools/registry.ts
+// (impl/04 §2.1, §3.1; impl/05 §3, §6, DECISIONS-r9 V23). The schema is the runtime check.
+export interface ExecuteInput {
+  language: string;         // "shell" | "powershell" | "javascript" | "typescript" | "python" (EXEC_LANGUAGES) or any PATH runtime (A9)
+  code: string;
+  file?: string;
+  intent?: string;
+  timeoutMs?: number;       // positive integer, at most EXEC_TIMEOUT_MS (Q8)
+  background?: boolean;
+  summary?: boolean;
+}
+export interface BatchInput { commands: string[]; queries: string[]; }
+export interface CtxIndexInput { path?: string; content?: string; url?: string; source?: string; } // exactly one of path/content/url (ONE_OF_INPUT)
+export interface CtxSearchInput {
+  queries: string[];
+  scope?: SearchScope;
+  source?: string;
+  offset?: number;          // relevance only; with "timeline" -> INVALID_ARGS (M23)
+  sort?: SearchSort;
+  after?: number;           // timeline only, epoch-ms cursor (M18); with "relevance" -> INVALID_ARGS (M23)
+}
