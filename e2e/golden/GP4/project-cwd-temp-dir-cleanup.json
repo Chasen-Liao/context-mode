@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "exit 0 · 160 B\nCWD=<proj>\nSCRIPT=<tmp-script-dir>/code.js\n"
+    }
+  ],
+  "isError": false
+}

@@ -1,0 +1,20 @@
+{
+  "r1": {
+    "content": [
+      {
+        "type": "text",
+        "text": "exit 0 · 4 B\nrun1"
+      }
+    ],
+    "isError": false
+  },
+  "r2": {
+    "content": [
+      {
+        "type": "text",
+        "text": "exit 0 · 4 B\nrun2"
+      }
+    ],
+    "isError": false
+  }
+}
