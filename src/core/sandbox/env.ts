@@ -12,9 +12,12 @@ const STRIPPED_KEYS: readonly string[] = Object.freeze([
   "DENO_OPTIONS",
 ]);
 
+// Windows env names ignore case (`Node_Options` reaches node as NODE_OPTIONS), so the match is on
+// the upper-case name on every OS (DEVIATIONS D-M2-R3-1).
 function isStripped(key: string): boolean {
-  if (STRIPPED_KEYS.includes(key)) return true;
-  return key.startsWith(NODE_PREFIX) && key.endsWith(OPTIONS_SUFFIX);
+  const name = key.toUpperCase();
+  if (STRIPPED_KEYS.includes(name)) return true;
+  return name.startsWith(NODE_PREFIX) && name.endsWith(OPTIONS_SUFFIX);
 }
 
 /** Pure: copies `parent` (string values only), drops preload vars, then applies `extra` last. */

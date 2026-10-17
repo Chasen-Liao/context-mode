@@ -4,38 +4,51 @@ import { accessSync, constants as fsConstants, statSync } from "node:fs";
 import path from "node:path";
 import { PATHEXT_DEFAULT } from "../contracts/constants.ts";
 
-const IS_WIN = process.platform === "win32";
 const PATHEXT_SEPARATOR = ";";
+// DEVIATIONS D-M2-R3-2: the only files Windows CreateProcess starts with shell:false. Node refuses
+// .bat/.cmd without a shell (EINVAL), so a PATHEXT hit on them is not a runtime. An extensionless
+// file is a `#!/bin/sh` shim (pyenv-win, #1208/#1209); runProcess starts it through sh.exe.
+const WIN_STARTABLE_EXT: readonly string[] = Object.freeze([".exe", ".com"]);
+
+// Read per call, not at load: the platform decides the lookup rules of each call.
+function isWin(): boolean {
+  return process.platform === "win32";
+}
 
 /** Step 1: candidate binary names for `lang`, in lookup order. */
 function candidates(lang: string): string[] {
+  const win = isWin();
   switch (lang) {
     case "shell":
       // §2a: Git Bash is reached only through PATH lookup of these names.
-      return IS_WIN ? ["sh.exe", "bash.exe"] : ["sh"];
+      return win ? ["sh.exe", "bash.exe"] : ["sh"];
     case "powershell":
       return ["pwsh", "pwsh.exe", "powershell.exe"];
     case "javascript":
     case "typescript":
       return ["node", "node.exe"];
     case "python":
-      return IS_WIN ? ["python.exe", "py.exe"] : ["python3", "python"];
+      // D-M2-R3-2: the bare name last, so a pyenv-win `python` shim is found when no .exe is.
+      return win ? ["python.exe", "py.exe", "python"] : ["python3", "python"];
     default:
-      return IS_WIN ? [lang, lang + ".exe"] : [lang];
+      return win ? [lang, lang + ".exe"] : [lang];
   }
 }
 
-/** Step 3: on Windows a name with no extension is tried with each PATHEXT entry, in order. */
+/** Step 3: on Windows a name with no extension is tried with each PATHEXT entry, then bare (D-M2-R3-2). */
 function fileNames(name: string, pathExt: string[]): string[] {
-  if (!IS_WIN || path.extname(name) !== "") return [name];
-  return pathExt.map((ext) => name + ext);
+  if (!isWin() || path.extname(name) !== "") return [name];
+  return [...pathExt.map((ext) => name + ext), name];
 }
 
-/** Steps 4-5: a regular file; on POSIX it must also carry the exec bit (shebang shims pass as-is). */
+/** Steps 4-5: a regular file; on POSIX it must carry the exec bit, on Windows it must be startable. */
 function isRunnable(full: string): boolean {
   const st = statSync(full, { throwIfNoEntry: false });
   if (st === undefined || !st.isFile()) return false;
-  if (IS_WIN) return true;
+  if (isWin()) {
+    const ext = path.extname(full).toLowerCase();
+    return ext === "" || WIN_STARTABLE_EXT.includes(ext);
+  }
   try {
     accessSync(full, fsConstants.X_OK);
     return true;
@@ -47,7 +60,7 @@ function isRunnable(full: string): boolean {
 /** Absolute interpreter path for `lang`, or null when no PATH directory has one. Re-walks PATH every call. */
 export function findRuntime(lang: string): string | null {
   const dirs = (process.env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
-  const pathExt = IS_WIN
+  const pathExt = isWin()
     ? (process.env.PATHEXT ?? PATHEXT_DEFAULT).split(PATHEXT_SEPARATOR).filter((e) => e !== "")
     : [];
   const names = candidates(lang);
