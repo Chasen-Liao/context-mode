@@ -2,9 +2,11 @@
 // chunk returned twice inside one batch call is deduped"); DECISIONS-r3 Q8 (one timeout bounds the
 // whole handler, batch included: #947); TECH-SPEC §5 runPool row (#915, #932); DEVIATIONS D-M2-2
 // (journal facts), D-M2-4 (no run-wrapper in M2), D-M2-6 (whole chunks, capBytes is a final bound),
-// D-M2-T11-1.
+// D-M2-T11-1, D-M2-R4-1 (ingest byte budget, #961).
 import { z } from "zod/v4";
-import { CANCELLED_LINE, EXEC_TIMEOUT_MS, INDEX_WRITE_CHUNK, OUTPUT_CAP, SEARCH_PAGE_SIZE } from "../contracts/constants.ts";
+import {
+  CANCELLED_LINE, EXEC_TIMEOUT_MS, INDEX_WRITE_CHUNK, OUTPUT_CAP, RETENTION_SIZE_CAP_BYTES, SEARCH_PAGE_SIZE,
+} from "../contracts/constants.ts";
 import { CtxError, formatError } from "../contracts/errors.ts";
 import type { BatchInput, Chunk, DbHandle, ToolContext, ToolReply } from "../contracts/types.ts";
 import { chunkText } from "../index/chunk.ts";
@@ -101,7 +103,9 @@ async function runCommand(cmd: string, shell: string | null, ctx: ToolContext, d
 
 // ---- step 5: index, in INDEX_WRITE_CHUNK groups with the deadline checked before each group ----
 
-interface Indexed { bodies: Map<string, string>; indexed: number; total: number; }
+/** Why indexing stopped before the end: the Q8 deadline (or a cancel), or the ingest byte budget. */
+type IndexStop = "deadline" | "budget" | null;
+interface Indexed { bodies: Map<string, string>; indexed: number; total: number; stop: IndexStop; }
 
 function chunkKey(sourceId: number, ord: number): string {
   return sourceId + ":" + ord;
@@ -122,13 +126,17 @@ function shown(chunks: Chunk[], heads: string[]): string[] {
   });
 }
 
-function indexCombined(db: DbHandle, ctx: ToolContext, label: string, ran: CmdOut[], deadline: number): Indexed {
+// D-M2-R4-1 (#961): one call ingests at most `budgetBytes` (the tool passes RETENTION_SIZE_CAP_BYTES).
+// Whole chunks only, in output order: the first chunk that would pass the budget ends the ingest and
+// the reply says how many bytes were indexed. No chunk is cut.
+function indexCombined(db: DbHandle, ctx: ToolContext, label: string, ran: CmdOut[], deadline: number, budgetBytes: number): Indexed {
   const chunks = chunkText(ran.map((r) => r.block).join(BLOCK_SEP), "text");
   const display = shown(chunks, ran.map((r) => r.head));
   const bodies = new Map<string, string>();
   let total = 0;
   for (const c of chunks) total += c.bytes;
   let indexed = 0;
+  let queued = 0;
   let group: Chunk[] = [];
   let groupBytes = 0;
   const flush = (): boolean => {
@@ -154,12 +162,17 @@ function indexCombined(db: DbHandle, ctx: ToolContext, label: string, ran: CmdOu
     return true;
   };
   for (const c of chunks) {
-    if (group.length > 0 && groupBytes + c.bytes > INDEX_WRITE_CHUNK && !flush()) return { bodies, indexed, total };
+    if (queued + c.bytes > budgetBytes) {
+      const stop: IndexStop = flush() ? "budget" : "deadline"; // flush first: it adds to `indexed`
+      return { bodies, indexed, total, stop };
+    }
+    if (group.length > 0 && groupBytes + c.bytes > INDEX_WRITE_CHUNK && !flush()) return { bodies, indexed, total, stop: "deadline" };
     group.push(c);
     groupBytes += c.bytes;
+    queued += c.bytes;
   }
-  flush();
-  return { bodies, indexed, total };
+  const stop: IndexStop = flush() ? null : "deadline";
+  return { bodies, indexed, total, stop };
 }
 
 // ---- steps 6-8: answer each query inside its share ----
@@ -202,8 +215,11 @@ function answer(db: DbHandle, ctx: ToolContext, label: string, queries: string[]
 
 // ---- handler ----
 
-/** §3.3 with the whole-handler bound as a parameter; the tool handler passes EXEC_TIMEOUT_MS. */
-export async function runBatch(input: unknown, ctx: ToolContext, boundMs: number): Promise<ToolReply> {
+/**
+ * §3.3 with the whole-handler bound and the ingest byte budget as parameters; the tool handler
+ * passes EXEC_TIMEOUT_MS and RETENTION_SIZE_CAP_BYTES (D-M2-R4-1).
+ */
+export async function runBatch(input: unknown, ctx: ToolContext, boundMs: number, budgetBytes: number): Promise<ToolReply> {
   // Step 1.
   const parsed = ctxBatchSchema.safeParse(input);
   if (!parsed.success) {
@@ -231,11 +247,13 @@ export async function runBatch(input: unknown, ctx: ToolContext, boundMs: number
     let notice: string | null;
     try {
       // Steps 3-5: what ran is indexed, a stopped command's block carries its error line.
-      idx = indexCombined(db, ctx, label, ran, deadline);
+      idx = indexCombined(db, ctx, label, ran, deadline, budgetBytes);
       const stop = last.error;
       const cut = idx.indexed < idx.total ? "Indexed " + idx.indexed + " of " + idx.total + " B." : null;
       const timeout = formatError("TIMEOUT", { ms: boundMs });
-      notice = cut === null ? stop : (stop ?? (ctx.signal.aborted ? CANCELLED_LINE : timeout)) + " " + cut;
+      // The cause in front of the cut line: a stopped command, else a cancel, else what ended the ingest.
+      const cause = stop ?? (ctx.signal.aborted ? CANCELLED_LINE : idx.stop === "deadline" ? timeout : null);
+      notice = cut === null ? stop : cause === null ? cut : cause + " " + cut;
       const fixed = bytes(summary) + 1 + (notice === null ? 0 : bytes(notice) + 1) + bytes(footer);
       const share = Math.floor((OUTPUT_CAP - fixed) / queries.length);
       sections = answer(db, ctx, label, queries, share, idx.bodies);
@@ -260,5 +278,5 @@ export const ctxBatch = Object.freeze({
   schema: ctxBatchSchema,
   readOnly: false, // A12
   alwaysLoad: false,
-  handler: (input: BatchInput, ctx: ToolContext): Promise<ToolReply> => runBatch(input, ctx, EXEC_TIMEOUT_MS),
+  handler: (input: BatchInput, ctx: ToolContext): Promise<ToolReply> => runBatch(input, ctx, EXEC_TIMEOUT_MS, RETENTION_SIZE_CAP_BYTES),
 });
