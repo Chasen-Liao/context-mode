@@ -153,3 +153,45 @@ test("metaGet returns null for an unset key", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// D-M2-CI-3 (GP8 on CI): N processes opening one fresh context.db at once all succeed, the file
+// ends in WAL mode with the schema applied, and no private build file is left behind.
+test("openDb from 8 processes at once on a fresh project: no 'database is locked', WAL, no temp files", async () => {
+  const { spawn } = await import("node:child_process");
+  const { readdirSync } = await import("node:fs");
+  const { DatabaseSync } = await import("node:sqlite");
+  const dbUrl = new URL("../../../src/core/store/db.ts", import.meta.url).href;
+  const root = mkdtempSync(join(tmpdir(), "cm-db-race-"));
+  try {
+    for (let round = 0; round < 10; round += 1) {
+      const project = fakeProject(root, String(round).padStart(16, "0"));
+      // Each child loads db.ts, prints "ready", then waits for one stdin line: the parent sends
+      // it to all 8 at once, so every openDb hits the fresh file in the same few milliseconds.
+      const child = `const { openDb, closeDb } = await import(${JSON.stringify(dbUrl)});
+        process.stdout.write("ready\\n");
+        process.stdin.once("data", async () => { const db = await openDb(${JSON.stringify(project)}); closeDb(db); process.exit(0); });`;
+      const kids = Array.from({ length: 8 }, () => {
+        const c = spawn(process.execPath, ["--input-type=module", "-e", child], { stdio: ["pipe", "pipe", "pipe"] });
+        let err = "";
+        c.stderr.on("data", (d) => { err += d; });
+        const ready = new Promise((resolve) => c.stdout.once("data", resolve));
+        const done = new Promise((resolve) => c.on("exit", (code) => resolve({ code, err })));
+        return { c, ready, done };
+      });
+      await Promise.all(kids.map((k) => k.ready));
+      for (const k of kids) k.c.stdin.write("go\n");
+      const results = await Promise.all(kids.map((k) => k.done));
+      for (const r of results) assert.equal(r.code, 0, r.err);
+      const raw = new DatabaseSync(project.dbPath, { readOnly: true });
+      try {
+        assert.equal(raw.prepare("PRAGMA journal_mode").get().journal_mode, "wal");
+        assert.equal(raw.prepare("PRAGMA user_version").get().user_version > 0, true);
+      } finally {
+        raw.close();
+      }
+      assert.deepEqual(readdirSync(project.projectDir).filter((n) => n.includes(".tmp")), []);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

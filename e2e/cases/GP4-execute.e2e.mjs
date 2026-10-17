@@ -187,9 +187,14 @@ test("[M2] GP4/project-cwd-temp-dir-cleanup", async () => {
   const scriptDir = path.dirname(line("SCRIPT="));
   assert.equal(scriptDir.startsWith(PROJECT), false); // temp file lives outside the project
   assert.equal(existsSync(scriptDir), false); // and its dir is removed after the run
-  // The per-run temp dir name is random (ctx-exec-<random>); golden on a value with that one
-  // field replaced by a stable placeholder so the case is deterministic across runs.
-  const stableText = text.replace(scriptDir, "<tmp-script-dir>");
+  // The summary byte count is the byte length of stdout, which holds two absolute paths whose
+  // length depends on the runner's TMPDIR and project dir (D-M2-CI-1): assert it equals the body's
+  // real byte length here, then golden on a placeholder. The per-run temp dir name is random
+  // (ctx-exec-<random>) and gets a placeholder too, so the case is deterministic across runners.
+  const nl = text.indexOf("\n");
+  const body = text.slice(nl + 1);
+  assert.equal(text.slice(0, nl), `exit 0 · ${Buffer.byteLength(body, "utf8")} B`);
+  const stableText = ("exit 0 · <bytes> B\n" + body).replace(scriptDir, "<tmp-script-dir>");
   golden("project-cwd-temp-dir-cleanup", { ...reply, content: [{ ...reply.content[0], text: stableText }] });
 });
 
@@ -265,7 +270,13 @@ test("[M2] GP4/node-options-no-leak-across-servers", async () => {
   const replyB = await callBatch({ commands: ["node -v"], queries: ["v"] }, ENV); // server B, clean env
   assert.equal(replyB.isError, false);
   assert.ok(!JSON.stringify(replyB).includes("MODULE_NOT_FOUND"));
-  golden("node-options-no-leak-across-servers", replyB);
+  // `node -v` prints the runner's Node version, one per CI matrix entry (D-M2-CI-2): assert the
+  // reply holds the version of the `node` the batch shell finds on PATH, then golden on a placeholder.
+  const nodeV = execFileSync("node", ["-v"], { env: ENV, encoding: "utf8" }).trim();
+  const textB = replyB.content?.[0]?.text ?? "";
+  assert.ok(textB.includes(`\n${nodeV}\n`), `reply holds ${nodeV}: ${textB}`);
+  const stableB = textB.split(nodeV).join("<node-version>");
+  golden("node-options-no-leak-across-servers", { ...replyB, content: [{ ...replyB.content[0], text: stableB }] });
 });
 
 test("[M2] GP4/recreate-preload-temp-file", async () => {

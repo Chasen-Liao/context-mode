@@ -1,11 +1,13 @@
 // impl/02 §6 (openDb, withWrite, closeDb), impl/00 §4 signatures (DEVIATIONS D-M1-1),
 // metaGet/metaSet/metaTake (DEVIATIONS D-M1-7), ADR-0002 decisions 2-3, impl/02 A-S3,
 // DEVIATIONS D-M1-T5-1.
-import { existsSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, linkSync, mkdirSync, rmSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import {
   DB_SHM_SUFFIX,
   DB_TIMEOUT_MS,
+  DB_TMP_SUFFIX,
   DB_WAL_SUFFIX,
   NODE_MIN,
   SCHEMA_VERSION,
@@ -59,10 +61,34 @@ function readUserVersion(raw: DatabaseSync): number {
   return row.user_version;
 }
 
+// D-M2-CI-3: a missing DB is built under a private temp name (WAL switch + DDL, no other
+// connection can see it), then published with linkSync, which fails with EEXIST if another server
+// won. `PRAGMA journal_mode = WAL` needs an exclusive lock that SQLite takes without calling the
+// busy handler, so N servers switching one fresh file at once got "database is locked" (GP8).
+function createAtomically(sqlite: SqliteModule, path: string): void {
+  const tmp = path + "." + randomUUID() + DB_TMP_SUFFIX;
+  try {
+    const raw = new sqlite.DatabaseSync(tmp, { timeout: DB_TIMEOUT_MS });
+    try {
+      applyMigrations(raw, readUserVersion(raw));
+    } finally {
+      raw.close(); // last connection: SQLite checkpoints and removes the temp -wal/-shm
+    }
+    try {
+      linkSync(tmp, path);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+  } finally {
+    for (const suffix of ["", DB_WAL_SUFFIX, DB_SHM_SUFFIX]) rmSync(tmp + suffix, { force: true });
+  }
+}
+
 // Read-write open + migrations (impl/02 §6.1 steps 5-7). Closes the handle on any error.
 function openWritable(sqlite: SqliteModule, path: string): DatabaseSync {
   let raw: DatabaseSync | null = null;
   try {
+    if (!existsSync(path)) createAtomically(sqlite, path);
     raw = new sqlite.DatabaseSync(path, { timeout: DB_TIMEOUT_MS });
     applyMigrations(raw, readUserVersion(raw));
     return raw;

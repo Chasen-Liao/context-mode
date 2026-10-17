@@ -47,8 +47,9 @@ jobs:
         run: choco install elixir --yes --no-progress
       - run: npm install
         name: dev tooling (npm is dev-only, never shipped)
-      # Gate selection (DEVIATIONS D-M2-arch-4, D-M0-3; scripts/gate.mjs keepPass): milestone =
-      # the one after the highest milestone in .impl/progress.json "done"; KEEP-PASS files =
+      # Gate selection (DEVIATIONS D-M2-arch-4, D-M2-CI-4, D-M0-3; scripts/gate.mjs keepPass):
+      # milestone = the highest milestone in .impl/progress.json "done" (M0 if none), the same
+      # milestone the local gate passed before "done"; the one in progress has its own gate run. KEEP-PASS files =
       # owner milestone <= it, or owner module done. Later-milestone files are reported, not run.
       - name: gate milestone selection (D-M2-arch-4)
         shell: bash
@@ -57,7 +58,7 @@ jobs:
           const fs = require("node:fs");
           const MS = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7"];
           const done = JSON.parse(fs.readFileSync(".impl/progress.json", "utf8")).done;
-          const ms = Math.min(Math.max(-1, ...done.map((d) => MS.indexOf(d))) + 1, MS.length - 1);
+          const ms = Math.max(0, ...done.map((d) => MS.indexOf(d)));
           const map = JSON.parse(fs.readFileSync(".impl/keep-pass-map.json", "utf8"));
           const owner = (f) => MS.indexOf(map.moduleMilestone[map.files[f].module]);
           const all = Object.keys(map.files).sort();
