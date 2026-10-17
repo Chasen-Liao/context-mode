@@ -27,16 +27,60 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      # v1 runtimes for the KEEP-PASS executor tests, the same set as v1 main CI (DEVIATIONS
+      # D-M2-arch-5). Dev tooling only, nothing ships. Rust is preinstalled on all three images.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: false
+      - uses: erlef/setup-beam@v1
+        if: runner.os != 'Windows'
+        with:
+          elixir-version: "1.17"
+          otp-version: "27"
+      - name: Elixir (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install elixir --yes --no-progress
       - run: npm install
         name: dev tooling (npm is dev-only, never shipped)
+      # Gate selection (DEVIATIONS D-M2-arch-4, D-M0-3; scripts/gate.mjs keepPass): milestone =
+      # the one after the highest milestone in .impl/progress.json "done"; KEEP-PASS files =
+      # owner milestone <= it, or owner module done. Later-milestone files are reported, not run.
+      - name: gate milestone selection (D-M2-arch-4)
+        shell: bash
+        run: |
+          node - >> "$GITHUB_ENV" <<'JS'
+          const fs = require("node:fs");
+          const MS = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7"];
+          const done = JSON.parse(fs.readFileSync(".impl/progress.json", "utf8")).done;
+          const ms = Math.min(Math.max(-1, ...done.map((d) => MS.indexOf(d))) + 1, MS.length - 1);
+          const map = JSON.parse(fs.readFileSync(".impl/keep-pass-map.json", "utf8"));
+          const owner = (f) => MS.indexOf(map.moduleMilestone[map.files[f].module]);
+          const all = Object.keys(map.files).sort();
+          const files = all.filter((f) => owner(f) <= ms || done.includes(map.files[f].module));
+          const later = all.filter((f) => !files.includes(f));
+          console.error(`gate milestone ${MS[ms]}: ${files.length} KEEP-PASS files run, ${later.length} owned by a later milestone: ${later.join(" ")}`);
+          console.log(`GATE_MILESTONE=${MS[ms]}`);
+          console.log(`KEEP_PASS_FILES=${files.join(" ")}`);
+          JS
       - run: node build/build.mjs --out release-out
         name: build (esbuild, no package.json in output)
       - run: node docs/v2/prompt/lint.mjs --out release-out
         name: prompt lint, bundle mode (impl/13 §7; gate layer prompt-lint from M2, D-M0-1)
-      - run: node e2e/cases/run.mjs
-        name: GP cases
-      - run: npx vitest run --config tests/vitest.config.ts
-        name: KEEP-PASS v1 tests (DECISIONS-r9 G5)
+      - run: node e2e/cases/run.mjs --milestone "$GATE_MILESTONE"
+        name: GP cases tagged <= gate milestone (D-M0-2, D-M2-arch-4)
+        shell: bash
+      # --testTimeout: go run / rustc / PowerShell cold starts exceed vitest's 5 s default on CI
+      # runners; 60 s is the executor's own rustc compile cap (D-M2-R2-1).
+      - run: npx vitest run --config tests/vitest.config.ts --testTimeout=60000 --hookTimeout=60000 $KEEP_PASS_FILES
+        name: KEEP-PASS v1 tests, gate selection (DECISIONS-r9 G5, D-M2-arch-4)
+        shell: bash
+      - run: node build/build.mjs --generated-only
+        name: src/prompt/_generated.ts for v2 unit tests (D-M2-arch-6)
       - run: node --test tests/v2/
         name: v2 unit tests (TECH-SPEC 6.2a, DEVIATIONS D-M1-13, same as gate layer v2-unit)
       - run: node scripts/gen-keep-pass.mjs --check
