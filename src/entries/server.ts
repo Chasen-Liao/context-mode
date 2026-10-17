@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { McpServer, type ServerContext, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import { AGENT_IDS, type AgentId } from "../core/contracts/agents.js";
-import { INTERNAL_ERROR_LINE, NODE_MIN, SERVER_KEY, TOOLS_TTL_MS } from "../core/contracts/constants.js";
+import { INTERNAL_ERROR_LINE, NODE_MIN, SERVER_KEY, TOOLS_TTL_MS } from "../core/contracts/constants.ts";
 import { CtxError } from "../core/contracts/errors.js";
 import type { DbHandle, ProjectContext, ToolContext, ToolReply } from "../core/contracts/types.js";
 import { appendEvent } from "../core/journal/append.js";

@@ -4,7 +4,7 @@
 // the milestone that builds it (DEVIATIONS 2026-10-17 registry.ts rows). Each milestone swaps its
 // stub for the real handler import (impl/11 §1 step 1) and moves the schema next to it.
 import { z } from "zod/v4";
-import { EXEC_TIMEOUT_MS, TOOL_ORDER } from "../contracts/constants.js";
+import { EXEC_TIMEOUT_MS, TOOL_ORDER } from "../contracts/constants.ts";
 import type { ToolContext, ToolReply } from "../contracts/types.js";
 import { TOOL_DESCRIPTIONS } from "../../prompt/_generated.js";
 
