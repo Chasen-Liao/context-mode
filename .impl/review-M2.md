@@ -18,8 +18,13 @@ Range: e071921f..4b81603c (origin/v2-design). Checked against impl/00 §3-§5, i
 | 10 | info | e2e | No file under e2e/ imports src/. | OK. |
 | 11 | info | security | Sandbox env: NODE_*_OPTIONS, BUN/DENO_OPTIONS stripped case-insensitively; spawn argv-only, `shell:false`, detached group, killTree. SSRF: every hop re-resolves and checks every address, socket connects to the checked address (no DNS rebind), proxy target checked, IP-literal origin checked through a proxy. Errors are one line with a low-level code, never a stack. | OK. |
 | 13 | major | e2e/live/run.mjs, e2e/live/cases/{cap-past-16k,savings-on-off}.json | Live gate red: `--strict-mcp-config` with no `--mcp-config` loaded no server ("no tool called ctx_execute"); prompts asked for a count, not the `exit` line the cases expect. | Fixed: MCP cases get `release-out/server.mjs` as the one server; prompts ask for the summary line; T-SAVE drops ctx_stats until it is built. D-M2-RV-4. |
-| 14 | minor | tests/executor/win-sandbox-782-788.test.ts | One gate run had this KEEP-PASS file red; 3 direct reruns 8/8 and the next full gate green. Not reproduced. | Watch at M3. |
+| 14 | minor | tests/executor/win-sandbox-782-788.test.ts | M2-C1 re-check: reproduced. `#788(b)` ("leaves no .ctx-mode-* dir behind") failed with one leaked `.ctx-mode-*` dir only inside a full `keep-pass` batch run (5/5 green standalone). Cause: a cleanup race in v1's `PolyglotExecutor` (`src/runtime.js`), not M2-C1's owned `src/core/sandbox/*`. | Not fixed here (outside M2-C1's files, D-M2-C1-flake-1). Recorded in DEVIATIONS.md; owner of `src/runtime.js` should fix the race. Still watch at M3. |
+| 15 | minor | tests/server-stdin-eof-exit.test.ts | "exits instead of surviving an uncaught exception storm" went red in the same full `keep-pass` batch runs as #14, 4/4 standalone pass. Cause: CPU contention from the other spawn-heavy keep-pass files during the batch, pushing `server.bundle.mjs`'s response past the fixed 2000 ms close bound; not a defect in the v1 server or the test. | Not fixed (D-M2-C1-flake-2): fix is a worker-concurrency change in `tests/vitest.config.ts`/`scripts/gate.mjs`, outside M2-C1's files. Recorded in DEVIATIONS.md. |
 | 12 | info | signatures | `ftsInsert` returns id (D-M2-1), `ftsQueryTimeline` extra args (D-M2-3, D-M2-T3-1). Rest matches 00 §4. | OK. |
+
+## O1/O2 outcome (M2-O1)
+
+M2-O1 measured O1 (toolerr session weight) and O2 (turn prompt on edit rows) against R2. The commit recorded only the measurement; M2-C1 does not own the product decision or any file M2-O1 touched, so no src/ change is made here. Outcome logged in DEVIATIONS.md (D-M2-C1-O) for the trail; a later module picks the winner.
 
 ## Performance
 
