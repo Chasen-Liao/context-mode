@@ -134,3 +134,99 @@ test("ftsInsert never writes rows whose body exceeds MAX_CHUNK_BYTES (caller con
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---- M1-T8 additions (V24 tokenizer, D-M1-T8-1..4) ----
+
+test("ftsQuery matches Cyrillic and accented Latin words, case and diacritics folded (V24)", async () => {
+  const { db, root, project } = await freshDb("6".repeat(16));
+  try {
+    ftsInsert(db, src({ id: 1, sessionId: "s1", worktree: project.worktree }), [{ ord: 0, text: "Привет мир, café crème", bytes: 30 }]);
+    assert.equal(ftsQuery(db, "привет", "session", project, "s1", 10, 0).length, 1);
+    assert.equal(ftsQuery(db, "МИР", "session", project, "s1", 10, 0).length, 1);
+    assert.equal(ftsQuery(db, "cafe", "session", project, "s1", 10, 0).length, 1);
+    assert.equal(ftsQuery(db, "crème", "session", project, "s1", 10, 0).length, 1);
+  } finally {
+    closeDb(db);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ftsQuery treats FTS5 operators in the query as plain words, never a syntax error (D-M1-T8-1)", async () => {
+  const { db, root, project } = await freshDb("7".repeat(16));
+  try {
+    ftsInsert(db, src({ id: 1, sessionId: "s1", worktree: project.worktree }), [{ ord: 0, text: "a AND b OR c NOT d", bytes: 18 }]);
+    for (const q of ['a AND', 'NOT', '"', 'b OR (', 'x:y', '*', '   ', '']) {
+      assert.ok(Array.isArray(ftsQuery(db, q, "session", project, "s1", 10, 0)), q);
+    }
+    assert.deepEqual(ftsQuery(db, "   ", "session", project, "s1", 10, 0), []);
+  } finally {
+    closeDb(db);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ftsQuery hit carries label, ord and an escaped snippet; scope worktree filters by worktree", async () => {
+  const { db, root, project } = await freshDb("8".repeat(16));
+  try {
+    ftsInsert(db, src({ id: 1, sessionId: "s1", worktree: project.worktree, label: "a.txt" }), [
+      { ord: 0, text: "nothing here", bytes: 12 },
+      { ord: 1, text: "<b>needle</b>", bytes: 13 },
+    ]);
+    ftsInsert(db, src({ id: 2, sessionId: "s1", worktree: "/other", label: "b.txt" }), [{ ord: 0, text: "needle", bytes: 6 }]);
+    const wt = ftsQuery(db, "needle", "worktree", project, "s1", 10, 0);
+    assert.equal(wt.length, 1);
+    assert.equal(wt[0].label, "a.txt");
+    assert.equal(wt[0].ord, 1);
+    assert.equal(wt[0].snippet, "&lt;b&gt;needle&lt;/b&gt;");
+    assert.equal(ftsQuery(db, "needle", "project", project, "s1", 10, 0).length, 2);
+  } finally {
+    closeDb(db);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ftsQuery limit/offset page the ranked list; source filters by label before ranking (D-M1-T8-4)", async () => {
+  const { db, root, project } = await freshDb("9".repeat(16));
+  try {
+    for (let i = 1; i <= 5; i++) {
+      ftsInsert(db, src({ id: i, sessionId: "s1", worktree: project.worktree, label: `f${i}` }), [{ ord: 0, text: "pager word", bytes: 10 }]);
+    }
+    const all = ftsQuery(db, "pager", "session", project, "s1", 10, 0);
+    assert.equal(all.length, 5);
+    assert.deepEqual(all.map((h) => h.sourceId), [5, 4, 3, 2, 1]); // equal score: newest source first (M19)
+    const page = ftsQuery(db, "pager", "session", project, "s1", 2, 2);
+    assert.deepEqual(page.map((h) => h.sourceId), [3, 2]);
+    const one = ftsQuery(db, "pager", "session", project, "s1", 10, 0, "f2");
+    assert.deepEqual(one.map((h) => h.sourceId), [2]);
+  } finally {
+    closeDb(db);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("ftsInsert upserts the sources row (bytes_total, chunk_count) and batches large inputs", async () => {
+  const { db, root, project } = await freshDb("a".repeat(16));
+  try {
+    const text = "z".repeat(C.MAX_CHUNK_BYTES);
+    const n = Math.ceil((2 * C.INDEX_WRITE_CHUNK) / C.MAX_CHUNK_BYTES) + 1; // spans > 2 write batches
+    const chunks = Array.from({ length: n }, (_, i) => ({ ord: i, text, bytes: text.length }));
+    ftsInsert(db, src({ id: 7, sessionId: "s1", worktree: project.worktree }), chunks);
+    const row = db.raw.prepare("SELECT bytes_total, chunk_count FROM sources WHERE id = 7").get();
+    assert.equal(row.chunk_count, n);
+    assert.equal(row.bytes_total, n * C.MAX_CHUNK_BYTES);
+    const count = db.raw.prepare("SELECT count(*) AS c FROM chunks WHERE source_id = 7").get();
+    assert.equal(count.c, n);
+    assert.equal(db.raw.isTransaction, false);
+  } finally {
+    closeDb(db);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("highlight output never exceeds maxBytes even when escaping grows the text (D-M1-T8-3)", () => {
+  const out = highlight("&".repeat(500) + "<>".repeat(500), "x", 100);
+  assert.ok(Buffer.byteLength(out, "utf8") <= 100);
+  assert.ok(out.endsWith("&amp;")); // never cut inside an entity
+  const emoji = highlight("😀".repeat(100), "x", 10); // 4-byte code points
+  assert.equal(emoji, "😀😀");
+});
