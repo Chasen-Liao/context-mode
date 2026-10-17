@@ -66,6 +66,10 @@ export const SCHEMA_VERSION = 1; // ADR-0002 decision 2: PRAGMA user_version
 export const RETENTION_IDLE_DAYS = 30; // impl/02 A-S1: row-level, age since last access
 export const RETENTION_SIZE_CAP_BYTES = 524288000; // impl/02 A-S2 (Q7b): 500 MB per project
 export const PROJECT_DEAD_IDLE_DAYS = 14; // DECISIONS-r9 V22 (#1024): project-level sweep, dead owner
+export const PROJECTS_DIR_NAME = "projects"; // PRD §4: <DATA_ROOT>/projects/<projectKey>/
+export const DB_FILE_NAME = "context.db"; // PRD §4: one SQLite file per project
+export const GIT_DIR_NAME = ".git"; // DEVIATIONS D-M1-T3-3: containmentRoot of a non-bare repo
+export const WORKSPACE_FOLDER_FLAG = "--workspace-folder"; // DEVIATIONS D-M1-5: VS Code ${workspaceFolder} launch arg
 
 // Runtime
 export const NODE_MIN = "24.15.0"; // S-NODE
