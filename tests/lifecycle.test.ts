@@ -68,11 +68,19 @@ setInterval(() => {}, 1000);
   child.on("close", () => {
     try { rmSync(scratchDir, { recursive: true, force: true }); } catch {}
   });
-  const ready = new Promise<void>((resolve) => {
+  // Resolve on the child's own READY (written after startLifecycleGuard has
+  // registered its signal handlers), never on a wall-clock fallback: under load
+  // tsx startup can exceed any fixed delay, and a signal sent before the guard
+  // is registered hits Node's default handler instead (DEVIATIONS D-M2-F1-6).
+  const ready = new Promise<void>((resolve, reject) => {
+    let out = "";
     child.stdout!.on("data", (chunk: Buffer) => {
-      if (chunk.toString().includes("READY")) resolve();
+      out += chunk.toString();
+      if (out.includes("READY")) resolve();
     });
-    setTimeout(resolve, 3000); // fallback
+    child.once("close", (code, signal) => {
+      reject(new Error(`guard child closed before READY (code ${code}, signal ${signal})`));
+    });
   });
   return { child, ready };
 }

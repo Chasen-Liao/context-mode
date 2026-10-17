@@ -1,6 +1,6 @@
 import { describe, test, expect, afterAll } from "vitest";
 import { strict as assert } from "node:assert";
-import { existsSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, writeFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -1764,56 +1764,79 @@ describe("Background Mode", () => {
     bgExecutor.cleanupBackgrounded();
   }, 10_000);
 
+  // The executor detaches on its timer, which can fire before a loaded machine
+  // has even started `node`, so stdout may still be empty at return. The child
+  // therefore reports its pid and progress through files, and the test waits on
+  // those events and on process exit, never on a fixed sleep (DEVIATIONS D-M2-F1-5).
+  const isAlive = (pid: number): boolean => {
+    try { process.kill(pid, 0); return true; } catch { return false; }
+  };
+  const until = async (cond: () => boolean): Promise<void> => {
+    while (!cond()) await new Promise((r) => setTimeout(r, 20));
+  };
+  const readInt = (file: string): number =>
+    existsSync(file) ? parseInt(readFileSync(file, "utf-8"), 10) || 0 : 0;
+
   test("cleanupBackgrounded kills detached process", async () => {
-    const bgExecutor = new PolyglotExecutor({ runtimes });
-    const r = await bgExecutor.execute({
-      language: "javascript",
-      code: `process.stdout.write(String(process.pid)); setInterval(() => {}, 1000);`,
-      timeout: 500,
-      background: true,
-    });
-    const pid = parseInt(r.stdout.trim(), 10);
-    assert.ok(pid > 0, `Expected valid PID, got: "${r.stdout}"`);
+    const scratch = mkdtempSync(join(tmpdir(), "ctx-bg-kill-"));
+    const pidFile = join(scratch, "pid");
+    try {
+      const bgExecutor = new PolyglotExecutor({ runtimes });
+      const r = await bgExecutor.execute({
+        language: "javascript",
+        code: `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`,
+        timeout: 500,
+        background: true,
+      });
+      assert.equal(r.backgrounded, true, "Should be marked as backgrounded");
+      await until(() => readInt(pidFile) > 0);
+      const pid = readInt(pidFile);
+      assert.equal(isAlive(pid), true, "Process should be alive before cleanup");
 
-    let alive = false;
-    try { process.kill(pid, 0); alive = true; } catch { /* ESRCH */ }
-    assert.equal(alive, true, "Process should be alive before cleanup");
-
-    bgExecutor.cleanupBackgrounded();
-    await new Promise((r) => setTimeout(r, 300));
-
-    alive = false;
-    try { process.kill(pid, 0); alive = true; } catch { /* ESRCH */ }
-    assert.equal(alive, false, `Process ${pid} should be dead after cleanup`);
+      bgExecutor.cleanupBackgrounded();
+      await until(() => !isAlive(pid));
+      assert.equal(isAlive(pid), false, `Process ${pid} should be dead after cleanup`);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   }, 10_000);
 
   test("background: true keeps process alive when it writes after detach", async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "ctx-bg-write-"));
+    const pidFile = join(scratch, "pid");
+    const countFile = join(scratch, "count");
     const bgExecutor = new PolyglotExecutor({ runtimes });
-    const r = await bgExecutor.execute({
-      language: "javascript",
-      code: `
-        process.stdout.write(String(process.pid));
-        // Write every 200ms after detach (timeout is 300ms)
-        const id = setInterval(() => {
-          process.stdout.write('alive\\n');
-        }, 200);
-        // Keep alive for 3 seconds total
-        setTimeout(() => { clearInterval(id); process.exit(0); }, 3000);
-      `,
-      timeout: 300,
-      background: true,
-    });
-    const pid = parseInt(r.stdout.trim(), 10);
-    assert.ok(pid > 0, `Expected valid PID, got: "${r.stdout}"`);
+    try {
+      const r = await bgExecutor.execute({
+        language: "javascript",
+        code: `
+          const fs = require("node:fs");
+          fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+          let n = 0;
+          // Write to the (still open) stdout pipe every 50ms and count each
+          // write that returned. A SIGPIPE on a write kills the process, so
+          // the count stops growing.
+          setInterval(() => {
+            process.stdout.write('alive\\n');
+            fs.writeFileSync(${JSON.stringify(countFile)}, String(++n));
+          }, 50);
+        `,
+        timeout: 300,
+        background: true,
+      });
+      assert.equal(r.backgrounded, true, "Should be marked as backgrounded");
+      await until(() => readInt(pidFile) > 0);
+      const pid = readInt(pidFile);
 
-    // Give the process time to write after detach
-    await new Promise((r) => setTimeout(r, 1000));
-
-    let alive = false;
-    try { process.kill(pid, 0); alive = true; } catch { /* ESRCH */ }
-    assert.equal(alive, true, `Process ${pid} should still be alive after detach (SIGPIPE bug?)`);
-
-    bgExecutor.cleanupBackgrounded();
+      // Writes after detach: the count grows by 3 past its value at return,
+      // or the process dies (the SIGPIPE bug), whichever happens first.
+      const atDetach = readInt(countFile);
+      await until(() => readInt(countFile) >= atDetach + 3 || !isAlive(pid));
+      assert.equal(isAlive(pid), true, `Process ${pid} should still be alive after detach (SIGPIPE bug?)`);
+    } finally {
+      bgExecutor.cleanupBackgrounded();
+      rmSync(scratch, { recursive: true, force: true });
+    }
   }, 10_000);
 });
 
