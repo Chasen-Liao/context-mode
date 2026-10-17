@@ -384,6 +384,9 @@ E2E: GP6 (`ctx_resume(seq: N)` resumes from a given pointer). `covers`: `src/cor
 - A-S3: `ctx_doctor`'s lossless `healLossless` (`VACUUM INTO` before rename-and-recreate) described in ADR-0010 D8 and PRD-v2.md:122 is **not** implemented in this module. ADR-0002 §3 and DECISIONS-r4 A57 state the named decision as hard-error + rename-aside only, with no mid-session self-heal; D8's `healLossless` branch belongs to `tools-ops`'s `ctx_doctor` file (`00-architecture.md` owner column), not `store`, and is out of scope for this spec. `store/db.ts` only ever renames-aside-and-fails-over to `ctx_doctor`; it never runs `VACUUM INTO` itself.
 - A-S4: `events.turn` and `sources.accessed_ts`/`created_ts` are stored as integer Unix milliseconds (`Date.now()`), matching ADR-0009's "age = current turn − item turn" integer arithmetic; no ADR states the unit explicitly.
 - A-S5: `owners/<serverId>.pid` liveness check uses `process.kill(pid, 0)` (signal-0 probe), not a `ps` spawn, to satisfy PRD P5 (idle server/liveness checks must not spawn processes); ADR-0002 names the file but not the liveness mechanism.
+- A-S6 (intern M0 Q3): "CJK stays open" means issue #1295 stays open. `chunks` uses `unicode61 remove_diacritics 2` and nothing else; there is no CJK code path. GP5 asserts Cyrillic and accented Latin only, no CJK case.
+- A-S7 (intern M0 Q9): the two thresholds are independent. `cleanupProject` (rows, `RETENTION_IDLE_DAYS`) runs on the open project; `sweepDeadProjects` (whole project, dead owner and last access older than `PROJECT_DEAD_IDLE_DAYS`) runs on the others. A dead project goes whole, young rows too. Caller and "last access": DEVIATIONS D-M1-11.
+- A-S8: names, signatures, error keys and DDL columns in this file are reconciled with `00-architecture.md` in DEVIATIONS D-M1-1 to D-M1-9; where they differ, those rows win.
 
 ## Changes
 

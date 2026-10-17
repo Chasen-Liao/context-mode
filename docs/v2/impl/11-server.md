@@ -215,6 +215,7 @@ ADR-0017 `covers`: `src/entries/server.ts`, `src/prompt/`.
 ## Files written
 
 `/Users/mksglu/.claude/claude-worktree-workspaces/oss-new/docs/v2/impl/11-server.md`
+- A4 (intern M0 Q4): `serverId = crypto.randomUUID()`, made once at start. The fallback session id is `"mcp:" + serverId`; the owner file is `owners/<serverId>.pid` with `process.pid` inside. M1 wiring: DEVIATIONS D-M1-10.
 
 ## Changes
 

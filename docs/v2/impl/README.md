@@ -37,6 +37,9 @@ Every link in this file and in each module file is relative to the file it is wr
    - `node e2e/live/run.mjs` (step mode: only cases whose `covers` match your changed files; `claude-sonnet-5 --effort low`).
 6. A step is done only when both are green. Do not delete v1 `tests/`; the 131 KEEP-PASS files must stay green (ADR-0003 r2, Q1).
 7. Never import `src/` from `e2e/` (GS4). Never add a constant outside `src/core/contracts/constants.ts`.
+## Assumption and deviation ids (intern M0 Q10)
+
+Each module file keeps its own `## Assumptions` list with its own prefix (`A-C` contracts, `A-S` store, `AS` sandbox, `A<n>` elsewhere). Cross-file answers go to `DEVIATIONS.md` as `D-M<n>-<k>`. There is no central registry: search `## Assumptions` and `DEVIATIONS.md`.
 
 ## Changes
 

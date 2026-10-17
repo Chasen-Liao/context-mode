@@ -386,6 +386,7 @@ In-process glue only, same reasoning as Pi.
 - A6: Qwen's shell name stays both `run_shell_command` and `Shell` (§1.3a, §1.5) until S-NAMES's live run names the one the installed build sends; no separate test id (§1.5b).
 
 ---
+- A7 (intern M0 Q6): there is no runtime mode pick. `compactSummary` is a fixed column of `ADAPTERS` (§1.3); hooks read `getAdapter(id).compactSummary` and branch (impl/09 §5). Only a table edit after an LV-COMPACT run changes it.
 
 ## Changes
 
