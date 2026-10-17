@@ -37,6 +37,8 @@ jobs:
         name: GP cases
       - run: npx vitest run --config tests/vitest.config.ts
         name: KEEP-PASS v1 tests (DECISIONS-r9 G5)
+      - run: node --test tests/v2/
+        name: v2 unit tests (TECH-SPEC 6.2a, DEVIATIONS D-M1-13, same as gate layer v2-unit)
       - run: node scripts/gen-keep-pass.mjs --check
         name: KEEP-PASS list is current
       - run: node scripts/ci-gs4-lint.mjs
