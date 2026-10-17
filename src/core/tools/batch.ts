@@ -17,6 +17,7 @@ import { findRuntime } from "../sandbox/runtimes.ts";
 import { runProcess } from "../sandbox/spawn.ts";
 import { closeDb, openDb } from "../store/db.ts";
 import { ftsInsert, ftsQuery } from "../store/fts.ts";
+import { unknownField } from "./search.ts";
 
 export type { BatchInput } from "../contracts/types.ts";
 
@@ -24,7 +25,7 @@ export type { BatchInput } from "../contracts/types.ts";
 export const ctxBatchSchema = z.object({
   commands: z.array(z.string().min(1)).min(1),
   queries: z.array(z.string().min(1)).min(1),
-}).strict();
+}, { error: unknownField }).strict(); // 00 §5.2 step 1: the SDK validates first, so the text lives on the schema
 
 const TOOL = "ctx_batch";
 const LABEL_PREFIX = TOOL + ":"; // §3.3 step 5: label = "ctx_batch:" + turn

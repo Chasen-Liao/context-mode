@@ -158,3 +158,14 @@ test("[M2] GP4/fetch-error-one-line-cause: an unreachable url gives one line wit
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("[M2-review] ctx_execute, ctx_batch, ctx_index schemas name the fix for an unknown key (00 §5.2 step 1)", async () => {
+  const { ctxExecuteSchema } = await import("../../../src/core/tools/execute.ts");
+  const { ctxBatchSchema } = await import("../../../src/core/tools/batch.ts");
+  const { ctxIndexSchema } = await import("../../../src/core/tools/index.ts");
+  for (const [schema, input] of [[ctxExecuteSchema, { language: "shell", code: "x", bogus: 1 }], [ctxBatchSchema, { commands: ["x"], queries: ["x"], bogus: 1 }], [ctxIndexSchema, { content: "x", bogus: 1 }]]) {
+    const r = schema.safeParse(input);
+    assert.equal(r.success, false);
+    assert.equal(r.error.issues[0].message, 'Unknown field "bogus". Fix: use "queries".');
+  }
+});

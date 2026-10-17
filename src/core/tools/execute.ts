@@ -21,6 +21,7 @@ import { findRuntime } from "../sandbox/runtimes.ts";
 import { runProcess, type RunResult } from "../sandbox/spawn.ts";
 import { closeDb, openDb } from "../store/db.ts";
 import { indexText } from "./index.ts";
+import { unknownField } from "./search.ts";
 
 export type { ExecuteInput } from "../contracts/types.ts";
 
@@ -35,7 +36,7 @@ export const ctxExecuteSchema = z.object({
   timeoutMs: z.number().int().positive().max(EXEC_TIMEOUT_MS).optional(),
   background: z.boolean().optional(),
   summary: z.boolean().optional(),
-}).strict();
+}, { error: unknownField }).strict(); // 00 §5.2 step 1: the SDK validates first, so the text lives on the schema
 
 // Interpreter and OS facts (not tunables). A9: runtimes that take code with `-c`; all others get a file.
 // D-M2-T10-7: ".js", not ".mjs": Node's syntax detection runs both require() and import code.

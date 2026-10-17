@@ -194,6 +194,10 @@ export async function safeFetch(url: string, signal: AbortSignal): Promise<{ bod
       throw fail(status);
     }
     const body = await readBody(res);
-    return { body, contentType: res.headers["content-type"] ?? "", finalUrl: current.href };
+    // finalUrl labels the indexed source and is echoed in replies: never carry userinfo (a secret).
+    const shown = new URL(current.href);
+    shown.username = "";
+    shown.password = "";
+    return { body, contentType: res.headers["content-type"] ?? "", finalUrl: shown.href };
   }
 }

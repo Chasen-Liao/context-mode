@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { z } from "zod/v4";
-import { OUTPUT_CAP } from "../contracts/constants.ts";
+import { EXEC_TIMEOUT_MS, OUTPUT_CAP } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import type { CtxIndexInput, DbHandle, ProjectContext, SourceKind, ToolContext, ToolReply } from "../contracts/types.ts";
 import { chunkText } from "../index/chunk.ts";
@@ -12,6 +12,7 @@ import { walkDir } from "../index/walk.ts";
 import { isInside } from "../project/contain.ts";
 import { capBytes } from "../sandbox/cap.ts";
 import { safeFetch } from "../sandbox/fetch.ts";
+import { unknownField } from "./search.ts";
 import { closeDb, openDb } from "../store/db.ts";
 import { ftsInsert } from "../store/fts.ts";
 
@@ -23,7 +24,7 @@ export const ctxIndexSchema = z.object({
   content: z.string().optional(),
   url: z.string().optional(),
   source: z.string().optional(),
-}).strict();
+}, { error: unknownField }).strict(); // 00 §5.2 step 1: the SDK's isError line is UNKNOWN_FIELD
 
 // The three input fields, in the order the error line names them.
 const INPUT_FIELDS = ["path", "content", "url"] as const;
@@ -113,7 +114,9 @@ async function itemsOf(input: CtxIndexInput, ctx: ToolContext): Promise<{ items:
     return { items, from: items.length === 1 ? items[0].label : input.path };
   }
   // url: safeFetch owns proxy env and the per-hop SSRF check; its CtxError is the reply (P1, one path).
-  const res = await safeFetch(input.url ?? "", ctx.signal);
+  // 00 §5.2 step 3 / Q8: the handler runs under cancel and EXEC_TIMEOUT_MS, so a server that never
+  // answers ends as FETCH_FAILED, not a hung call. AbortSignal.timeout does not hold the event loop.
+  const res = await safeFetch(input.url ?? "", AbortSignal.any([ctx.signal, AbortSignal.timeout(EXEC_TIMEOUT_MS)]));
   const text = res.body.toString("utf8");
   const label = res.finalUrl;
   return { items: [{ sourceKind: "url", label, kind: kindOfType(res.contentType), read: () => text }], from: label };

@@ -41,6 +41,10 @@ for (const k of ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "
 Object.assign(env, { ENABLE_CLAUDEAI_MCP_SERVERS: "false", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" });
 
 const bin = realClaude();
+// --strict-mcp-config loads no server unless one is named: cases that call context-mode tools get the
+// built bundle (release-out/server.mjs, built by the gate's gp-cases step) as the one MCP server.
+const MCP_PREFIX = "mcp__context-mode__";
+const MCP_CONFIG = JSON.stringify({ mcpServers: { "context-mode": { command: process.execPath, args: [path.join(ROOT, "release-out", "server.mjs"), "--agent", "claude-code"] } } });
 const rows = [];
 for (const c of selected) {
   if (c.kind === "local") {
@@ -53,6 +57,7 @@ for (const c of selected) {
   if (!bin) { rows.push({ id: c.id, result: "SKIPPED", cost: 0, note: "no real claude binary on PATH" }); continue; }
   const r = spawnSync(bin, ["-p", c.prompt, "--model", MODEL, "--effort", EFFORT, "--max-budget-usd", BUDGET,
     "--no-session-persistence", "--setting-sources", "project", "--strict-mcp-config", "--output-format", "json",
+    ...(c.tools.some((t) => t.startsWith(MCP_PREFIX)) ? ["--mcp-config", MCP_CONFIG] : []),
     ...(c.tools.length ? ["--allowedTools", ...c.tools] : ["--tools", ""])], { cwd: ROOT, env, encoding: "utf8", timeout: 600000 });
   let res; try { res = JSON.parse(r.stdout); } catch { res = { is_error: true, result: (r.stderr || r.stdout || "").slice(0, 200) }; }
   const text = String(res.result || "").trim();
