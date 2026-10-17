@@ -3,7 +3,8 @@
 export type ErrorCode =
   | "NODE_TOO_OLD" | "NO_SQLITE" | "DB_GONE" | "NO_PROJECT" | "UNKNOWN_FIELD"
   | "TIMEOUT" | "NO_RUNTIME" | "FETCH_FAILED" | "SSRF" | "OUTSIDE_ROOT"
-  | "INVALID_ARGS" | "ONE_OF_INPUT" | "SPAWN_FAILED";
+  | "INVALID_ARGS" | "ONE_OF_INPUT" | "SPAWN_FAILED"
+  | "DB_CORRUPT" | "SCHEMA_STALE" | "NO_GIT_DIR" | "NO_HOME"; // store additions, DEVIATIONS D-M1-2
 
 export const ERROR_TEXT: Readonly<Record<ErrorCode, string>> = Object.freeze({
   NODE_TOO_OLD: "Node <v> is below 24.15.0. Fix: install Node 24.15.0 or later.",
@@ -19,6 +20,10 @@ export const ERROR_TEXT: Readonly<Record<ErrorCode, string>> = Object.freeze({
   INVALID_ARGS: "Invalid argument <field>. Fix: <action>.",
   ONE_OF_INPUT: "Pass exactly one of <names>. Fix: drop the extra field.",
   SPAWN_FAILED: "Failed to start the process: <detail>. Fix: check the command and PATH.",
+  DB_CORRUPT: "context.db failed integrity_check. Fix: run ctx_doctor.",
+  SCHEMA_STALE: "context.db schema is version <found>, expected <want>. Fix: run ctx_doctor.",
+  NO_GIT_DIR: "No git repository at <path>. Fix: run context-mode inside a git repository.",
+  NO_HOME: "Env var <name> is not set. Fix: set <name> to your home directory.",
 });
 
 // impl/01 §4.3: one left-to-right scan for <name> tokens, no regex.

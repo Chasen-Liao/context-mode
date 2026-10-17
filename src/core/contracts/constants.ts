@@ -58,6 +58,14 @@ export const GP9_EXIT_MS = 2000; // impl/14 harness lifecycle budget; TECH-SPEC 
 export const COLD_START_MS = 1000; // GP4
 export const TOOLS_TTL_MS = 3600000; // ADR-0007 (A1)
 export const IN_PROCESS_TIMEOUT_MS = 0; // impl/10 §1.3: pi/opencode hookTimeoutMs "n/a (in-process, no spawn)"
+export const MS_PER_DAY = 86400000; // DEVIATIONS D-M1-3: day-to-ms factor for the retention cutoffs
+
+// Store (impl/02 §0; DEVIATIONS D-M1-3: impl/00 names NODE_MIN and INDEX_WRITE_CHUNK cover the rest)
+export const PROJECT_KEY_HEX_LEN = 16; // impl/00 A5: first 16 hex chars of sha256(git common dir realpath)
+export const SCHEMA_VERSION = 1; // ADR-0002 decision 2: PRAGMA user_version
+export const RETENTION_IDLE_DAYS = 30; // impl/02 A-S1: row-level, age since last access
+export const RETENTION_SIZE_CAP_BYTES = 524288000; // impl/02 A-S2 (Q7b): 500 MB per project
+export const PROJECT_DEAD_IDLE_DAYS = 14; // DECISIONS-r9 V22 (#1024): project-level sweep, dead owner
 
 // Runtime
 export const NODE_MIN = "24.15.0"; // S-NODE
