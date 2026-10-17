@@ -2,11 +2,11 @@
 // realpath'd path COMPONENTS, never a string prefix check (A61 — "/root-evil" vs "/root").
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, symlinkSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { isInside } from "../../../src/core/project/contain.ts";
+import { isInside, commonRoot } from "../../../src/core/project/contain.ts";
 
 test("isInside: a child directory is inside its parent", () => {
   const root = mkdtempSync(join(tmpdir(), "cm-in-"));
@@ -75,6 +75,37 @@ test("isInside: a symlink inside root pointing to another location inside root i
     const link = join(root, "link");
     symlinkSync(join(root, "real"), link);
     assert.equal(isInside(root, link), true);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+// GP7/symlink-dot-prefix-containment (#1294): "..notes" is a name, not a climb. Components decide.
+test("[M2] GP7/symlink-dot-prefix-containment: a symlink to ./..notes is inside, a symlink to ../x is not", () => {
+  const base = mkdtempSync(join(tmpdir(), "cm-in-"));
+  try {
+    const root = join(base, "root");
+    mkdirSync(join(root, "..notes"), { recursive: true });
+    mkdirSync(join(base, "x"), { recursive: true });
+    symlinkSync(join(root, "..notes"), join(root, "notes-link"));
+    symlinkSync(join(base, "x"), join(root, "x-link"));
+    assert.equal(isInside(root, join(root, "notes-link")), true);
+    assert.equal(isInside(root, join(root, "x-link")), false);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("commonRoot: the deepest dir that holds every path, by components", () => {
+  const base = mkdtempSync(join(tmpdir(), "cm-in-"));
+  try {
+    mkdirSync(join(base, "a", "repo"), { recursive: true });
+    mkdirSync(join(base, "a", "repo-evil"), { recursive: true });
+    mkdirSync(join(base, "b", "wt"), { recursive: true });
+    const real = realpathSync(base);
+    assert.equal(commonRoot([join(base, "a"), join(base, "b", "wt")]), real);
+    assert.equal(commonRoot([join(base, "a", "repo"), join(base, "a", "repo-evil")]), join(real, "a"));
+    assert.equal(commonRoot([join(base, "a")]), join(real, "a"));
   } finally {
     rmSync(base, { recursive: true, force: true });
   }

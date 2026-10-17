@@ -6,10 +6,11 @@ import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type { AgentId } from "../contracts/agents.ts";
-import { DB_FILE_NAME, GIT_DIR_NAME, PROJECTS_DIR_NAME, PROJECT_KEY_HEX_LEN, WORKSPACE_FOLDER_FLAG } from "../contracts/constants.ts";
+import { DB_FILE_NAME, GIT_DIR_NAME, GIT_WORKTREE_LINE_PREFIX, PROJECTS_DIR_NAME, PROJECT_KEY_HEX_LEN, WORKSPACE_FOLDER_FLAG } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import type { ProjectContext, ProjectSourceKind } from "../contracts/types.ts";
 import { resolveConfigDir } from "./config-dir.ts";
+import { commonRoot } from "./contain.ts";
 
 export interface ProjectSourceInput {
   env: NodeJS.ProcessEnv;
@@ -62,24 +63,29 @@ function dirOf(kind: ProjectSourceKind, src: ProjectSourceInput): string | undef
 
 // impl/02 §2 steps 1-3 and 5 in one git call (D-M1-5: spawnSync, shell:false, never at boot).
 function gitDirs(dir: string): { commonDir: string; worktree: string } {
-  const r = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"], {
-    cwd: dir,
-    shell: false,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  if (r.error !== undefined || r.status !== 0) throw new CtxError("NO_GIT_DIR", { path: dir });
-  const lines = r.stdout.split("\n").filter((l) => l !== "");
+  const lines = git(dir, ["rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"]);
   if (lines.length !== 2) throw new CtxError("NO_GIT_DIR", { path: dir });
   // .native: one canonical letter case, so one repo always hashes to one projectKey (review-M1 #1).
   return { commonDir: realpathSync.native(lines[0]), worktree: realpathSync.native(lines[1]) };
 }
 
+function git(dir: string, args: string[]): string[] {
+  const r = spawnSync("git", args, { cwd: dir, shell: false, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  if (r.error !== undefined || r.status !== 0) throw new CtxError("NO_GIT_DIR", { path: dir });
+  return r.stdout.split("\n").filter((l) => l !== "");
+}
+
 // D-M1-T3-3: the dir that holds the repo, so every sibling worktree is inside (#954).
 // <repo>/.git -> parent of <repo>; a bare <repo>.git -> its own parent.
-function containmentRootOf(commonDir: string): string {
+// D-M2-R7-1: a registered worktree outside that dir (git worktree add /elsewhere) is inside too:
+// the root is the deepest dir holding the repo's parent and every registered worktree, so
+// ctx_execute_file accepts what ctx_batch_execute runs in, from every session of the project.
+function containmentRootOf(dir: string, commonDir: string): string {
   const repoDir = basename(commonDir) === GIT_DIR_NAME ? dirname(commonDir) : commonDir;
-  return dirname(repoDir);
+  const worktrees = git(dir, ["worktree", "list", "--porcelain"])
+    .filter((l) => l.startsWith(GIT_WORKTREE_LINE_PREFIX))
+    .map((l) => l.slice(GIT_WORKTREE_LINE_PREFIX.length));
+  return commonRoot([dirname(repoDir), ...worktrees]);
 }
 
 /** impl/00 §4: resolve the project of this call from the agent's one named project source. */
@@ -96,7 +102,7 @@ export function resolveProject(agent: AgentId, src: ProjectSourceInput): Project
     projectDir,
     dbPath: join(projectDir, DB_FILE_NAME),
     worktree,
-    containmentRoot: containmentRootOf(commonDir),
+    containmentRoot: containmentRootOf(dir, commonDir),
     agent,
     source,
   };
