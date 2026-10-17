@@ -74,7 +74,17 @@ test("[M2] GP2/lint-exit-zero", () => {
 
 test("[M2] GP2/initialize-and-discover-identical-bytes", async () => {
   const { client, init } = await handshake();
-  const discover = await client.request("server/discover", {});
   await client.close();
+  // A 2026-07-28 server/discover opens its own connection with the _meta envelope; after a legacy
+  // initialize the SDK treats the connection as 2025-era (DEVIATIONS D-M2-T7-1, as lint.mjs does).
+  const modern = spawnBundle(SERVER_BUNDLE);
+  const discover = await modern.request("server/discover", {
+    _meta: {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {},
+      "io.modelcontextprotocol/clientInfo": { name: "context-mode-e2e", version: "0.0.0" },
+    },
+  });
+  await modern.close();
   assert.deepStrictEqual(normalize({ bytes: init.instructions }), normalize({ bytes: discover.instructions }), "initialize and server/discover must return identical instruction bytes (GS9)");
 });

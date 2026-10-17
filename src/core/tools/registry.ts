@@ -7,6 +7,10 @@ import { z } from "zod/v4";
 import { EXEC_TIMEOUT_MS, TOOL_ORDER } from "../contracts/constants.ts";
 import type { ToolContext, ToolReply } from "../contracts/types.js";
 import { TOOL_DESCRIPTIONS } from "../../prompt/_generated.js";
+import { ctxBatch } from "./batch.ts";
+import { ctxExecute } from "./execute.ts";
+import { ctxIndex } from "./index.ts";
+import { ctxSearch } from "./search.ts";
 
 export type ToolName = (typeof TOOL_ORDER)[number];
 
@@ -89,14 +93,27 @@ function notBuilt(name: ToolName): () => Promise<ToolReply> {
   return async () => ({ text, isError: true, sandboxBytes: 0 });
 }
 
+// impl/11 §1 step 1: built tool modules replace their stub; schema and handler come from the module.
+interface BuiltTool {
+  schema: z.ZodType;
+  handler(input: never, ctx: ToolContext): Promise<ToolReply>;
+}
+const BUILT: Readonly<Partial<Record<ToolName, BuiltTool>>> = Object.freeze({
+  ctx_execute: ctxExecute,
+  ctx_batch: ctxBatch,
+  ctx_index: ctxIndex,
+  ctx_search: ctxSearch,
+});
+
 function define(name: ToolName): RegisteredTool<unknown> {
+  const built = BUILT[name];
   return {
     name,
     description: TOOL_DESCRIPTIONS[name],
-    schema: SCHEMAS[name] as z.ZodType<unknown>,
+    schema: (built === undefined ? SCHEMAS[name] : built.schema) as z.ZodType<unknown>,
     readOnly: READ_ONLY.has(name),
     alwaysLoad: ALWAYS_LOAD.has(name),
-    handler: notBuilt(name),
+    handler: built === undefined ? notBuilt(name) : (built.handler as (i: unknown, c: ToolContext) => Promise<ToolReply>),
   };
 }
 

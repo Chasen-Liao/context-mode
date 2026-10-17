@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "[<ts>] cmd #1 No hits in scope \"project\" across 0 source(s).\n[<ts>] cmd #2 No hits in scope \"project\" across 0 source(s)."
+    }
+  ],
+  "isError": false
+}
