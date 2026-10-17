@@ -23,7 +23,8 @@ test("ctxIndex rejects when zero of path/content/url are given (ONE_OF_INPUT)", 
   try {
     const out = await ctxIndex.handler({}, ctxFor(root));
     assert.equal(out.isError, true);
-    assert.ok(/Give exactly one of path, content, url/.test(out.text));
+    // Canonical 00 §3.3 text (DECISIONS-r9 M23, impl/05 A5), DEVIATIONS D-M2-T8-1.
+    assert.equal(out.text, "Pass exactly one of path, content, url. Fix: drop the extra field.");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
