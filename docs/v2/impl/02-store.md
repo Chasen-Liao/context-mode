@@ -387,6 +387,10 @@ E2E: GP6 (`ctx_resume(seq: N)` resumes from a given pointer). `covers`: `src/cor
 - A-S6 (intern M0 Q3): "CJK stays open" means issue #1295 stays open. `chunks` uses `unicode61 remove_diacritics 2` and nothing else; there is no CJK code path. GP5 asserts Cyrillic and accented Latin only, no CJK case.
 - A-S7 (intern M0 Q9): the two thresholds are independent. `cleanupProject` (rows, `RETENTION_IDLE_DAYS`) runs on the open project; `sweepDeadProjects` (whole project, dead owner and last access older than `PROJECT_DEAD_IDLE_DAYS`) runs on the others. A dead project goes whole, young rows too. Caller and "last access": DEVIATIONS D-M1-11.
 - A-S8: names, signatures, error keys and DDL columns in this file are reconciled with `00-architecture.md` in DEVIATIONS D-M1-1 to D-M1-9; where they differ, those rows win.
+- A-S9 (intern M1 Q1-Q3): every path the store canonicalizes uses `realpathSync.native` (D-M1-R1). `withWrite` runs `COMMIT` inside its `try`; any catch (also in `applyMigrations`) runs `ROLLBACK` only while `db.isTransaction` is true, then re-throws the first error (D-M1-T5-1, review-M1 #2-#3).
+- A-S10 (intern M1 Q4-Q5; Q5 tokenizer: A-S6): `sources.id` is `INTEGER PRIMARY KEY AUTOINCREMENT` (D-M1-4), never a caller string. From M2, `ftsInsert` takes the row without `id` and returns the new id (D-M2-1).
+- A-S11 (intern M1 Q6): the store does not pick an event `kind`. Own `ctx_*` rows: the handler names kind/key/path (D-M2-2). Host-tool rows: impl/09 §4.6 step 2 (clean Read/Grep/WebFetch write no row).
+- A-S12 (intern M1 Q7-Q10): every `*_ts`, `created_at`/`accessed_at` INTEGER is UTC epoch ms from `Date.now()`; `sources.created_at` TEXT is its ISO mirror (A-S4). Read-only open of a missing file: one read-write open creates and migrates it first (D-M1-T5-1). Row retention vs dead-project sweep: A-S7, D-M1-11. Orphan `-wal`/`-shm` with no `context.db`: the store throws `DB_GONE` and deletes nothing; only `ctx_doctor` D8 renames the three files aside (impl/07).
 
 ## Changes
 
