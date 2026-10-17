@@ -5,19 +5,19 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { McpServer, type ServerContext, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
-import { AGENT_IDS, type AgentId } from "../core/contracts/agents.js";
+import { AGENT_IDS, type AgentId } from "../core/contracts/agents.ts";
 import { INTERNAL_ERROR_LINE, NODE_MIN, SERVER_KEY, TOOLS_TTL_MS } from "../core/contracts/constants.ts";
-import { CtxError } from "../core/contracts/errors.js";
-import type { DbHandle, ProjectContext, ToolContext, ToolReply } from "../core/contracts/types.js";
-import { appendEvent } from "../core/journal/append.js";
-import { installExitGuard } from "../core/lifecycle/exit.js";
-import { resolveConfigDir } from "../core/project/config-dir.js";
-import { resolveProject } from "../core/project/resolve.js";
-import { cleanupProject, sweepDeadProjects } from "../core/store/cleanup.js";
-import { closeDb, openDb } from "../core/store/db.js";
-import { removeOwnerPid, writeOwnerPid } from "../core/store/owners.js";
-import { TOOLS, type RegisteredTool } from "../core/tools/registry.js";
-import { INSTRUCTIONS } from "../prompt/_generated.js";
+import { CtxError } from "../core/contracts/errors.ts";
+import type { DbHandle, ProjectContext, ToolContext, ToolReply } from "../core/contracts/types.ts";
+import { appendEvent } from "../core/journal/append.ts";
+import { installExitGuard } from "../core/lifecycle/exit.ts";
+import { resolveConfigDir } from "../core/project/config-dir.ts";
+import { resolveProject } from "../core/project/resolve.ts";
+import { cleanupProject, sweepDeadProjects } from "../core/store/cleanup.ts";
+import { closeDb, openDb } from "../core/store/db.ts";
+import { removeOwnerPid, writeOwnerPid } from "../core/store/owners.ts";
+import { TOOLS, type RegisteredTool } from "../core/tools/registry.ts";
+import { INSTRUCTIONS } from "../prompt/_generated.ts";
 
 export { INSTRUCTIONS };
 
@@ -242,5 +242,9 @@ export async function startServer(argv: string[], env: NodeJS.ProcessEnv): Promi
   await new Promise<void>((resolve) => process.once("exit", () => resolve()));
 }
 
-const [, , ...cliArgs] = process.argv; // node <server.mjs> <args...>
-await startServer(cliArgs, process.env);
+// The bundle (server.mjs) is the process entry, so import.meta.main is true there; a unit test that
+// imports this module for INSTRUCTIONS does not start the server (DEVIATIONS D-M2-R1-1).
+if (import.meta.main) {
+  const [, , ...cliArgs] = process.argv; // node <server.mjs> <args...>
+  await startServer(cliArgs, process.env);
+}

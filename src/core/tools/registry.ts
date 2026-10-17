@@ -5,8 +5,8 @@
 // stub for the real handler import (impl/11 §1 step 1) and moves the schema next to it.
 import { z } from "zod/v4";
 import { EXEC_TIMEOUT_MS, TOOL_ORDER } from "../contracts/constants.ts";
-import type { ToolContext, ToolReply } from "../contracts/types.js";
-import { TOOL_DESCRIPTIONS } from "../../prompt/_generated.js";
+import type { ToolContext, ToolReply } from "../contracts/types.ts";
+import { TOOL_DESCRIPTIONS } from "../../prompt/_generated.ts";
 import { ctxBatch } from "./batch.ts";
 import { ctxExecute } from "./execute.ts";
 import { ctxIndex } from "./index.ts";
