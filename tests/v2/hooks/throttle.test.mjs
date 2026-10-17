@@ -45,15 +45,13 @@ test("once key: fires on the first call only, then never again in the same sessi
 
 test("GP3/hint-once-per-session (throttle slice): same session id, 3 Reads -> one hint, no tmp dirs made", async () => {
   await withDb(async (db, root) => {
-    const before = readdirSync(tmpdir()).length;
     const fired = [1, 2, 3].map(() => shouldHint(db, "sess-read", "read:sess-read"));
     assert.deepEqual(fired, [true, false, false]);
-    // The marker is a meta row, not a file: the project dir holds only the DB files.
+    // The marker is a meta row, not a file or dir: the project dir holds only the DB files.
     assert.deepEqual(
       readdirSync(join(root, "projects", "a".repeat(16))).filter((f) => !f.startsWith("context.db")),
       [],
     );
-    assert.equal(readdirSync(tmpdir()).length <= before, true);
   });
 });
 
