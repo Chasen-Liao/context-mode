@@ -3,7 +3,9 @@
 // pi-reload-no-leak (M5). D-M1-12: idle windows capped at 60s (plus the 10s V20 CPU check).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync, statSync, readlinkSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,6 +33,44 @@ function spawnServer(t, extraEnv, opts = {}) {
 
 function waitExit(child) {
   return new Promise((resolve) => child.once("exit", (code, signal) => resolve({ code, signal })));
+}
+
+// Test-only (not src/): list live child PIDs whose ppid is the given pid, via `ps` on POSIX
+// or `wmic`/`tasklist` would be needed on win32 (skipped there, see each case's skip guard).
+// This is the TEST checking the SERVER's behavior from outside; the server itself must never
+// spawn `ps` (that is the property under test).
+function childPidsOf(ppid) {
+  if (process.platform === "win32") return [];
+  const out = execFileSync("ps", ["-A", "-o", "pid=,ppid="], { encoding: "utf8" });
+  return out
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.split(/\s+/).map(Number))
+    .filter(([, p]) => p === ppid)
+    .map(([pid]) => pid);
+}
+
+// Test-only cwd probe for a running child: /proc/<pid>/cwd on Linux, `lsof -d cwd` on macOS.
+// Returns null when the platform has no cheap probe (win32) — callers skip the real assertion then.
+function childCwd(pid) {
+  if (process.platform === "linux") {
+    try {
+      return readlinkSync(`/proc/${pid}/cwd`);
+    } catch {
+      return null;
+    }
+  }
+  if (process.platform === "darwin") {
+    try {
+      const out = execFileSync("lsof", ["-p", String(pid), "-a", "-d", "cwd", "-Fn"], { encoding: "utf8" });
+      const line = out.split("\n").find((l) => l.startsWith("n"));
+      return line ? line.slice(1) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 test("[M1] GP9/stdin-eof-exit: stdin close exits the process within 2 seconds (#1100)", async (t) => {
@@ -65,27 +105,49 @@ test("[M1] GP9/no-chdir: process.cwd() stays the launch cwd (#974, #924)", async
   checkGolden("GP9", "no-chdir", normalize({ launchCwd }, { proj: REPO_ROOT }));
 });
 
-test("[M1] GP9/no-chdir-server-cwd-stable: started in /proj, process.cwd() stays /proj (#923)", async (t) => {
-  const child = spawnServer(t, {});
+test("[M1] GP9/no-chdir-server-cwd-stable: started in /proj, process.cwd() stays /proj (#923)", { skip: process.platform === "win32" }, async (t) => {
+  const projDir = realpathSync(mkdtempSync(path.join(tmpdir(), "cm-gp9-proj-")));
+  t.after(() => rmSync(projDir, { recursive: true, force: true }));
+  const child = spawnServer(t, {}, { cwd: projDir });
+  // Give the process a moment to run past startup before probing cwd — a real chdir would
+  // show up here; a child that never chdirs keeps reporting the launch directory.
+  await new Promise((r) => setTimeout(r, 300));
+  const cwd = childCwd(child.pid);
   child.stdin.end();
   await waitExit(child);
-  checkGolden("GP9", "no-chdir-server-cwd-stable", normalize({ ok: true }));
+  assert.equal(cwd, projDir, `server cwd changed: expected ${projDir}, probed ${cwd}`);
+  checkGolden("GP9", "no-chdir-server-cwd-stable", normalize({ cwdStable: true }));
 });
 
-test("[M1] GP9/no-periodic-ps-spawn: a server running briefly spawns zero child processes via the liveness guard (#1262)", async (t) => {
+test("[M1] GP9/no-periodic-ps-spawn: a server running briefly spawns zero child processes via the liveness guard (#1262)", { skip: process.platform === "win32" }, async (t) => {
   const child = spawnServer(t, {});
-  await new Promise((r) => setTimeout(r, 2000));
+  const samples = [];
+  for (let i = 0; i < 4; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    samples.push(childPidsOf(child.pid).length);
+  }
   child.stdin.end();
   await waitExit(child);
-  checkGolden("GP9", "no-periodic-ps-spawn", normalize({ ok: true }));
+  assert.deepEqual(samples, [0, 0, 0, 0], `server spawned a child process: samples ${JSON.stringify(samples)}`);
+  checkGolden("GP9", "no-periodic-ps-spawn", normalize({ childSpawns: 0 }));
 });
 
 test("[M1] GP9/no-periodic-stats-db-scan: idle 60s, server opens 0 DBs outside its own session (#1211 #1111)", async (t) => {
+  // A sibling project DB the server under test never owns. If it were polled/opened while
+  // idle, its mtime/atime would move; untouched proves no periodic scan happened.
+  const siblingDir = mkdtempSync(path.join(tmpdir(), "cm-gp9-sibling-"));
+  const siblingDb = path.join(siblingDir, "context.db");
+  writeFileSync(siblingDb, "not a real db, just a probe file");
+  t.after(() => rmSync(siblingDir, { recursive: true, force: true }));
+  const before = statSync(siblingDb).mtimeMs;
+
   const child = spawnServer(t, {});
   await new Promise((r) => setTimeout(r, 60_000));
+  const after = statSync(siblingDb).mtimeMs;
   child.stdin.end();
   await waitExit(child);
-  checkGolden("GP9", "no-periodic-stats-db-scan", normalize({ ok: true }));
+  assert.equal(after, before, "sibling DB mtime moved while the server idled: something opened/touched it");
+  checkGolden("GP9", "no-periodic-stats-db-scan", normalize({ siblingUntouched: true }));
 });
 
 test("[M1] GP9/no-process-spawn-at-boot: zero `where` probe processes spawn before initialize (Windows) (#1167)", { skip: process.platform !== "win32" }, async (t) => {
