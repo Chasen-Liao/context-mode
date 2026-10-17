@@ -1,6 +1,4 @@
 [
-  "tests/adapters/zod3tov4-production.test.ts",
-  "tests/hooks/ensure-deps.test.ts",
   "tests/server-stdin-eof-exit.test.ts",
   "tests/statusline-sqlite.test.ts",
   "tests/statusline.test.ts"

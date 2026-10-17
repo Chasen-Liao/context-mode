@@ -4,10 +4,6 @@
   "command": "npx vitest run --config tests/vitest.config.ts",
   "failures": [
     {
-      "file": "tests/adapters/zod3tov4-production.test.ts",
-      "error": "Error: Cannot find module '/private/tmp/cm-v2-impl-wt/M0-T3-keep-pass/build/adapters/opencode/zod3tov4.js' imported from tests/adapters/zod3tov4-production.test.ts:24:27"
-    },
-    {
       "file": "tests/server-stdin-eof-exit.test.ts",
       "error": "AssertionError: server survived the uncaught exception storm: expected false to be true (tests/server-stdin-eof-exit.test.ts:203)"
     },
@@ -18,11 +14,7 @@
     {
       "file": "tests/statusline.test.ts",
       "error": "AssertionError: resolver landed on pid-90001 → SessionDB had matching events — expected /this chat/, received \"context-mode  ●  saves ~98% of context window\" (tests/statusline.test.ts:276); 3 more assertions in the same file fail the same way (lines 311, 327, 360, 371)"
-    },
-    {
-      "file": "tests/hooks/ensure-deps.test.ts",
-      "error": "Error: Test timed out in 5000ms. (tests/hooks/ensure-deps.test.ts:293, \"graceful degradation: does not throw when probe and rebuild both fail\")"
     }
   ],
-  "summary": "5 failed files, 10 failed tests, 126 passed files, 2416 passed tests, 27 skipped, out of 131 KEEP-PASS files"
+  "summary": "3 failed files (M3-K1 fixed zod3tov4-production and ensure-deps, see docs/v2/impl/DEVIATIONS.md D-M3-K1-1/2); out of 131 KEEP-PASS files"
 }

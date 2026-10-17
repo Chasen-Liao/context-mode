@@ -15,10 +15,25 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import z4 from "zod/v4";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve, dirname } from "node:path";
+import { execFileSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(__dirname, "..", "..");
+const builtPath = resolve(repoRoot, "build/adapters/opencode/zod3tov4.js");
+
+// `build/` is gitignored tsc output (D-M3-K1-1): neither `build/build.mjs`
+// (M0-scoped esbuild bundles, server/hook only) nor `scripts/gate.mjs`
+// run `tsc` before this file. Compile it here so the test is self-contained
+// and still imports the real compiled artifact OpenCode loads, not source.
+if (!existsSync(builtPath)) {
+  execFileSync("npx", ["tsc", "-p", resolve(repoRoot, "tsconfig.json")], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+}
 
 // Import the BUILT zod3tov4 module (same file OpenCode loads)
 const { zod3ShapeToV4 } = await import(
