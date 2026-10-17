@@ -14,7 +14,7 @@ test("resolveConfigDir creates ~/.context-mode under HOME and returns its realpa
   const home = mkdtempSync(join(tmpdir(), "cm-cfg-"));
   try {
     const dir = resolveConfigDir({ HOME: home });
-    assert.equal(dir, realpathSync(join(home, ".context-mode")));
+    assert.equal(dir, realpathSync.native(join(home, ".context-mode")));
     assert.ok(existsSync(dir));
   } finally {
     rmSync(home, { recursive: true, force: true });
@@ -36,7 +36,7 @@ test("resolveConfigDir uses USERPROFILE when HOME is absent (Windows)", () => {
   const home = mkdtempSync(join(tmpdir(), "cm-cfg-win-"));
   try {
     const dir = resolveConfigDir({ USERPROFILE: home });
-    assert.equal(dir, realpathSync(join(home, ".context-mode")));
+    assert.equal(dir, realpathSync.native(join(home, ".context-mode")));
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

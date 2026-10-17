@@ -27,7 +27,7 @@ test("resolveProject reads cwd from env.CLAUDE_PROJECT_DIR for claude-code", () 
   const repo = initRepo();
   try {
     const ctx = resolveProject("claude-code", { env: { CLAUDE_PROJECT_DIR: repo }, argv: [], cwd: tmpdir() });
-    assert.equal(ctx.worktree, realpathSync(repo));
+    assert.equal(ctx.worktree, realpathSync.native(repo));
     assert.match(ctx.projectKey, /^[0-9a-f]{16}$/);
     assert.equal(ctx.agent, "claude-code");
     assert.equal(ctx.source, "env:CLAUDE_PROJECT_DIR");
@@ -40,7 +40,7 @@ test("resolveProject uses cwd directly for codex (arg:--agent+cwd)", () => {
   const repo = initRepo();
   try {
     const ctx = resolveProject("codex", { env: {}, argv: ["--agent", "codex"], cwd: repo });
-    assert.equal(ctx.worktree, realpathSync(repo));
+    assert.equal(ctx.worktree, realpathSync.native(repo));
     assert.equal(ctx.source, "arg:--agent+cwd");
   } finally {
     rmSync(repo, { recursive: true, force: true });
@@ -51,7 +51,7 @@ test("resolveProject reads --workspace-folder from argv", () => {
   const repo = initRepo();
   try {
     const ctx = resolveProject("vscode", { env: {}, argv: ["--workspace-folder", repo], cwd: tmpdir() });
-    assert.equal(ctx.worktree, realpathSync(repo));
+    assert.equal(ctx.worktree, realpathSync.native(repo));
     assert.equal(ctx.source, "arg:workspaceFolder");
   } finally {
     rmSync(repo, { recursive: true, force: true });
@@ -62,7 +62,7 @@ test("resolveProject reads piCwd for pi", () => {
   const repo = initRepo();
   try {
     const ctx = resolveProject("pi", { env: {}, argv: [], cwd: tmpdir(), piCwd: repo });
-    assert.equal(ctx.worktree, realpathSync(repo));
+    assert.equal(ctx.worktree, realpathSync.native(repo));
     assert.equal(ctx.source, "pi:ctx.cwd");
   } finally {
     rmSync(repo, { recursive: true, force: true });
@@ -117,7 +117,7 @@ test("containmentRoot is the parent of the git common directory", () => {
   const repo = initRepo();
   try {
     const ctx = resolveProject("codex", { env: {}, argv: ["--agent", "codex"], cwd: repo });
-    assert.equal(ctx.containmentRoot, realpathSync(join(repo, "..")));
+    assert.equal(ctx.containmentRoot, realpathSync.native(join(repo, "..")));
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
@@ -147,7 +147,7 @@ test("[M2] GP7/worktree-containment-consistent: a registered external worktree i
       assert.equal(isInside(ctx.containmentRoot, fromMain.worktree), true);
     }
     // The root is the deepest dir that holds both, not the filesystem root.
-    assert.equal(fromWt.containmentRoot, realpathSync(base));
+    assert.equal(fromWt.containmentRoot, realpathSync.native(base));
   } finally {
     rmSync(base, { recursive: true, force: true });
   }
@@ -160,7 +160,7 @@ test("[M2] GP7/workspace-folder-remote-wsl: a file in the --workspace-folder wor
   try {
     writeFileSync(join(repo, "a.ts"), "x");
     const ctx = resolveProject("vscode", { env: { VSCODE_CWD: tmpdir() }, argv: ["--agent", "vscode", "--workspace-folder", repo], cwd: tmpdir() });
-    assert.equal(ctx.worktree, realpathSync(repo));
+    assert.equal(ctx.worktree, realpathSync.native(repo));
     assert.equal(isInside(ctx.containmentRoot, join(repo, "a.ts")), true);
   } finally {
     rmSync(repo, { recursive: true, force: true });

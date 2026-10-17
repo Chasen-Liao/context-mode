@@ -102,7 +102,7 @@ test("commonRoot: the deepest dir that holds every path, by components", () => {
     mkdirSync(join(base, "a", "repo"), { recursive: true });
     mkdirSync(join(base, "a", "repo-evil"), { recursive: true });
     mkdirSync(join(base, "b", "wt"), { recursive: true });
-    const real = realpathSync(base);
+    const real = realpathSync.native(base);
     assert.equal(commonRoot([join(base, "a"), join(base, "b", "wt")]), real);
     assert.equal(commonRoot([join(base, "a", "repo"), join(base, "a", "repo-evil")]), join(real, "a"));
     assert.equal(commonRoot([join(base, "a")]), join(real, "a"));
