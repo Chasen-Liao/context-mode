@@ -20,7 +20,7 @@ parser recurses into those forms instead.
 
 **Constants:** none (no byte or time limit; rule is structural, not numeric).
 
-**Code:** `src/core/enforcement/` (per `08-enforcement.md`, module not yet present at this commit — see
+**Code:** `src/core/policy/` (per `00-architecture.md` §1, module not yet present at this commit — see
 `docs/v2/impl/DEVIATIONS.md`).
 
 ## 2. Read size rule
@@ -40,7 +40,7 @@ the rule denies rather than slices.
 
 **Constants:** `OUTPUT_CAP = 16384` B; `READ_MAX_LINES = 200` (example text only).
 
-**Code:** `src/core/enforcement/` (PreToolUse path), `08-enforcement.md` §2.6/§5.3.
+**Code:** `src/core/policy/` (PreToolUse path, not yet present), `08-enforcement.md` §2.6/§5.3.
 
 ## 3. Compaction state selection (budgeted greedy)
 
@@ -62,7 +62,7 @@ Agents (recency decay + importance), JetBrains "The Complexity Trap" (arXiv 2508
 **Constants:** `STATE_BUDGET = 2048` B; `POINTER_MIN = 640` B; `MAX_CANDIDATES = 85` per section;
 `WEIGHT = {toolerr:900, prompt:500, edit:400, index:200}`; `DECAY_HALF_LIFE_TURNS = 4`.
 
-**Code:** `src/core/memory/` compaction module (ADR-0009 §1-§7; not yet present at this commit — see
+**Code:** `src/core/compaction/` (ADR-0009 §1-§7; not yet present at this commit — see
 `DEVIATIONS.md`).
 
 ## 4. BM25 per scope + RRF across scopes
@@ -83,7 +83,7 @@ against a 30 ms target (`SEARCH_P95_MS`).
 
 **Constants:** `RRF_K = 60`; `SEARCH_PAGE_SIZE = 20` per source before merge; `SEARCH_P95_MS = 30` (target).
 
-**Code:** `src/core/tools/search.ts` (per `05-tools-index.md`; not yet present at this commit).
+**Code:** `src/core/tools/search.ts` (per `05-tools-index.md`).
 
 ## 5. Decision tag (update-beats-duplicate)
 
@@ -100,7 +100,7 @@ shares that pass's "no LLM, no regex" guarantee.
 
 **Constants:** none beyond the shared selection constants in §3.
 
-**Code:** `src/core/memory/` (ADR-0009 §8).
+**Code:** `decision` event kind in `src/core/journal/` and `ctx_search(source:"decision")` (`00-architecture.md`; ADR-0009 §8).
 
 ## 6. Timeline cursor
 
@@ -129,14 +129,14 @@ hook has already returned a result.
 **Why:** A hook has a hard wall-clock budget (`HOOK_COMBINED_P95_MS = 60` ms). Writing a very large output to
 disk inside that budget is not safe, so past a size line the write moves off the hook's critical path.
 
-**Source:** `docs/v2/impl/05-tools-index.md` §/135 (DECISIONS-r9 F1); `docs/v2/impl/00-architecture.md` §3.2.
+**Source:** `docs/v2/impl/05-tools-index.md` §5 `selectChunksInMemory` (DECISIONS-r9 F1); `docs/v2/impl/00-architecture.md` §3.2.
 
-**Measured:** threshold line `out/r9/perf-f1.md` (DECISIONS-r9 F1).
+**Measured:** threshold line `docs/v2/review/out/r9/perf-f1.md` (DECISIONS-r9 F1).
 
 **Constants:** `SYNC_INDEX_MAX_BYTES = 65536` B; `MAX_CHUNK_BYTES = 4096` B; `INDEX_WRITE_CHUNK = 1048576` B;
 `SNIPPET_MAX_BYTES = 800` B (⌊`OUTPUT_CAP`/`SEARCH_PAGE_SIZE`⌋ = 819, minus room for the label).
 
-**Code:** `src/core/store/` (`02-store.md`), `src/core/hooks/` post-tool path (`09-hooks.md` §4.6 step 5).
+**Code:** `src/core/store/` (`02-store.md`), `src/core/hooks/` post-tool path (not yet present) (`09-hooks.md` §4.6 step 5).
 
 ## 8. WAL mode + busy timeout
 

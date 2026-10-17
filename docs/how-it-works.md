@@ -26,8 +26,8 @@ receive back only the part that matches its stated intent.
 
 ## One database per project
 
-Each project gets one SQLite file, `context.db`, at the project root (`00-architecture.md`, "dbPath:
-`<projectDir>/context.db`"). It runs in WAL mode with a 5-second busy timeout, so the hook process and the
+Each project gets one SQLite file, `context.db`, under `~/.context-mode/projects/<projectKey>/`, not in the
+repo (`00-architecture.md`, `projectDir` and `dbPath`). It runs in WAL mode with a 5-second busy timeout, so the hook process and the
 MCP server process can both read and write it without stepping on each other (`02-store.md`; see
 `docs/algorithms.md` §8). The database holds two kinds of row:
 
@@ -51,7 +51,7 @@ MCP server process can both read and write it without stepping on each other (`0
 
 ## Search: scope, ranking, and time
 
-`ctx_search` takes one or more query strings and a scope (`"session"` or `"project"`):
+`ctx_search` takes one or more query strings and a scope (`"session"`, `"worktree"` or `"project"`; default `"worktree"`, `05-tools-index.md` §6):
 
 - Inside one scope, rows are ranked by BM25 (SQLite FTS5's built-in text ranking).
 - Across the whole project, that BM25 ranking is combined with a separate recency ranking by Reciprocal

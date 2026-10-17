@@ -1,5 +1,7 @@
 # JetBrains Copilot Setup
 
+> **v1 document.** It describes context-mode v1 (npm). It is not valid for v2. For v2, see [docs/install/README.md](install/README.md). TECH-SPEC §2 lists the 10 v2 agents.
+
 Setup guide for using context-mode with JetBrains IDEs (IntelliJ IDEA, WebStorm, PyCharm, etc.) via the GitHub Copilot plugin.
 
 ## Prerequisites

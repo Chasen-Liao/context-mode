@@ -2,7 +2,7 @@
 
 Keeps large tool output out of your coding agent's context window.
 
-[![clones](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmksglu%2Fcontext-mode%2Fmain%2Fmetrics%2Ftraffic.json&query=%24.clones.count&label=clones&color=blue)](metrics/traffic.json)
+[![clones](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmksglu%2Fcontext-mode%2Fmain%2Fmetrics%2Ftraffic.json&query=%24.clones.count&label=clones&color=blue)](https://github.com/mksglu/context-mode/graphs/traffic)
 [![GitHub stars](https://img.shields.io/github/stars/mksglu/context-mode?style=flat&color=yellow)](https://github.com/mksglu/context-mode/stargazers)
 [![License: ELv2](https://img.shields.io/badge/License-ELv2-blue.svg)](LICENSE)
 
@@ -69,7 +69,7 @@ Do not uninstall the npm package first. The v1 hooks for Copilot CLI, VS Code, C
 | Auto-injected rules and persona | Removed | Put standing rules in `CLAUDE.md` or your agent's rules file |
 | Decisions found in prose | Answers to a choice only | `ctx_search(source:"decision")` |
 | Search by category | Search by text or source | `ctx_search(queries:["…"], scope:"project")` |
-| Cross-project timeline | Current project only | `scope:"global"` with `sort:"relevance"` |
+| Cross-project timeline | Current project only | `ctx_search(scope:"project")`; there is no cross-project scope |
 | `CONTEXT_MODE_REQUIRE_SECURITY` | Kept | Same name; `=1` denies every call when your deny rules cannot be read |
 | `CONTEXT_MODE_BASH_NUDGE_MIN_COMMAND_BYTES` | Ignored | v2 shows the hint once per session |
 
@@ -78,14 +78,14 @@ v1 memory rows are not moved into v2. To go back to v1, run the command for your
 | Agent | Rollback |
 |---|---|
 | Claude Code | `npm install -g context-mode`, then `claude plugin uninstall context-mode@context-mode` |
-| Codex | Put the v1 entry (`npx -y context-mode mcp`) back in the `[mcp_servers.context-mode*]` block of `config.toml`, then restart Codex |
+| Codex | `npm install -g context-mode`, put the v1 entry (`npx -y context-mode mcp`) back in `[mcp_servers.context-mode]` of `config.toml`, add the v1 `hooks.json` entries again, then restart Codex |
 | Gemini | `gemini extensions uninstall context-mode`, then add by hand to `~/.gemini/settings.json`: `"mcpServers": {"context-mode": {"command": "npx", "args": ["-y", "context-mode", "mcp"]}}` |
 | Qwen Code | Same as Gemini, in `~/.qwen/settings.json` |
-| Copilot CLI | `npm install -g context-mode`, then make `~/.copilot/hooks/context-mode.json` again with the v1 install step |
-| VS Code | `npm install -g context-mode`, then make `<project>/.github/hooks/context-mode.json` again with the v1 install step |
-| Kiro | `npm install -g context-mode`, then add the `.hooks.*` entries in `~/.kiro/agents/default.json` again with the v1 install step |
+| Copilot CLI | `copilot plugin uninstall context-mode`, `copilot mcp remove context-mode`, `npm install -g context-mode`, then make `~/.copilot/hooks/context-mode.json` again with the v1 install step |
+| VS Code | Delete the v2 `context-mode` entry in `.vscode/mcp.json`, `npm install -g context-mode`, then make `<project>/.github/hooks/context-mode.json` again with the v1 install step |
+| Kiro | Remove the v2 entry in `~/.kiro/settings/mcp.json` and the v2 hook file, `npm install -g context-mode`, then add the `.hooks.*` entries in `~/.kiro/agents/default.json` again with the v1 install step |
 | Pi | Remove the git entry from `packages[]` in `~/.pi/agent/settings.json`, then add `"npm:context-mode"` |
-| OpenCode | Remove the git spec from `.plugin[]`, then add `"context-mode"` |
+| OpenCode | `npm install -g context-mode`, delete `mcp.context-mode` and the v2 plugin file in `plugins/`, then add `"context-mode"` to `.plugin[]` |
 | ZCode | `npm install -g context-mode`, then make the `~/.zcode/cli/hooks.json` entry again with the v1 install step |
 
 Gemini and Qwen have no scripted rollback. If the steps above fail, open an issue with your `/ctx-doctor` report.
@@ -125,7 +125,7 @@ Context Mode has two parts that run inside one agent session:
 - **State after compaction.** After a compaction, the agent gets a state block of at most 2 KB. It is built from the session log.
 
 Read more: [docs/how-it-works.md](docs/how-it-works.md), [docs/algorithms.md](docs/algorithms.md) (search and ranking),
-[docs/performance.md](docs/performance.md) (speed and size limits), [docs/security.md](docs/security.md) (deny rules and the sandbox).
+[docs/tools.md](docs/tools.md) (tool inputs). Size limits and deny rules are in docs/algorithms.md §1, §2 and §7.
 
 ## Privacy
 

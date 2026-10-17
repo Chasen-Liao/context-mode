@@ -25,7 +25,7 @@ runs, search results, docs.
 
 ## Business value
 
-- Smaller context per turn means fewer tokens billed and faster replies.
+- Less tool output in context per turn (see "Measured numbers" for the v1 figures).
 - No text is thrown away: output is indexed, not deleted, so the agent can
   always search back for the exact bytes it needs.
 - One shared store per project, so work survives a context compaction.
@@ -70,7 +70,7 @@ measurements, clearly marked as v1.
 | v1 context savings, structured output path (`ctx_execute_file`) | 315 KB raw → 5.5 KB context, 98% savings, across 14 scenarios | `BENCHMARK.md`, Part 1 |
 | v1 context savings, knowledge retrieval path (`ctx_index`/`ctx_search`) | 60.3 KB raw → 11.0 KB context, 82% savings, across 6 scenarios | `BENCHMARK.md`, Part 2 |
 | v1 code examples preserved | 100% exact, not summarized, in the retrieval path | `BENCHMARK.md`, Overview |
-| v2 issue backlog resolved | 329 of 357 open issues/PRs given one outcome each (dedup) | `PRD-v2.md` §1, `docs/v2/review/ISSUE-OUTCOMES-r4.md` |
+| v2 issue backlog resolved | 329 deduplicated rows (from 357 open issues/PRs), one outcome each | `PRD-v2.md` §1, `docs/v2/review/ISSUE-OUTCOMES-r4.md` |
 | v2 unit tests passing at time of writing (ctx_execute/ctx_batch/ctx_search/ctx_index) | 232 of 234 | `docs/v2/impl/DEVIATIONS.md`, D-M2-merge-2 |
 
 No v2 context-savings or latency number is published yet. Do not quote the
@@ -80,14 +80,12 @@ v1 numbers above as v2 results.
 
 - We do not claim v2 has been benchmarked yet. `docs/v2/benchmarks.md` does
   not exist; the only numbers available are from the v1 benchmark run.
-- We do not claim Copilot CLI's MCP `instructions` field is confirmed to
-  reach the model. `docs/v2/adr/0004-no-skills-mcp-instructions.md` marks
-  this "probable, no source check" (flagged in `DECISIONS-r4.md`, item B9),
-  not verified.
-- We do not claim every one of the 10 agents has an install row written
-  yet; `DECISIONS-r4.md` item B42 lists 4 agents (Copilot CLI, VS Code
-  Copilot, Kiro, ZCode) with no install command in `README.md` at the time
-  of writing.
+- We do not claim v2 has confirmed that Copilot CLI's MCP `instructions` field
+  reaches the model. ADR-0004 records a live probe on Copilot CLI 1.0.60 with
+  v1; no v2 build has run that check yet.
+- We do not claim any install command works yet. Every row of the
+  `README.md` install table says "see guide", because no agent has passed a
+  live install test (`docs/install/README.md`).
 - We do not claim zero data loss as a design choice: the design bans
   truncation and cutting a reply mid-item as a *reduction mechanism*
   (`docs/v2/impl/DEVIATIONS.md`, D-M2-T5-1, D-M2-T10-6); we do not claim

@@ -1,5 +1,7 @@
 # Platform Support Matrix
 
+> **v1 document.** It describes context-mode v1 (npm). It is not valid for v2. For v2, see [docs/install/README.md](install/README.md). TECH-SPEC §2 lists the 10 v2 agents.
+
 This document provides a comprehensive comparison of all platforms supported by context-mode, including their hook paradigms, capabilities, configuration, and known limitations.
 
 ## Overview
