@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Input validation error: Invalid arguments for tool ctx_search: queries: Invalid input: expected array, received undefined, Unknown field \"query\". Fix: use \"queries\"."
+    }
+  ],
+  "isError": true
+}
