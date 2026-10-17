@@ -38,12 +38,17 @@ test("constants carry the impl/00 §3.2 values", () => {
     EXIT_SIGTERM_MS: 2000, EXIT_SIGKILL_MS: 5000, GP9_EXIT_MS: 2000, COLD_START_MS: 1000, TOOLS_TTL_MS: 3600000,
     DATA_ROOT: "~/.context-mode", LIVE_MODEL: "claude-sonnet-5", LIVE_EFFORT: "low", LIVE_BUDGET_USD: 0.25,
     LIVE_SKIP_LIMIT: 3, RRF_K: 60, SEARCH_P95_MS: 30, HOOK_TIMEOUT_MS: 5000,
+    // store additions (impl/02 §0, DEVIATIONS D-M1-3)
+    PROJECT_KEY_HEX_LEN: 16, SCHEMA_VERSION: 1, RETENTION_IDLE_DAYS: 30, RETENTION_SIZE_CAP_BYTES: 524288000,
+    PROJECT_DEAD_IDLE_DAYS: 14, MS_PER_DAY: 86400000,
   };
   for (const [k, v] of Object.entries(want)) assert.equal(C[k], v, k);
   assert.deepEqual({ ...C.WEIGHT }, { toolerr: 900, prompt: 500, edit: 400, index: 200 });
   assert.ok(Object.isFrozen(C.WEIGHT));
   assert.equal(C.COMPACT_POINTER_LINE, 'context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").');
   assert.equal("READ_HINT_BYTES" in C, false, "READ_HINT_BYTES is retired (DECISIONS-r8)");
+  // D-M1-3: impl/00 names win; one name per value, no dead constant.
+  for (const k of ["NODE_MIN_VERSION", "INDEX_WRITE_BATCH_BYTES", "OWNER_PID_STALE_CHECK_MS"]) assert.equal(k in C, false, `${k} must not exist (D-M1-3)`);
 });
 
 test("SNIPPET_MAX_BYTES fits OUTPUT_CAP / SEARCH_PAGE_SIZE (DECISIONS-r9 M21)", () => {
@@ -73,6 +78,7 @@ const VARS = {
   FETCH_FAILED: { code: "ENOTFOUND" }, SSRF: { host: "127.0.0.1" }, OUTSIDE_ROOT: { p: "/etc/passwd", root: "/repo" },
   INVALID_ARGS: { field: "offset", action: "drop offset with sort:\"timeline\"" }, ONE_OF_INPUT: { names: "code, file" },
   SPAWN_FAILED: { detail: "ENOENT" },
+  DB_CORRUPT: {}, SCHEMA_STALE: { found: 2, want: 1 }, NO_GIT_DIR: { path: "/repo" }, NO_HOME: { name: "HOME" },
 };
 const EXPECTED = {
   NODE_TOO_OLD: "Node 22.1.0 is below 24.15.0. Fix: install Node 24.15.0 or later.",
@@ -88,15 +94,37 @@ const EXPECTED = {
   INVALID_ARGS: 'Invalid argument offset. Fix: drop offset with sort:"timeline".',
   ONE_OF_INPUT: "Pass exactly one of code, file. Fix: drop the extra field.",
   SPAWN_FAILED: "Failed to start the process: ENOENT. Fix: check the command and PATH.",
+  // store additions (DEVIATIONS D-M1-2)
+  DB_CORRUPT: "context.db failed integrity_check. Fix: run ctx_doctor.",
+  SCHEMA_STALE: "context.db schema is version 2, expected 1. Fix: run ctx_doctor.",
+  NO_GIT_DIR: "No git repository at /repo. Fix: run context-mode inside a git repository.",
+  NO_HOME: "Env var HOME is not set. Fix: set HOME to your home directory.",
 };
 
-test("ERROR_TEXT has exactly the 13 codes, each one line with '. Fix: '", () => {
+test("ERROR_TEXT has exactly the 17 codes, each one line with '. Fix: ' (A-C6)", () => {
+  assert.equal(Object.keys(ERROR_TEXT).length, 17);
   assert.deepEqual(Object.keys(ERROR_TEXT).sort(), Object.keys(EXPECTED).sort());
   assert.ok(Object.isFrozen(ERROR_TEXT));
   for (const [code, text] of Object.entries(ERROR_TEXT)) {
     assert.ok(text.includes(". Fix: "), code);
     assert.equal(text.includes("\n"), false, code);
   }
+  for (const k of ["ERR_NODE_VERSION", "ERR_DB_VANISHED", "ERR_PATH_ESCAPE", "ERR_CLEANUP_LOCKED", "ERR_DB_CORRUPT", "ERR_SCHEMA_STALE", "ERR_GIT_COMMON_DIR"]) {
+    assert.equal(k in ERROR_TEXT, false, `${k} is mapped or dropped (D-M1-2)`);
+  }
+});
+
+test("every formatted error is one line with '. Fix: ' and no '<' left (A-C6)", () => {
+  for (const code of Object.keys(ERROR_TEXT)) {
+    const line = new CtxError(code, VARS[code]).toLine();
+    assert.ok(line.includes(". Fix: "), code);
+    assert.equal(line.includes("\n"), false, code);
+    assert.equal(line.includes("<"), false, code);
+  }
+});
+
+test("SCHEMA_STALE formats with SCHEMA_VERSION as <want>", () => {
+  assert.equal(formatError("SCHEMA_STALE", { found: 3, want: C.SCHEMA_VERSION }), "context.db schema is version 3, expected 1. Fix: run ctx_doctor.");
 });
 
 test("every error code formats with its vars", () => {

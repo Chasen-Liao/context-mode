@@ -1,5 +1,6 @@
 // impl/01 §2, impl/00 §3.1 verbatim. Pure types: no runtime code.
 import type { AgentId } from "./agents.js";
+import type { DatabaseSync } from "node:sqlite";
 export type { AgentId } from "./agents.js";
 
 export type CanonicalEventName = "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse"; // ADR-0001, PRD §10.1
@@ -75,3 +76,21 @@ export interface AdapterRow {
   decode(raw: unknown): CanonicalHookEvent;
   encode(ev: CanonicalHookEvent, d: Decision, extra?: string): HookOutput;
 }
+
+// Store handle (impl/02 §6; signatures per impl/00 §4, DEVIATIONS D-M1-1).
+export interface DbHandle {
+  raw: DatabaseSync;
+  projectKey: string;
+  path: string;
+}
+
+// ContentStore types (impl/05 §0 verbatim).
+export type SourceKind = "path" | "content" | "url";
+export interface SourceRow {
+  id: number; projectKey: string; sessionId: string; worktree: string; agent: AgentId;
+  kind: SourceKind; label: string;   // label = path, "content", or final URL
+  bytes: number; chunkCount: number; createdAt: number;
+}
+export interface Chunk { ord: number; text: string; bytes: number; }
+export type SearchScope = "session" | "worktree" | "project";
+export interface Hit { sourceId: number; label: string; ord: number; snippet: string; score: number; }
