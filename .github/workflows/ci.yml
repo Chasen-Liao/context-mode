@@ -31,8 +31,8 @@ jobs:
         name: dev tooling (npm is dev-only, never shipped)
       - run: node build/build.mjs --out release-out
         name: build (esbuild, no package.json in output)
-      - run: node docs/v2/prompt/lint.mjs drafts docs/v2/prompt/drafts.md
-        name: prompt lint (M0 mode, same rule as scripts/gate.mjs)
+      - run: node docs/v2/prompt/lint.mjs --out release-out
+        name: prompt lint, bundle mode (impl/13 §7; gate layer prompt-lint from M2, D-M0-1)
       - run: node e2e/cases/run.mjs
         name: GP cases
       - run: npx vitest run --config tests/vitest.config.ts
