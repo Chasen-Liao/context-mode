@@ -7,7 +7,8 @@
 //
 // Layers run in this order and stop at the first FAIL (impl/14 §8 step 3):
 //   1 keep-pass      npx vitest run --config tests/vitest.config.ts <files>   (DECISIONS-r9 G5)
-//   1a v2-unit       node --test --test-reporter=tap tests/v2/                (>= M1, D-M1-13)
+//   1a v2-unit       node build/build.mjs --generated-only, then
+//                    node --test --test-reporter=tap tests/v2/                (>= M1, D-M1-13, D-M2-arch-6)
 //   2 gp-cases       node build/build.mjs --out release-out, then
 //                    node e2e/cases/run.mjs --milestone Mn                   (DEVIATIONS D-M0-2, D-M0-F1-1)
 //   3 prompt-lint    node docs/v2/prompt/lint.mjs drafts docs/v2/prompt/drafts.md   (< M2)
@@ -124,9 +125,15 @@ function keepPass(ms) {
 
 // ---- layer 1a: v2 unit tests, TECH-SPEC §6.2a (DEVIATIONS D-M1-13) ----
 // TAP reporter so the counts come from fixed "# tests N" / "# pass N" / "# fail N" lines.
+// src/ imports src/prompt/_generated.ts, so the layer writes it first (DEVIATIONS D-M2-arch-6).
 function v2Unit() {
-  const gone = missing(["tests/v2"]);
+  const gone = missing(["tests/v2", "build/build.mjs"]);
   if (gone) return gone;
+  const g = run(process.execPath, ["build/build.mjs", "--generated-only"]);
+  if (g.status !== 0) {
+    dumpChild("v2-unit", g);
+    return { status: "FAIL", detail: `build/build.mjs --generated-only exit ${g.status}` };
+  }
   const r = run(process.execPath, ["--test", "--test-reporter=tap", "tests/v2/"]);
   const count = (key) => {
     const line = r.stdout.split("\n").find((l) => l.startsWith(`# ${key} `));
