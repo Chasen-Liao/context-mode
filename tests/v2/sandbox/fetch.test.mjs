@@ -108,7 +108,7 @@ test("HTTP_PROXY is not used for an https URL (per-scheme)", async () => {
 });
 
 test("NO_PROXY exact and .suffix matches skip the proxy", async () => {
-  for (const no of ["127.0.0.3", "x.example, 127.0.0.3 ", "*"]) {
+  for (const no of ["127.0.0.3", "x.example, 127.0.0.3 ", "X.EXAMPLE,127.0.0.3"]) {
     await withEnv({ HTTP_PROXY: "http://127.0.0.1:9", no_proxy: no }, () =>
       assert.rejects(safeFetch("http://127.0.0.3/", new AbortController().signal), (err) => {
         assert.equal(err.message, "Blocked private address 127.0.0.3. Fix: use a public URL.");
@@ -153,4 +153,12 @@ test("abort before completion is FETCH_FAILED ABORT_ERR", async () => {
     assert.equal(err.message, "Fetch failed: ABORT_ERR. Fix: check the URL or proxy.");
     return true;
   }));
+});
+
+test("an IP-literal private origin is blocked even when a proxy is set (B57 hop rule)", async () => {
+  await withEnv({ HTTP_PROXY: "http://127.0.0.1:9" }, () =>
+    assert.rejects(safeFetch("http://169.254.169.254/latest/meta-data", new AbortController().signal), (err) => {
+      assert.equal(err.message, "Blocked private address 169.254.169.254. Fix: use a public URL.");
+      return true;
+    }));
 });
