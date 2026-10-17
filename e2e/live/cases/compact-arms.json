@@ -1,0 +1,10 @@
+{
+  "id": "T-CMP",
+  "kind": "agent",
+  "covers": ["src/core/compaction/", "src/core/tools/resume.ts"],
+  "prompt": "Work until the host compacts this session, then call ctx_resume and report only whether the earlier work is still visible.",
+  "tools": ["mcp__context-mode__ctx_resume", "mcp__context-mode__ctx_execute"],
+  "expect": {
+    "firstLineStartsWith": "exit"
+  }
+}
