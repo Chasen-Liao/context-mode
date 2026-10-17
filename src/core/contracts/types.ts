@@ -134,3 +134,28 @@ export interface CtxSearchInput {
   sort?: SearchSort;
   after?: number;           // timeline only, epoch-ms cursor (M18); with "relevance" -> INVALID_ARGS (M23)
 }
+
+// M3 enforcement parser types (impl/08 §1.1, §2.1, §2.2, §2.3 step 2a, §3.1, §6.2).
+// "op": && || ; | ( )   "io": > >> < 2> 2>&1 &> << <<-
+// "unhandled": a span the lexer does not read as a command: [[ ]] (( )) $( ) ` ` and a heredoc body.
+export type TokenKind = "word" | "op" | "io" | "unhandled";
+export interface Token { kind: TokenKind; text: string; start: number; end: number; }
+
+export interface SimpleCommand {
+  argv0: string;               // first word, quote characters stripped
+  args: string[];
+  redirectsToFile: boolean;    // > / >> to a real file, curl -o / wget -O to a real file
+  endsInBoundedSink: boolean;  // last pipeline segment is head -c N, wc, grep -c, or a whitelisted jq
+  raw: string;                 // original substring for this segment
+  insideConstruct?: string;    // DECISIONS-r9 P1: "case", or the function's name
+  wrappedBy?: string[];        // impl/08 §3.1: unwrapped wrappers, outermost first
+}
+
+// DECISIONS-r9 P2: the only six ParseError codes.
+export type ParseErrorConstruct =
+  | "process-substitution" | "unterminated-quote" | "unterminated-heredoc" | "coproc" | "select" | "nesting-too-deep";
+export type ParseResult =
+  | { ok: true; commands: SimpleCommand[] }        // one per pipeline segment, chain-split
+  | { ok: false; construct: ParseErrorConstruct };
+
+export type DenyKind = "curl" | "http" | "build" | "webfetch"; // impl/08 §6.2 denyMessage kind

@@ -110,3 +110,51 @@ export const LIVE_EFFORT = "low";
 export const LIVE_BUDGET_USD = 0.25;
 export const LIVE_SKIP_LIMIT = 3;
 export const README_MAX_LINES = 200; // ADR-0015: CI cap on README.md length
+
+// Enforcement (M3; impl/08 §2.3 step 2a, §2.4, §6.1 steps 3, 5b, 5d, 6, §6.2; DEVIATIONS D-M3-arch-5:
+// the text templates are fixed strings here, READ_DENY_MESSAGE is the one formatter).
+export const MAX_NEST_DEPTH = 32; // impl/08 §2.3 step 2a, ADR-0008 "Parse errors": deeper -> construct "nesting-too-deep"
+
+// impl/08 §6.1 step 6: Read (or one-file shell dump) over OUTPUT_CAP with no offset/limit. Three alternatives,
+// in this order: ranged Read, ctx_execute with file, bounded shell search. READ_MAX_LINES is text only.
+export function READ_DENY_MESSAGE(path: string, size: number): string {
+  return `context-mode: this file is ${size} bytes, more than the ${OUTPUT_CAP} byte limit for one read. ` +
+    `Pick one: read part of it with Read(file_path, offset, limit), for example limit ${READ_MAX_LINES}; ` +
+    `or run code on it with ctx_execute(language, code, file="${path}"), which gives your code the path in CTX_FILE ` +
+    `and returns only stdout, up to ${OUTPUT_CAP} bytes; or search it with a bounded command such as grep -n or tail.`;
+}
+
+// impl/08 §6.2, ADR-0008 "Deny message" (kept verbatim). Lines, joined by "\n":
+//   DENY_PREFIX + DENY_WHAT[kind] + DENY_WHAT_SUFFIX
+//   DENY_RUN_HERE_LINE
+//   DENY_TOOL_LABEL + row.toolNamePrefix + tool name
+//   {"language":"shell","code":<cmd>,"intent":<description or DENY_INTENT_DEFAULT>}
+export const DENY_PREFIX = "context-mode: ";
+export const DENY_WHAT: Readonly<Record<"curl" | "http" | "build" | "webfetch", string>> = Object.freeze({
+  curl: "This curl/wget call", http: "This inline HTTP call", build: "This build command", webfetch: "WebFetch",
+});
+export const DENY_WHAT_SUFFIX = " sends its body into the conversation.";
+export const DENY_RUN_HERE_LINE = "Run it here instead; the full output is indexed and only the part that matches your intent comes back.";
+export const DENY_TOOL_LABEL = "Tool: ";
+export const DENY_INTENT_DEFAULT = "state what you need";
+export const DENY_EXEC_TOOL = "ctx_execute"; // curl/http/build alternative
+// WebFetch alternative: index the URL, then search it. impl/08 B1: v2 names (ctx_index absorbs fetch), not ctx_fetch_and_index.
+export const DENY_WEBFETCH_TOOLS = Object.freeze(["ctx_index", "ctx_search"] as const);
+
+export const USER_DENY_REASON_PREFIX = "Blocked by security policy: matches deny pattern "; // impl/08 §6.1 step 3, v1 text verbatim; + pattern
+export const POLICY_UNREADABLE_LINE = "context-mode: your deny rules could not be read. Fix: run ctx_doctor."; // DECISIONS-r9 E2
+export const PARSE_ERROR_DENY_LINE = "context-mode: could not parse this command; it may be blocked by your own rules. Run it through ctx_execute instead."; // impl/08 §6.1 step 5b, Q4
+
+// impl/08 §6.1 step 5d, DECISIONS-r9 E4: "structurally bounded" (no op/io tokens at all) -> allow, no hint.
+// E3: CONTEXT_MODE_BASH_NUDGE_MIN_COMMAND_BYTES is not ported.
+export const BOUNDED_COMMANDS = Object.freeze(["pwd", "whoami", "uname", "id", "realpath", "ln"] as const);
+export const BOUNDED_GIT_SUBCOMMANDS = Object.freeze(["status"] as const); // `git status`
+export const VERSION_PROBE_FLAGS = Object.freeze(["--version", "-v"] as const); // any argv0 whose only arg is one of these
+export const BOUNDED_UNLESS_VERBOSE = Object.freeze(["cp", "mv", "rm"] as const);
+export const VERBOSE_FLAGS = Object.freeze(["-v", "--verbose"] as const); // any of these in args removes BOUNDED_UNLESS_VERBOSE commands out of the set
+
+// impl/08 §2.4: closed jq filter whitelist, checked by walking the string (no regex). After stripping quotes the
+// filter is exactly `identity`, exactly `length`, a dotted path (fieldSep + [A-Za-z0-9_]+, repeated), or a dotted
+// path followed by `pipeLength` (spaces around "|" allowed). Anything else -> not a bounded sink.
+export const JQ_WHITELIST: Readonly<{ identity: "."; length: "length"; pipeLength: "| length"; fieldSep: "." }> =
+  Object.freeze({ identity: ".", length: "length", pipeLength: "| length", fieldSep: "." });
