@@ -1,7 +1,7 @@
 // impl/02 §3, TECH-SPEC GP7 "path containment by components" (A61, #954, #1294), DEVIATIONS D-M1-T3-4.
 // One shared containment predicate for every tool. Never a string-prefix check.
 import { realpathSync } from "node:fs";
-import { sep } from "node:path";
+import { dirname, sep } from "node:path";
 
 // D-M1-T3-4: a path that cannot be realpath'd (missing, no access) cannot be proven inside: false.
 function real(p: string): string | undefined {
@@ -30,4 +30,25 @@ export function isInside(root: string, p: string): boolean {
     if (rc[i] !== qc[i]) return false;
   }
   return true;
+}
+
+/**
+ * D-M2-R7-1 (#954): the deepest dir that holds every path, by realpath components.
+ * A path that cannot be realpath'd holds no files and is left out.
+ */
+export function commonRoot(paths: string[]): string {
+  const reals = paths.map(real).filter((r): r is string => r !== undefined);
+  if (reals.length === 0) throw new RangeError("commonRoot needs at least one existing path");
+  const first = reals[0];
+  let n = components(first).length;
+  for (const r of reals) {
+    const rc = components(r);
+    const fc = components(first);
+    let i = 0;
+    while (i < n && i < rc.length && rc[i] === fc[i]) i += 1;
+    n = i;
+  }
+  let q = first;
+  while (components(q).length > n && dirname(q) !== q) q = dirname(q);
+  return q;
 }
