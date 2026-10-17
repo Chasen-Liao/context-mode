@@ -371,3 +371,19 @@ test("rankTexts scores an in-memory text set with the store's BM25: match > 0, m
   assert.ok(rankTexts(["a AND b"], 'AND ("')[0] > 0); // operators stay plain words, no throw
   assert.deepEqual(rankTexts(["x y"], '(" *'), [0]);
 });
+
+// ---- M2-R6 (#1163) ----
+test("[M2] GP5/snippet-code-point-safe", () => {
+  // An emoji (a surrogate pair, 4 UTF-8 bytes) at every position across the clip edge.
+  for (let k = 0; k <= 4; k++) {
+    const row = "a".repeat(C.SNIPPET_MAX_BYTES - k) + "😀" + "tail";
+    const out = highlight(row, "a", C.SNIPPET_MAX_BYTES);
+    assert.ok(out.isWellFormed(), "lone surrogate at k=" + k);
+    assert.equal(Buffer.from(out, "utf8").toString("utf8"), out);
+    assert.ok(Buffer.byteLength(out, "utf8") <= C.SNIPPET_MAX_BYTES);
+    assert.ok(out === row.slice(0, out.length), "clip is a prefix of whole code points");
+  }
+  // Escaping next to the edge never leaves half an entity.
+  const amp = highlight("a".repeat(C.SNIPPET_MAX_BYTES - 3) + "&😀", "a", C.SNIPPET_MAX_BYTES);
+  assert.ok(amp.endsWith("a"));
+});

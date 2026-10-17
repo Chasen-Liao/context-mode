@@ -20,13 +20,14 @@ INSERT INTO chunks(source_id, session_id, worktree, agent, ord, body) VALUES (?,
 
 // One statement for every scope (one path). Candidates = every MATCH row inside the scope and
 // source filter; both RRF rank lists run over that full set before LIMIT/OFFSET (ADR-0009 §8.3).
-// Order (M19): current session first, score desc, newest source first, ord asc.
+// Order (M19 + #895, D-M2-R6-1): current session first, then the current worktree, then score desc,
+// newest source first, ord asc. The worktree tier only changes the order for scope "project".
 // Ranking reads only the narrow columns; the chunk body is fetched by rowid for the page rows alone,
 // so a broad query never moves every matched body through the window sorts (review-M1 perf carry).
 const QUERY = `
 WITH m AS (
   SELECT chunks.rowid AS rid, chunks.source_id AS source_id, chunks.session_id AS session_id,
-         chunks.ord AS ord, s.label AS label, s.created_ts AS created_ts, bm25(chunks) AS bm
+         chunks.worktree AS worktree, chunks.ord AS ord, s.label AS label, s.created_ts AS created_ts, bm25(chunks) AS bm
   FROM chunks JOIN sources s ON s.id = chunks.source_id
   WHERE chunks MATCH :match
     AND (:scope <> 'session' OR chunks.session_id = :session_id)
@@ -38,15 +39,15 @@ WITH m AS (
          ROW_NUMBER() OVER (ORDER BY created_ts DESC, source_id DESC, ord ASC) AS rank_b
   FROM m
 ), p AS (
-  SELECT rid, source_id, session_id, label, ord,
+  SELECT rid, source_id, session_id, worktree, label, ord,
          CASE WHEN :scope = 'project' THEN 1.0 / (:k + rank_a) + 1.0 / (:k + rank_b) ELSE -bm END AS score
   FROM r
-  ORDER BY (session_id = :session_id) DESC, score DESC, source_id DESC, ord ASC
+  ORDER BY (session_id = :session_id) DESC, (worktree = :worktree) DESC, score DESC, source_id DESC, ord ASC
   LIMIT :limit OFFSET :offset
 )
 SELECT p.source_id AS source_id, p.label AS label, p.ord AS ord, c.body AS body, p.score AS score
 FROM p JOIN chunks c ON c.rowid = p.rid
-ORDER BY (p.session_id = :session_id) DESC, p.score DESC, p.source_id DESC, p.ord ASC`;
+ORDER BY (p.session_id = :session_id) DESC, (p.worktree = :worktree) DESC, p.score DESC, p.source_id DESC, p.ord ASC`;
 
 // Fixed character-escape map (#341); a format table, not a tunable value.
 const ESCAPES: Readonly<Record<string, string>> = Object.freeze({ "&": "&amp;", "<": "&lt;", ">": "&gt;" });

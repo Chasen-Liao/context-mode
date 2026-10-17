@@ -50,3 +50,29 @@ test("readAutoMemory never throws for an unreadable or missing memory path", () 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---- M2-R6 (#1295) ----
+import { ctxSearch } from "../../../src/core/tools/search.ts";
+import { rankTexts } from "../../../src/core/store/fts.ts";
+
+test("[M2] GP5/non-ascii-auto-memory-match", async () => {
+  const root = mkdtempSync(join(tmpdir(), "cm-mem-ru-"));
+  try {
+    writeFileSync(join(root, "CLAUDE.md"), "Привет: всегда запускай тесты перед коммитом\n");
+    const ctx = {
+      project: { projectKey: "2".repeat(16), projectDir: join(root, "p"), dbPath: join(root, "p", "context.db"), worktree: root, containmentRoot: root, agent: "claude-code", source: "env:CLAUDE_PROJECT_DIR" },
+      sessionId: "s1", turn: 1, signal: new AbortController().signal,
+    };
+    const out = await ctxSearch.handler({ queries: ["привет"], sort: "timeline" }, ctx);
+    assert.equal(out.isError, false);
+    const line = out.text.split("\n").find((l) => l.includes("] CLAUDE.md "));
+    assert.ok(line, out.text);
+    assert.ok(line.endsWith("Привет: всегда запускай тесты перед коммитом"));
+    // The store's one tokenizer matches the Russian word, any case, as a whole word and as a prefix.
+    const [row] = readAutoMemory({ agent: "claude-code", worktree: root, containmentRoot: root });
+    for (const q of ["привет", "ПРИВЕТ", "тест", "коммитом"]) assert.ok(rankTexts([row.text], q)[0] > 0, q);
+    assert.equal(rankTexts([row.text], "пока")[0], 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

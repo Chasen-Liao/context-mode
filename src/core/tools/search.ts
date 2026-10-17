@@ -12,7 +12,12 @@ import { ftsQuery, ftsQueryTimeline } from "../store/fts.ts";
 import { readAutoMemory } from "../index/auto-memory.ts";
 
 // DECISIONS-r9 V23, M23: six keys, strict (unknown key -> the SDK's isError); offset/after are
-// non-negative integers; an empty `queries` array is valid input.
+// non-negative integers; an empty `queries` array is valid input. impl/05 §6 error table, D-M2-arch-3:
+// the SDK's one isError line for an unknown key carries the UNKNOWN_FIELD text, which names "queries".
+function unknownField(issue: z.core.$ZodRawIssue): string | undefined {
+  return issue.code === "unrecognized_keys" ? formatError("UNKNOWN_FIELD", { f: issue.keys[0] }) : undefined;
+}
+
 export const ctxSearchSchema = z.object({
   queries: z.array(z.string()),
   scope: z.enum(["session", "worktree", "project"]).optional(),
@@ -20,7 +25,7 @@ export const ctxSearchSchema = z.object({
   offset: z.number().int().nonnegative().optional(),
   sort: z.enum(["relevance", "timeline"]).optional(),
   after: z.number().int().nonnegative().optional(),
-}).strict();
+}, { error: unknownField }).strict();
 
 // Source count for the zero-hit line (PRD §8): the same scope and source filter ftsQuery applies.
 const COUNT_SOURCES = `
