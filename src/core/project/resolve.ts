@@ -71,7 +71,8 @@ function gitDirs(dir: string): { commonDir: string; worktree: string } {
   if (r.error !== undefined || r.status !== 0) throw new CtxError("NO_GIT_DIR", { path: dir });
   const lines = r.stdout.split("\n").filter((l) => l !== "");
   if (lines.length !== 2) throw new CtxError("NO_GIT_DIR", { path: dir });
-  return { commonDir: realpathSync(lines[0]), worktree: realpathSync(lines[1]) };
+  // .native: one canonical letter case, so one repo always hashes to one projectKey (review-M1 #1).
+  return { commonDir: realpathSync.native(lines[0]), worktree: realpathSync.native(lines[1]) };
 }
 
 // D-M1-T3-3: the dir that holds the repo, so every sibling worktree is inside (#954).

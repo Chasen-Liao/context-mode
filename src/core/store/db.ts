@@ -120,16 +120,17 @@ export async function openDb(project: ProjectContext, opts?: { readOnly?: boolea
 // DB_TIMEOUT_MS; a SQLITE_BUSY from BEGIN propagates unchanged (impl/02 §6.2).
 export function withWrite<T>(db: DbHandle, fn: (db: DbHandle) => T): T {
   db.raw.exec("BEGIN IMMEDIATE");
-  let result: T;
   try {
-    result = fn(db);
+    const result = fn(db);
+    // COMMIT inside the try: a failed COMMIT (busy, disk full) must not leave the connection in an
+    // open transaction that the next withWrite's BEGIN would trip over (review-M1 #3).
+    db.raw.exec("COMMIT");
+    return result;
   } catch (err) {
     // SQLite may already have rolled back (e.g. on SQLITE_FULL); ROLLBACK only an open transaction.
     if (db.raw.isTransaction) db.raw.exec("ROLLBACK");
     throw err;
   }
-  db.raw.exec("COMMIT");
-  return result;
 }
 
 // Every server checkpoints on its own close, no election (impl/02 §6.3). Never throws.

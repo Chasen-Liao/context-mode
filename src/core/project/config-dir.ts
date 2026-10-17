@@ -18,5 +18,5 @@ function homeOf(env: NodeJS.ProcessEnv): string {
 export function resolveConfigDir(env: NodeJS.ProcessEnv): string {
   const dir = join(homeOf(env), DATA_ROOT.slice(1)); // DATA_ROOT is "~" + "/.context-mode"; join drops the lead "/"
   mkdirSync(dir, { recursive: true });
-  return realpathSync(dir);
+  return realpathSync.native(dir); // same canonical form as resolve.ts and contain.ts (review-M1 #1)
 }

@@ -6,7 +6,9 @@ import { sep } from "node:path";
 // D-M1-T3-4: a path that cannot be realpath'd (missing, no access) cannot be proven inside: false.
 function real(p: string): string | undefined {
   try {
-    return realpathSync(p);
+    // .native: the OS realpath also folds letter case on case-insensitive volumes (macOS, Windows),
+    // so "/Repo" and "/repo" compare as the same components (review-M1 #1).
+    return realpathSync.native(p);
   } catch {
     return undefined;
   }

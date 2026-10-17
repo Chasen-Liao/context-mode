@@ -87,7 +87,9 @@ export function applyMigrations(db: DatabaseSync, fromVersion: number): void {
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec("COMMIT");
   } catch (err) {
-    db.exec("ROLLBACK");
+    // A failed BEGIN (busy past DB_TIMEOUT_MS) opens no transaction; a bare ROLLBACK would throw
+    // "no transaction is active" and hide the real error (review-M1 #2).
+    if (db.isTransaction) db.exec("ROLLBACK");
     throw err;
   }
 }

@@ -72,6 +72,11 @@ export async function runAll(opts = {}) {
       else {
         bucket.fail += 1;
         anyFail = true;
+        // DX (review-M1 #4): name the failing case and its first error line, so a gate FAIL is
+        // actionable without a rerun.
+        const err = event.data.details?.error;
+        const why = String(err?.cause?.message ?? err?.message ?? "no error detail").split("\n")[0];
+        console.error(`FAIL ${name}: ${why}`);
       }
       results.set(gpId, bucket);
     }
