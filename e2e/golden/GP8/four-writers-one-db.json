@@ -1,0 +1,11 @@
+{
+  "resultsCount": 40,
+  "busyErrors": 0,
+  "texts": [
+    "ctx_stats is not built yet; milestone M4 builds it. Fix: use your normal tools until then."
+  ],
+  "integrity": [
+    "ok"
+  ],
+  "eventRows": 40
+}

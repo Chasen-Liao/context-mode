@@ -48,10 +48,14 @@ export async function runAll(opts = {}) {
   }
 
   const testFiles = files.map((f) => path.join(dir, f));
+  // --milestone Mn: only tests tagged [M0]..[Mn] run at all, so a lower milestone never waits on
+  // a higher milestone's idle windows (D-M0-2, D-M1-F1-2). CI tool code: regex allowed.
+  const target = milestone ? /^M(\d+)$/.exec(milestone) : null;
+  const tags = target ? Array.from({ length: Number(target[1]) + 1 }, (_, k) => `M${k}`).join("|") : "";
   const stream = run({
     files: testFiles,
     concurrency: 1,
-    testNamePatterns: milestone ? undefined : undefined,
+    testNamePatterns: target ? [new RegExp(`^\\[(${tags})\\]`)] : undefined,
   });
 
   const results = new Map(); // gp id -> { pass, fail }
@@ -73,9 +77,15 @@ export async function runAll(opts = {}) {
     }
   }
 
+  // impl/14 §5 step 3: one pass/fail line per GP id, on stderr; stdout carries exactly one JSON
+  // line { ok, gp } so the live harness's local branch can parse it (DEVIATIONS row for
+  // e2e/live/cases kind "local", D-M1-F1-2). Exit code stays §5 step 4.
+  const gp = {};
   for (const [gpId, { pass, fail }] of results) {
-    console.log(`${gpId}: ${fail === 0 ? "PASS" : "FAIL"} (${pass} pass, ${fail} fail)`);
+    console.error(`${gpId}: ${fail === 0 ? "PASS" : "FAIL"} (${pass} pass, ${fail} fail)`);
+    gp[gpId] = { pass, fail };
   }
+  console.log(JSON.stringify({ ok: !anyFail, gp }));
 
   return anyFail ? 1 : 0;
 }

@@ -1,0 +1,26 @@
+{
+  "main": {
+    "content": [
+      {
+        "type": "text",
+        "text": "ctx_stats is not built yet; milestone M4 builds it. Fix: use your normal tools until then."
+      }
+    ],
+    "isError": true
+  },
+  "wt": {
+    "content": [
+      {
+        "type": "text",
+        "text": "ctx_stats is not built yet; milestone M4 builds it. Fix: use your normal tools until then."
+      }
+    ],
+    "isError": true
+  },
+  "projects": {
+    "project0": [
+      "<main>",
+      "<wt>"
+    ]
+  }
+}

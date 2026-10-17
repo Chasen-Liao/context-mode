@@ -1,0 +1,14 @@
+{
+  "after": {
+    "content": [
+      {
+        "type": "text",
+        "text": "ctx_stats is not built yet; milestone M4 builds it. Fix: use your normal tools until then."
+      }
+    ],
+    "isError": true
+  },
+  "rowsBefore": 1,
+  "rowsAfterIdle": 1,
+  "projectCount": 1
+}

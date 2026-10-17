@@ -4,24 +4,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 
 import { spawnBundle } from "../harness/mcp-client.mjs";
 import { normalize } from "../harness/normalize.mjs";
 import { dumpDb } from "../harness/db-dump.mjs";
+import { checkGolden } from "../harness/golden.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const RELEASE_OUT = path.join(REPO_ROOT, "release-out");
 const SERVER_BUNDLE = path.join(RELEASE_OUT, "server.mjs");
-
-function loadGolden(name) {
-  const p = path.join(__dirname, "..", "golden", "GP8", `${name}.json`);
-  return JSON.parse(readFileSync(p, "utf8"));
-}
+const INIT = { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0" } };
+const IDLE_WINDOW_MS = 60_000; // DEVIATIONS D-M1-12: one 60 s idle window
 
 function initRepo() {
   const dir = mkdtempSync(path.join(tmpdir(), "cm-gp8-"));
@@ -32,120 +31,134 @@ function initRepo() {
   return dir;
 }
 
-test("[M1] GP8/four-writers-one-db: 0 busy errors reach the tool result, integrity_check ok, no retry loop", async () => {
+// Temp repo + temp HOME, removed after the test; every bundle spawned through it is killed after
+// the test even when an assert throws first (DEVIATIONS D-M1-F1-1).
+function fixture(t) {
   const repo = initRepo();
   const home = mkdtempSync(path.join(tmpdir(), "cm-gp8-home-"));
-  try {
-    const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: repo };
-    const clients = Array.from({ length: 4 }, () => spawnBundle(SERVER_BUNDLE, env));
-    await Promise.all(clients.map((c) => c.request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0" } })));
-
-    const results = await Promise.all(
-      clients.flatMap((c) => Array.from({ length: 10 }, () => c.request("tools/call", { name: "ctx_stats", arguments: {} })))
-    );
-    const busyErrors = results.filter((r) => typeof r?.content?.[0]?.text === "string" && /SQLITE_BUSY/i.test(r.content[0].text));
-    assert.equal(busyErrors.length, 0, "no SQLITE_BUSY text may reach a tool result");
-
-    await Promise.all(clients.map((c) => c.close()));
-
-    const dbPath = path.join(home, ".context-mode", "projects");
-    // Only assert shape via normalize+golden once the real projectKey dir is discoverable.
-    const normalized = normalize({ resultsCount: results.length, busyErrors: busyErrors.length });
-    assert.deepStrictEqual(normalized, loadGolden("four-writers-one-db"));
-  } finally {
+  const clients = [];
+  t.after(() => {
+    for (const c of clients) c.kill();
     rmSync(repo, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
+  });
+  const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: repo };
+  const spawnOne = () => {
+    const c = spawnBundle(SERVER_BUNDLE, env);
+    clients.push(c);
+    return c;
+  };
+  return { repo, home, spawnOne, projectsDir: path.join(home, ".context-mode", "projects") };
+}
+
+function onlyProjectDb(projectsDir) {
+  const keys = readdirSync(projectsDir);
+  assert.equal(keys.length, 1, `expected one project dir, got ${keys.length}`);
+  return path.join(projectsDir, keys[0], "context.db");
+}
+
+test("[M1] GP8/four-writers-one-db: 0 busy errors reach the tool result, integrity_check ok, no retry loop", async (t) => {
+  const f = fixture(t);
+  const clients = Array.from({ length: 4 }, () => f.spawnOne());
+  await Promise.all(clients.map((c) => c.request("initialize", INIT)));
+
+  const results = await Promise.all(
+    clients.flatMap((c) => Array.from({ length: 10 }, () => c.request("tools/call", { name: "ctx_stats", arguments: {} })))
+  );
+  const busyErrors = results.filter((r) => typeof r?.content?.[0]?.text === "string" && /SQLITE_BUSY|database is locked/i.test(r.content[0].text));
+  assert.equal(busyErrors.length, 0, "no SQLITE_BUSY text may reach a tool result");
+
+  await Promise.all(clients.map((c) => c.close()));
+
+  const dbPath = onlyProjectDb(f.projectsDir);
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  let integrity;
+  try {
+    integrity = db.prepare("PRAGMA integrity_check").all().map((r) => r.integrity_check);
+  } finally {
+    db.close();
   }
+  // One journal row per call: no lost write, no retried duplicate (D-M1-10).
+  const events = dumpDb(dbPath, ["events"]).events;
+  const texts = [...new Set(results.map((r) => r?.content?.[0]?.text))].sort();
+  checkGolden("GP8", "four-writers-one-db", normalize({ resultsCount: results.length, busyErrors: busyErrors.length, texts, integrity, eventRows: events.length }));
 });
 
-test("[M1] GP8/cleanup-live-owner-kept (V22): a live owner PID + last access > 14 days is not deleted", async () => {
-  const repo = initRepo();
-  const home = mkdtempSync(path.join(tmpdir(), "cm-gp8-home-"));
+test("[M1] GP8/cleanup-live-owner-kept (V22): a live owner PID + last access > 14 days is not deleted", async (t) => {
+  const f = fixture(t);
+  // Server A owns project P and stays open (live owner).
+  const owner = f.spawnOne();
+  await owner.request("initialize", INIT);
+  await owner.request("tools/call", { name: "ctx_stats", arguments: {} });
+  const dbPath = onlyProjectDb(f.projectsDir);
+  const projectDir = path.dirname(dbPath);
+  // Age every row of P past PROJECT_DEAD_IDLE_DAYS (14 d): 15 days in ms, e2e literal (D-M0-4).
+  const old = Date.now() - 15 * 86_400_000;
+  const w = new DatabaseSync(dbPath, { timeout: 5000 });
   try {
-    const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: repo };
-    const client = spawnBundle(SERVER_BUNDLE, env);
-    await client.request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0" } });
-    await client.request("tools/call", { name: "ctx_stats", arguments: {} });
-    // client stays open (live owner) while this assertion runs; sweepDeadProjects runs lazily
-    // on another process's first resolution, never on a timer.
-    const normalized = normalize({ ok: true });
-    assert.deepStrictEqual(normalized, loadGolden("cleanup-live-owner-kept"));
-    await client.close();
+    w.prepare("UPDATE events SET created_at = ?, accessed_at = ?").run(old, old);
   } finally {
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
+    w.close();
   }
+  // A second server for a different project runs its once-per-process sweep (D-M1-11).
+  const other = initRepo();
+  t.after(() => rmSync(other, { recursive: true, force: true }));
+  const sweeper = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: f.home, CLAUDE_PROJECT_DIR: other });
+  t.after(() => sweeper.kill());
+  await sweeper.request("initialize", INIT);
+  await sweeper.request("tools/call", { name: "ctx_stats", arguments: {} });
+  await sweeper.close();
+
+  const kept = existsSync(projectDir);
+  await owner.close();
+  checkGolden("GP8", "cleanup-live-owner-kept", normalize({ liveOwnerProjectKept: kept, projectCount: readdirSync(f.projectsDir).length }));
 });
 
-test("[M1] GP8/cleanup-dead-owner-old-deleted (V22): a dead PID + last access older than 14 days is deleted", async () => {
-  const repo = initRepo();
-  const home = mkdtempSync(path.join(tmpdir(), "cm-gp8-home-"));
-  try {
-    // Build a stale, owner-less project dir by hand, then start a fresh server for a
-    // DIFFERENT project to trigger this process's own cleanup pass, and assert the
-    // stale sibling project directory is gone after the live server's first resolution.
-    const configDir = path.join(home, ".context-mode");
-    const staleKey = "a".repeat(16);
-    const staleDir = path.join(configDir, "projects", staleKey);
-    mkdirSync(staleDir, { recursive: true });
-    writeFileSync(path.join(staleDir, "context.db"), "");
+test("[M1] GP8/cleanup-dead-owner-old-deleted (V22): a dead PID + last access older than 14 days is deleted", async (t) => {
+  const f = fixture(t);
+  // A stale, owner-less project dir (empty DB = last access 0), then a fresh server for a
+  // DIFFERENT project; its first resolution runs the sweep (D-M1-11).
+  const staleDir = path.join(f.projectsDir, "a".repeat(16));
+  mkdirSync(staleDir, { recursive: true });
+  writeFileSync(path.join(staleDir, "context.db"), "");
 
-    const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: repo };
-    const client = spawnBundle(SERVER_BUNDLE, env);
-    await client.request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0" } });
-    await client.request("tools/call", { name: "ctx_stats", arguments: {} });
-    await client.close();
+  const client = f.spawnOne();
+  await client.request("initialize", INIT);
+  await client.request("tools/call", { name: "ctx_stats", arguments: {} });
+  await client.close();
 
-    const normalized = normalize({ staleDirDeleted: !existsSync(staleDir) });
-    assert.deepStrictEqual(normalized, loadGolden("cleanup-dead-owner-old-deleted"));
-  } finally {
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
-  }
+  checkGolden("GP8", "cleanup-dead-owner-old-deleted", normalize({ staleDirDeleted: !existsSync(staleDir), projectCount: readdirSync(f.projectsDir).length }));
 });
 
-test("[M1] GP8/stats-heartbeat-no-timer-db-open (D-M1-12: 60s idle window): idle server opens 0 DBs outside its own session", async () => {
-  const repo = initRepo();
-  const home = mkdtempSync(path.join(tmpdir(), "cm-gp8-home-"));
-  try {
-    const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: repo };
-    const client = spawnBundle(SERVER_BUNDLE, env);
-    await client.request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0" } });
-    await client.request("tools/call", { name: "ctx_stats", arguments: {} });
+test("[M1] GP8/stats-heartbeat-no-timer-db-open (D-M1-12: 60s idle window): idle server opens 0 DBs outside its own session", async (t) => {
+  const f = fixture(t);
+  const client = f.spawnOne();
+  await client.request("initialize", INIT);
+  await client.request("tools/call", { name: "ctx_stats", arguments: {} });
+  const before = dumpDb(onlyProjectDb(f.projectsDir), ["events"]).events.length;
 
-    await new Promise((r) => setTimeout(r, 60_000));
+  await new Promise((r) => setTimeout(r, IDLE_WINDOW_MS));
 
-    const after = await client.request("tools/call", { name: "ctx_stats", arguments: {} });
-    const normalized = normalize({ after });
-    assert.deepStrictEqual(normalized, loadGolden("stats-heartbeat-no-timer-db-open"));
-    await client.close();
-  } finally {
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
-  }
+  // No timer wrote a row while idle: the row count only moves with our own call.
+  const idle = dumpDb(onlyProjectDb(f.projectsDir), ["events"]).events.length;
+  const after = await client.request("tools/call", { name: "ctx_stats", arguments: {} });
+  await client.close();
+  checkGolden("GP8", "stats-heartbeat-no-timer-db-open", normalize({ after, rowsBefore: before, rowsAfterIdle: idle, projectCount: readdirSync(f.projectsDir).length }));
 });
 
-test("[M1] GP8/db-gone-hard-error: a context.db path vanished mid-session surfaces DB_GONE, not a raw stack", async () => {
-  const repo = initRepo();
-  const home = mkdtempSync(path.join(tmpdir(), "cm-gp8-home-"));
-  try {
-    const env = { ...process.env, HOME: home, CLAUDE_PROJECT_DIR: repo };
-    const client = spawnBundle(SERVER_BUNDLE, env);
-    await client.request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0" } });
-    await client.request("tools/call", { name: "ctx_stats", arguments: {} });
+test("[M1] GP8/db-gone-hard-error: a context.db path vanished mid-session surfaces DB_GONE, not a raw stack", async (t) => {
+  const f = fixture(t);
+  const client = f.spawnOne();
+  await client.request("initialize", INIT);
+  await client.request("tools/call", { name: "ctx_stats", arguments: {} });
 
-    const configDir = path.join(home, ".context-mode");
-    const projDirs = readdirSync(path.join(configDir, "projects"));
-    for (const d of projDirs) {
-      rmSync(path.join(configDir, "projects", d, "context.db"), { force: true });
-    }
-
-    const reply = await client.request("tools/call", { name: "ctx_stats", arguments: {} });
-    const normalized = normalize({ reply });
-    assert.deepStrictEqual(normalized, loadGolden("db-gone-hard-error"));
-    await client.close();
-  } finally {
-    rmSync(repo, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
+  for (const d of readdirSync(f.projectsDir)) {
+    rmSync(path.join(f.projectsDir, d, "context.db"), { force: true });
   }
+
+  const reply = await client.request("tools/call", { name: "ctx_stats", arguments: {} });
+  await client.close();
+  // ADR-0002 decision 3: never recreated.
+  const recreated = readdirSync(f.projectsDir).some((d) => existsSync(path.join(f.projectsDir, d, "context.db")));
+  checkGolden("GP8", "db-gone-hard-error", normalize({ reply, recreated }));
 });

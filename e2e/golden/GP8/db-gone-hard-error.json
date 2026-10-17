@@ -1,0 +1,12 @@
+{
+  "reply": {
+    "content": [
+      {
+        "type": "text",
+        "text": "context.db path vanished. Fix: run ctx_doctor."
+      }
+    ],
+    "isError": true
+  },
+  "recreated": false
+}

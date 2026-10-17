@@ -13,10 +13,11 @@ const CLOSE_TIMEOUT_MS = 2000;
 /**
  * @param {string} bundlePath
  * @param {Record<string,string>} [env]
- * @returns {{request:Function, notify:Function, close:Function}}
+ * @param {string[]} [args] - argv after the bundle path, e.g. ["--agent", "vscode"] (DEVIATIONS D-M1-F1-1)
+ * @returns {{request:Function, notify:Function, close:Function, kill:Function}}
  */
-export function spawnBundle(bundlePath, env) {
-  const child = spawn(process.execPath, [bundlePath], {
+export function spawnBundle(bundlePath, env, args = []) {
+  const child = spawn(process.execPath, [bundlePath, ...args], {
     stdio: ["pipe", "pipe", "pipe"],
     env: env ?? process.env,
   });
@@ -101,5 +102,11 @@ export function spawnBundle(bundlePath, env) {
     throw new Error(`mcp-client: bundle did not exit in ${CLOSE_TIMEOUT_MS}ms`);
   }
 
-  return { request, notify, close };
+  // Test teardown (t.after): a case whose assert throws before close() must not leave the bundle
+  // running, or its stdio pipes keep the node:test file process alive forever (D-M1-F1-1).
+  function kill() {
+    if (!exited) child.kill("SIGKILL");
+  }
+
+  return { request, notify, close, kill };
 }
