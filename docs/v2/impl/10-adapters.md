@@ -136,6 +136,26 @@ Citation: `tickets/spike-hooks-verified.md` §2, per-agent write-up, for file pa
 
 `tool-names.ts:28,121` and this file's prior draft disagree on whether Qwen's native shell tool is called `run_shell_command` or `Shell`. No live Qwen probe has run yet, so neither name is dropped by taste. Smallest rule consistent with DECISIONS-r9 R4: both stay in `qwen.nativeTools.shell` (§1.3a) and in the matcher (§1.5) until a GP3 live run against a recorded Qwen `PreToolUse` payload shows which one the installed Qwen build actually sends; that run is folded into S-NAMES (TECH-SPEC §9), not a separate test id, because S-NAMES already covers "exact MCP tool names" for this agent family. The losing name is then deleted from §1.3a and §1.5 in the same commit that closes S-NAMES.
 
+
+### 1.6 Prompt-delivery and skill-exposure rows (M2: S-COPILOT, S-SKILLS, S-ZCODE instructions row)
+
+These rows are data for `ctx_doctor` and the install docs, not `AdapterRow` fields. Tags: [V] live probe, [S] pinned source, [U] unknown. An open row prints `SKIPPED` in the live harness, never `FAIL` (TECH-SPEC §9).
+
+| id | MCP `instructions` reach the model | Skill command the user types | Spike file |
+|---|---|---|---|
+| `claude-code` | [V] yes (TECH-SPEC §3.1) | [V] `/ctx-stats` or `/context-mode:ctx-stats` | `tickets/spikes-r5/S-SKILLS.md` |
+| `codex` | [V] no at session start (S-CODEX) | [S] `$ctx-stats` mention, no `/` command | `tickets/spikes-r5/S-SKILLS.md` |
+| `gemini` | [S] yes, trusted folders only | [S] `/ctx-stats`; `disable-model-invocation` ignored | `tickets/spikes-r5/S-SKILLS.md` |
+| `qwen` | [S] yes | [S] `/ctx-stats` | `tickets/spikes-r5/S-SKILLS.md` |
+| `copilot-cli` | **[U] Blocked**: `copilot` not installed; exact command in the spike file | **[U] Blocked** | `tickets/spikes-r5/S-COPILOT.md`, `tickets/spikes-r5/S-SKILLS.md` |
+| `vscode` | [S] yes, when its tools are in the turn's request | [S] `/ctx-stats` | `tickets/spikes-r5/S-SKILLS.md` |
+| `kiro` | [S] no (Kiro#11096 open) | none: ask in words | `tickets/spikes-r5/S-SKILLS.md` |
+| `zcode` | [S] no, by source (`zai-org/ZCode` @ `aac4755666d0`: MCP client never reads `instructions`); live probe **Blocked**: `zcode` not installed | [S] `/skill ctx-stats` (rewritten into a `Skill` tool call); `disable-model-invocation` not enforced | `tickets/spikes-r5/S-ZCODE.md`, `tickets/spikes-r5/S-SKILLS.md` |
+| `pi` | n/a (in-process, `before_agent_start`) | [S] `/skill:ctx-stats` | `tickets/spikes-r5/S-SKILLS.md` |
+| `opencode` | [S] yes | none: model-called `skill` tool only (ADR-0004 gap) | `tickets/spikes-r5/S-SKILLS.md` |
+
+No row changes routing: every agent still gets routing from self-contained tool descriptions (ADR-0004 decision 2), and agents with "no"/[U] get nothing else (decision 4). `skills/` stays the one source (ADR-0004 decision 3); no `commands/` dir is added for ZCode.
+
 ---
 
 ## 2–11. Per-agent decode/encode
@@ -387,8 +407,11 @@ In-process glue only, same reasoning as Pi.
 
 ---
 - A7 (intern M0 Q6): there is no runtime mode pick. `compactSummary` is a fixed column of `ADAPTERS` (§1.3); hooks read `getAdapter(id).compactSummary` and branch (impl/09 §5). Only a table edit after an LV-COMPACT run changes it.
+- A8 (M2-T2): ADR-0004 says Copilot CLI `instructions` were "verified by live probe (Copilot CLI 1.0.60)", but no spike file, log or transcript for that probe exists; TECH-SPEC §3.7/§9 keep the row `[U]`. §1.6 follows TECH-SPEC (`[U]`, Blocked) until `tickets/spikes-r5/S-COPILOT.md` runs. ADR-0004's line is left as is (outside this module's files) and flagged for the next docs pass.
+- A9 (M2-T2): §1.6 rows tagged [S] come from pinned source, not live runs; they are enough to close S-SKILLS for M2 (TECH-SPEC §9 asks "which agents expose ... and from which install path", answerable from source) but a live run that disagrees replaces the row in the same commit.
 
 ## Changes
 
 - DECISIONS-r6 D6: added `compactSummary: "host" | "none"` to the `ADAPTERS` table (§1.3). Claude Code = `"host"` (one pointer line, no state block). Every other agent = `"none"` (full 2,048 B block through its ADR-0009 §6 path) until its own LV-COMPACT live check (M3) passes.
 - DECISIONS-r9: R1 Codex `toolNamePrefix` to `mcp__context_mode__` (underscore) everywhere in this file (§1.3, §1.3a, §1.5, §3); R3 ZCode marked `[unverified, T-ZC]` with live test spec added (§1.5a); R4 added `nativeTools` field, rewrote all host matchers as generated from `nativeTools` + `toolNamePrefix` (§1.3a, §1.5); R5 added `execReadOnlyHint` (§1.3a); R6 added Codex install/doctor note (§3); V9 added compactSummary flip note (§1.3); intern questions closed: T-ZC fixture path and `SKIPPED` rule (§1.5a, A5), Qwen shell-name live check folded into S-NAMES (§1.5b, A6).
+- M2-T2: added §1.6 (instructions + skill-exposure rows per agent) from S-COPILOT (Blocked), S-SKILLS (9/10 by source, Copilot CLI Blocked), S-ZCODE instructions row ([S] no; live probe Blocked); Assumptions A8, A9.
