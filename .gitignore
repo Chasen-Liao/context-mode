@@ -2,6 +2,7 @@ node_modules/
 # v1 tsc outDir; v2 build scripts in build/ are tracked (impl/13 §2)
 /build/*
 !/build/build.mjs
+!/build/check-readme.mjs
 # v2 build output and the prompt file build.mjs generates and deletes (impl/13 §2.2)
 release-out/
 src/prompt/_generated.ts

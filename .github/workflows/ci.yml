@@ -43,3 +43,5 @@ jobs:
         name: KEEP-PASS list is current
       - run: node scripts/ci-gs4-lint.mjs
         name: GS4 lint (no e2e import of src, ledger verdicts)
+      - run: node build/check-readme.mjs
+        name: README line cap (ADR-0015, README_MAX_LINES)

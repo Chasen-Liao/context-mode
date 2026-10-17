@@ -107,3 +107,4 @@ export const LIVE_MODEL = "claude-sonnet-5";
 export const LIVE_EFFORT = "low";
 export const LIVE_BUDGET_USD = 0.25;
 export const LIVE_SKIP_LIMIT = 3;
+export const README_MAX_LINES = 200; // ADR-0015: CI cap on README.md length
