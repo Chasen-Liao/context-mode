@@ -166,3 +166,24 @@ test("contracts source: no regex, imports only node:* or local type re-exports",
     }
   }
 });
+
+// M2 (impl/03 §2 step 3, §6 step 5; impl/04 §2.1, §2.3 steps 9, 11, 15; DEVIATIONS D-M2-2, D-M2-3).
+test("[M2] sandbox and tools-exec constants carry the impl/03, impl/04 values", () => {
+  assert.equal(C.FETCH_MAX_HOPS, 5);
+  assert.equal(C.PATHEXT_DEFAULT, ".COM;.EXE;.BAT;.CMD");
+  assert.equal(C.SOURCE_LABEL_MAX_CHARS, 80);
+  assert.equal(C.CANCELLED_LINE, "Cancelled.");
+  assert.equal(C.BACKGROUND_REPLY_PREFIX, "started in background, pid ");
+  assert.deepEqual([...C.EXEC_LANGUAGES], ["shell", "powershell", "javascript", "typescript", "python"]);
+  assert.ok(Object.isFrozen(C.EXEC_LANGUAGES));
+});
+
+test("[M2] types.ts declares ToolReply.journal, TimelineRow and the four M2 tool inputs", () => {
+  const src = readFileSync(join(SRC, "types.ts"), "utf8");
+  for (const name of ["export interface TimelineRow", "export type TimelineOrigin", "export type SearchSort",
+    "export interface ExecuteInput", "export interface BatchInput", "export interface CtxIndexInput", "export interface CtxSearchInput",
+    "export interface JournalFacts"]) {
+    assert.ok(src.includes(name), name);
+  }
+  assert.ok(src.includes("journal?: JournalFacts"), "ToolReply.journal (D-M2-2)");
+});
