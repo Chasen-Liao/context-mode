@@ -120,16 +120,3 @@ One point worth a note, not a disagreement: Pi's own package manager command is 
 commit" (PRD-v2.md). Both are compatible: `/ctx-upgrade`'s own fetch-and-verify step (PRD-v2.md) covers the
 content swap, and `pi update --extensions` is the separate, Pi-native command a user can also run. This
 does not require a change to `impl/10-adapters.md`.
-
-## Verified
-
-No v2 src build exists on `v2-design` yet; `pi install git:github.com/mksglu/context-mode@release` fails only because the `release` branch does not exist yet (expected pre-publish). Tested the same command against `@v2-design` to confirm the install mechanism itself.
-
-| Step | Result | Agent version | Date |
-|---|---|---|---|
-| Install `@earendil-works/pi-coding-agent` via npm into isolated prefix | worked | pi 1.3.0 | 2026-10-17 |
-| `pi install git:github.com/mksglu/context-mode@release -l` | failed: `release` ref does not exist yet | 1.3.0 | 2026-10-17 |
-| `pi install git:github.com/mksglu/context-mode@v2-design -l` (substitute ref, to isolate the cause above) | worked: clone, checkout, `npm install`, settings entry written | 1.3.0 | 2026-10-17 |
-| `pi list` / `/ctx-doctor` in a live session | needs owner login | 1.3.0 | 2026-10-17 |
-
-Note: `pi list` (no flag) reports "No packages installed" even right after a `-l` (project-local) install; only `~/project/.pi/settings.json` has the entry. This guide's §1 should say clearly that a project-local install needs the project's own settings file read, not the global one, to show up in `pi list`. Recorded in `docs/v2/impl/DEVIATIONS.md`.
