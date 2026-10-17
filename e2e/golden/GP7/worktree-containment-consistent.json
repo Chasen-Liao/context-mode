@@ -1,0 +1,20 @@
+{
+  "execReply": {
+    "content": [
+      {
+        "type": "text",
+        "text": "exit 0 · 14 B\nworktree data\n"
+      }
+    ],
+    "isError": false
+  },
+  "batchReply": {
+    "content": [
+      {
+        "type": "text",
+        "text": "1 command(s), 1 querie(s), exit 0\n## worktree data\nworktree data\nmore: ctx_search({queries:[...], source:\"ctx_batch:0\"})"
+      }
+    ],
+    "isError": false
+  }
+}
