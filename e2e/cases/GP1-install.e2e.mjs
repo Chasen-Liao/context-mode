@@ -7,13 +7,15 @@
 // syntax error in this file.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, mkdtempSync, copyFileSync } from "node:fs";
+import { readFileSync, existsSync, mkdtempSync, copyFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { spawnBundle } from "../harness/mcp-client.mjs";
 import { normalize } from "../harness/normalize.mjs";
+import { checkGolden } from "../harness/golden.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -39,6 +41,41 @@ function loadGolden(name) {
   const p = path.join(__dirname, "..", "golden", "GP1", `${name}.json`);
   return JSON.parse(readFileSync(p, "utf8"));
 }
+
+// ADR-0007 decision 4 / Tests section; 11-server.md §5 step 1 and E2E coverage: agent id for a
+// 2026-07-28 client comes only from `--agent` (or env.CLAUDE_PROJECT_DIR), never from `clientInfo`.
+// No `initialize` call is made at all here, so `clientInfo` never crosses the wire; `tools/call`
+// must still resolve the project through the `--agent` flag (D-M2-arch-1). Placed first in this
+// file: `bundle-no-import-attributes` below fails in an M0-only checkout (release-out/run.mjs is
+// a later milestone's bundle row, not built here), and that failure stops `node:test`'s `run()`
+// from reporting any test later in the same file; a case placed after it would silently vanish
+// from `node e2e/cases/run.mjs`'s own output instead of failing loud.
+test("[M2] GP1/no-clientinfo-agent-from-flag", async (t) => {
+  const ws = mkdtempSync(path.join(tmpdir(), "cm-gp1-ws-"));
+  const home = mkdtempSync(path.join(tmpdir(), "cm-gp1-home-"));
+  t.after(() => {
+    rmSync(ws, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  });
+  execFileSync("git", ["init", "-q"], { cwd: ws });
+  execFileSync("git", ["config", "user.email", "t@example.com"], { cwd: ws });
+  execFileSync("git", ["config", "user.name", "t"], { cwd: ws });
+  execFileSync("git", ["commit", "--allow-empty", "-q", "-m", "init"], { cwd: ws });
+
+  const env = { ...process.env, HOME: home };
+  delete env.CLAUDE_PROJECT_DIR;
+  const client = spawnBundle(SERVER_BUNDLE, env, ["--agent", "vscode", "--workspace-folder", ws]);
+  t.after(() => client.kill());
+
+  const reply = await client.request("tools/call", {
+    name: "ctx_execute",
+    arguments: { language: "shell", code: "echo hi" },
+  });
+  await client.close();
+
+  assert.equal(reply.isError, false, "ctx_execute must resolve the project from --agent with no clientInfo ever sent");
+  checkGolden("GP1", "no-clientinfo-agent-from-flag", normalize({ reply }, { home, proj: ws }));
+});
 
 test("[M0] GP1/harness-smoke", async () => {
   const client = spawnBundle(SERVER_BUNDLE);

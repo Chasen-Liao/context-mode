@@ -1,0 +1,20 @@
+{
+  "reply": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Indexed 1 source(s), 1 chunk(s) from ..notes/inside.txt."
+      }
+    ],
+    "isError": false
+  },
+  "search": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Query \"inside body\":\n..notes/inside.txt #0: inside body\nQuery \"outside body\":"
+      }
+    ],
+    "isError": false
+  }
+}
