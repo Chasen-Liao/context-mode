@@ -11,6 +11,16 @@ import { openDb, closeDb } from "../../../src/core/store/db.ts";
 import { readSessionEvents } from "../../../src/core/journal/read.ts";
 import { appendDetached } from "../../../src/core/hooks/detached.ts";
 
+// D-M3-F-9: a hook or detached write keeps its DB handle open by design (A21), and Windows cannot delete
+// an open file, so temp cleanup there is best-effort. The assertions above it are unchanged.
+function rmTemp(dir) {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+  } catch (err) {
+    if (process.platform !== "win32" || err.code !== "EPERM") throw err;
+  }
+}
+
 function fakeProject(root, projectKey) {
   return {
     projectKey,
@@ -72,7 +82,7 @@ test("returns undefined synchronously, before the row is written", async () => {
       closeDb(reader);
     }
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmTemp(root);
   }
 });
 
@@ -95,7 +105,7 @@ test("several detached writes all land, in call order", async () => {
       closeDb(reader);
     }
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmTemp(root);
   }
 });
 
@@ -116,7 +126,7 @@ test("failure: one stderr line, no throw, no unhandled rejection", async () => {
   } finally {
     cap.restore();
     process.off("unhandledRejection", onUnhandled);
-    rmSync(root, { recursive: true, force: true });
+    rmTemp(root);
   }
   assert.equal(cap.lines.length, 1);
   assert.equal(cap.lines[0].startsWith("hooks: journal write failed: "), true);
@@ -140,6 +150,6 @@ test("does not close its DB handle (A21): a caller-side handle keeps working aft
       closeDb(reader);
     }
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    rmTemp(root);
   }
 });

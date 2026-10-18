@@ -4,7 +4,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { decide, denyMessage } from "../../../src/core/policy/decide.ts";
 import { getAdapter } from "../../../src/adapters/table.ts";
 import {
@@ -94,7 +94,8 @@ test("Read-deny case 2: ranged Read over OUTPUT_CAP is never denied", () => {
   }
 });
 test("Read-deny case 3: unbounded one-file shell dump over OUTPUT_CAP is denied (no Read tool host)", () => {
-  for (const cmd of [`cat ${big}`, `head ${big}`, `tail ${big}`, `sed -n p ${big}`, `less ${big}`, `jq . ${big}`, `bat ${big}`, `more ${big}`, "cat big.log"]) {
+  const p = big.split(sep).join("/"); // shell spelling of the path; "\\" is an escape in Bash
+  for (const cmd of [`cat ${p}`, `head ${p}`, `tail ${p}`, `sed -n p ${p}`, `less ${p}`, `jq . ${p}`, `bat ${p}`, `more ${p}`, "cat big.log"]) {
     const d = bash(cmd, CODEX);
     assert.deepEqual(d, { kind: "deny", reason: READ_DENY_MESSAGE(big, 300 * 1024) }, cmd);
   }
@@ -198,8 +199,9 @@ test("Grep hint and other-MCP hint; own MCP tools and unknown tools are allowed"
 });
 
 test("rule order (T-ROUTE): user deny beats the Read deny", () => {
-  const r = decide(ev("Read", { file_path: big }), CC, [`Read(${big})`]);
-  assert.equal(r.reason, USER_DENY_REASON_PREFIX + `Read(${big})`);
+  const rule = `Read(${big.split(sep).join("/")})`; // deny globs use "/" on every OS
+  const r = decide(ev("Read", { file_path: big }), CC, [rule]);
+  assert.equal(r.reason, USER_DENY_REASON_PREFIX + rule);
 });
 
 test("decide never returns replace", () => {

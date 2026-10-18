@@ -5,12 +5,18 @@ import { join } from "node:path";
 import { DATA_ROOT } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 
-// D-M1-T3-1: the home dir is the one home var the OS sets: HOME on POSIX, USERPROFILE on Windows.
-function homeOf(env: NodeJS.ProcessEnv): string {
+/** D-M1-T3-1: HOME, then USERPROFILE; an empty value counts as unset. null when neither is set (D-M3-F-8). */
+export function homeDirOf(env: NodeJS.ProcessEnv): string | null {
   const home = env.HOME;
   if (home !== undefined && home !== "") return home;
   const profile = env.USERPROFILE;
   if (profile !== undefined && profile !== "") return profile;
+  return null;
+}
+
+function homeOf(env: NodeJS.ProcessEnv): string {
+  const home = homeDirOf(env);
+  if (home !== null) return home;
   throw new CtxError("NO_HOME", { name: process.platform === "win32" ? "USERPROFILE" : "HOME" });
 }
 

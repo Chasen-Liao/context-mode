@@ -1,9 +1,9 @@
 // impl/08 §4 (module enforcement): the user's own deny rules. DECISIONS-r9 E2 (fail-closed signal), V17
 // (Read glob anchors). DEVIATIONS D-M3-E2-1..4. No regex: patterns are walked by a hand-written glob matcher.
 import { readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import type { AgentId } from "../contracts/agents.ts";
+import { homeDirOf } from "../project/config-dir.ts";
 
 // Host file names, not tunable values (same rule as index/walk.ts GITIGNORE). D-M3-E2-2.
 const CLAUDE_DIR = ".claude";
@@ -28,8 +28,11 @@ const BASH_SUBJECT: DenySubject = Object.freeze({ tool: BASH_TOOL });
 function denyFiles(projectDir: string, agent: AgentId): string[] {
   if (agent !== "claude-code") return [];
   const cfg = process.env[CLAUDE_CONFIG_DIR_ENV];
-  const userDir = cfg !== undefined && cfg !== "" ? cfg : join(homedir(), CLAUDE_DIR);
-  return [join(projectDir, CLAUDE_DIR, LOCAL_SETTINGS), join(projectDir, CLAUDE_DIR, SETTINGS), join(userDir, SETTINGS)];
+  // D-M3-F-8: the D-M1-T3-1 home rule (HOME, then USERPROFILE), not os.homedir(), which ignores HOME on Windows.
+  const home = homeDirOf(process.env);
+  const userDir = cfg !== undefined && cfg !== "" ? cfg : home === null ? null : join(home, CLAUDE_DIR);
+  const project = [join(projectDir, CLAUDE_DIR, LOCAL_SETTINGS), join(projectDir, CLAUDE_DIR, SETTINGS)];
+  return userDir === null ? project : [...project, join(userDir, SETTINGS)];
 }
 
 type FileDeny = { kind: "absent" } | { kind: "bad" } | { kind: "ok"; deny: string[] };
@@ -164,7 +167,10 @@ function matchPath(glob: string, absPath: string, projectDir: string | undefined
   }
   const target = toSlash(absPath);
   if (glob.startsWith(ABS_ANCHOR)) return globMatch(glob.slice(ABS_ANCHOR.length - "/".length), target, true);
-  if (glob.startsWith(HOME_ANCHOR)) return globMatch(toSlash(homedir()) + glob.slice(HOME_ANCHOR.length - "/".length), target, true);
+  if (glob.startsWith(HOME_ANCHOR)) {
+    const home = homeDirOf(process.env);
+    return home !== null && globMatch(toSlash(home) + glob.slice(HOME_ANCHOR.length - "/".length), target, true);
+  }
   return globMatch(glob, target, true);
 }
 

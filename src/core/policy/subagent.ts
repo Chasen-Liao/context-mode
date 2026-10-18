@@ -9,6 +9,7 @@ import {
 } from "../contracts/constants.ts";
 import type { AdapterRow, CanonicalHookEvent } from "../contracts/types.ts";
 import { getAdapter } from "../../adapters/table.ts";
+import { homeDirOf } from "../project/config-dir.ts";
 
 /** One agent definition from `--agents` JSON (Claude Code CLI shape). */
 export interface CliAgentDef { tools?: string[]; disallowedTools?: string[]; }
@@ -89,10 +90,9 @@ function safeType(type: string): boolean {
   return true;
 }
 
-// D-M1-T3-1 rule: one home var per OS (HOME on POSIX, USERPROFILE on Windows).
+// D-M1-T3-1 rule via config-dir.ts (D-M3-F-8): HOME, then USERPROFILE, on every OS.
 function homeDir(env: NodeJS.ProcessEnv): string | null {
-  const h = process.platform === "win32" ? env.USERPROFILE : env.HOME;
-  return h === undefined || h === "" ? null : h;
+  return homeDirOf(env);
 }
 
 // Claude Code plugin agent type "<plugin>:<agent>"; installed_plugins.json keys are "<plugin>@<marketplace>".

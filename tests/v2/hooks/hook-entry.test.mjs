@@ -3,7 +3,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, readdirSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, readdirSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -96,6 +96,6 @@ test("GP7/codex-session-project-dir: codex sessions in X and Y write to their ow
       h.close();
     }
   }
-  assert.ok(seen["cx-a"].endsWith("/x"));
-  assert.ok(seen["cx-b"].endsWith("/y"));
+  assert.equal(seen["cx-a"], realpathSync.native(x));
+  assert.equal(seen["cx-b"], realpathSync.native(y));
 });

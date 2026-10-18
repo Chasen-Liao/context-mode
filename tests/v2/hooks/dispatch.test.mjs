@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { handleHook } from "../../../src/core/hooks/dispatch.ts";
@@ -13,6 +13,16 @@ import { chunkText } from "../../../src/core/index/chunk.ts";
 import {
   COMPACT_POINTER_LINE, OUTPUT_CAP, SYNC_INDEX_MAX_BYTES, PENDING_COMPACT_META_PREFIX,
 } from "../../../src/core/contracts/constants.ts";
+
+// D-M3-F-9: a hook or detached write keeps its DB handle open by design (A21), and Windows cannot delete
+// an open file, so temp cleanup there is best-effort. The assertions above it are unchanged.
+function rmTemp(dir) {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+  } catch (err) {
+    if (process.platform !== "win32" || err.code !== "EPERM") throw err;
+  }
+}
 
 let root;
 let repo;
@@ -34,7 +44,7 @@ before(() => {
 
 after(() => {
   process.env.HOME = oldHome;
-  rmSync(root, { recursive: true, force: true });
+  rmTemp(root);
 });
 
 function dbFile() {
@@ -256,7 +266,7 @@ test("case B PreToolUse deny: reason names run.mjs next to the hook bundle (D-M3
   assert.equal(out.permissionDecision, "deny");
   const first = out.permissionDecisionReason.split("\n")[0];
   assert.ok(first.startsWith("node \""));
-  assert.ok(first.includes("/run.mjs\" " + Buffer.from(cmd).toString("base64url") + " "));
+  assert.ok(first.includes(sep + "run.mjs\" " + Buffer.from(cmd).toString("base64url") + " "));
   // D-M3-F-7: the rest is the case-B text (drafts.md deny-subagent-run); it names no ctx_* tool the subagent lacks.
   const md = readFileSync(new URL("../../../docs/v2/prompt/drafts.md", import.meta.url), "utf8");
   const at = md.indexOf("<!-- id: deny-subagent-run -->");

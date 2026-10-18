@@ -3,10 +3,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as C from "../../../src/core/contracts/constants.ts";
 
 const ENTRY = resolve(fileURLToPath(import.meta.url), "../../../../src/entries/run.ts");
@@ -17,10 +17,10 @@ function fixture(t) {
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const ws = join(dir, "ws");
   const bundle = join(dir, "bundle");
-  for (const d of [ws, bundle]) spawnSync("mkdir", ["-p", d]);
+  for (const d of [ws, bundle]) mkdirSync(d, { recursive: true });
   spawnSync("git", ["init", "-q"], { cwd: ws });
   // Two shims named like the release files: the entry picks its job from argv[1]'s file name.
-  for (const f of ["run.mjs", C.SEARCH_WRAPPER_FILE]) writeFileSync(join(bundle, f), `import ${JSON.stringify(ENTRY)};\n`);
+  for (const f of ["run.mjs", C.SEARCH_WRAPPER_FILE]) writeFileSync(join(bundle, f), `import ${JSON.stringify(pathToFileURL(ENTRY).href)};\n`);
   const run = (args) => spawnSync(process.execPath, [join(bundle, "run.mjs"), ...args], {
     cwd: ws, encoding: "utf8", env: { PATH: process.env.PATH, HOME: dir, TMPDIR: tmpdir() },
   });
