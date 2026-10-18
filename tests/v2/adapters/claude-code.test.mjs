@@ -258,7 +258,13 @@ test("hook entry fails open: unknown agent, missing agent, bad JSON, unknown eve
 });
 
 test("hook path imports contracts + adapters only: no DB, no network, no spawn (PRD P4)", () => {
-  const files = ["src/entries/hook.ts", "src/adapters/table.ts", "src/adapters/claude-code.ts", "src/adapters/codex.ts"];
+  // D-M3-H2-9: since M3 the entry imports handleHook (impl/09 §5.2); its own lines stay contracts + dispatch.
+  const entry = readFileSync(join(ROOT, "src/entries/hook.ts"), "utf8");
+  for (const line of entry.split("\n").filter((l) => l.startsWith("import "))) {
+    const spec = line.slice(line.lastIndexOf(" from ") + 6).trim();
+    assert.ok(spec.includes("/core/contracts/") || spec === '"../core/hooks/dispatch.ts";', "src/entries/hook.ts: " + line);
+  }
+  const files = ["src/adapters/table.ts", "src/adapters/claude-code.ts", "src/adapters/codex.ts"];
   const banned = ["node:sqlite", "node:child_process", "node:net", "node:http", "node:https", "node:dns", "fetch(", "/store/", "/sandbox/"];
   for (const f of files) {
     const src = readFileSync(join(ROOT, f), "utf8");
