@@ -95,6 +95,14 @@ function keepPass(ms) {
   const isHard = (f) => !baseline.includes(f) || ownerMs(f) <= ms;
   if (!selected.length) return { status: "PASS", detail: `0 files due at ${MILESTONES[ms]} (done: ${done.join(",") || "none"})` };
 
+  // D-M3-F-1: v1 `pretest` ran tsc; a KEEP-PASS file that imports build/*.js needs fresh tsc output,
+  // never a stale build/ left by an earlier local run (that hid the CI failure). Same step as CI.
+  const t = run("npx", ["tsc", "-p", "tsconfig.json"]);
+  if (t.status !== 0) {
+    dumpChild("keep-pass", t);
+    return { status: "FAIL", detail: `npx tsc -p tsconfig.json exit ${t.status}` };
+  }
+
   const outDir = mkdtempSync(path.join(tmpdir(), "cm-gate-"));
   const report = path.join(outDir, "vitest.json");
   try {

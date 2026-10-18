@@ -78,6 +78,9 @@ export const OWNERS_DIR_NAME = "owners"; // impl/02 §7, DEVIATIONS D-M1-T6-1: <
 export const OWNER_PID_EXT = ".pid"; // impl/02 §7, DEVIATIONS D-M1-T6-1: owner file extension
 export const GIT_DIR_NAME = ".git"; // DEVIATIONS D-M1-T3-3: containmentRoot of a non-bare repo
 export const GIT_WORKTREE_LINE_PREFIX = "worktree "; // DEVIATIONS D-M2-R7-1: `git worktree list --porcelain` path line
+export const GITDIR_FILE_PREFIX = "gitdir: "; // D-M3-F-4: a .git file (linked worktree, submodule) names its git dir
+export const GIT_COMMONDIR_FILE = "commondir"; // D-M3-F-4: <gitdir>/commondir of a linked worktree
+export const GIT_HEAD_FILE = "HEAD"; // D-M3-F-4: a git dir has a HEAD file
 export const WORKSPACE_FOLDER_FLAG = "--workspace-folder"; // DEVIATIONS D-M1-5: VS Code ${workspaceFolder} launch arg
 
 // Sandbox and tools-exec (M2; impl/03 §2 step 3, §6 step 5; impl/04 §2.1, §2.3 steps 9, 11, 15)

@@ -121,7 +121,11 @@ export async function openDb(project: ProjectContext, opts?: { readOnly?: boolea
   const path = project.dbPath;
 
   // Step 4: main file gone but a WAL/SHM sibling left behind -> hard error, no recreate (ADR-0002 §3).
-  if (!existsSync(path) && (existsSync(path + DB_WAL_SUFFIX) || existsSync(path + DB_SHM_SUFFIX))) {
+  // Siblings first, main file second (D-M3-F-2): SQLite makes a sibling only after the main file
+  // exists, so a sibling seen before a missing main file means the main file was deleted. The other
+  // order races a concurrent first open: main absent, then the winner links it and opens WAL.
+  const sibling = existsSync(path + DB_WAL_SUFFIX) || existsSync(path + DB_SHM_SUFFIX);
+  if (sibling && !existsSync(path)) {
     throw new CtxError("DB_GONE");
   }
 

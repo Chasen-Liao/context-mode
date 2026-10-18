@@ -3,10 +3,13 @@
 // One project source per host, no fallback chain; a missing source is never guessed.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import type { AgentId } from "../contracts/agents.ts";
-import { DB_FILE_NAME, GIT_DIR_NAME, GIT_WORKTREE_LINE_PREFIX, PROJECTS_DIR_NAME, PROJECT_KEY_HEX_LEN, WORKSPACE_FOLDER_FLAG } from "../contracts/constants.ts";
+import {
+  DB_FILE_NAME, GIT_COMMONDIR_FILE, GIT_DIR_NAME, GIT_HEAD_FILE, GIT_WORKTREE_LINE_PREFIX, GITDIR_FILE_PREFIX,
+  PROJECTS_DIR_NAME, PROJECT_KEY_HEX_LEN, WORKSPACE_FOLDER_FLAG,
+} from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import type { ProjectContext, ProjectSourceKind } from "../contracts/types.ts";
 import { resolveConfigDir } from "./config-dir.ts";
@@ -61,12 +64,58 @@ function dirOf(kind: ProjectSourceKind, src: ProjectSourceInput): string | undef
   }
 }
 
-// impl/02 §2 steps 1-3 and 5 in one git call (D-M1-5: spawnSync, shell:false, never at boot).
+// impl/02 §2 steps 1-3 and 5, read from disk the way git discovers a repo (D-M3-F-4, GS6: a git
+// process costs 10-14 ms of the hook budget). Walk up from dir to the first <d>/.git that names a git
+// dir with a HEAD: a .git dir is the git dir; a .git file holds "gitdir: <path>" (linked worktree,
+// submodule). The common dir is <gitdir>/commondir when that file exists (linked worktree), else the
+// git dir. worktree = <d>. Same answers as `git rev-parse --git-common-dir --show-toplevel`.
 function gitDirs(dir: string): { commonDir: string; worktree: string } {
-  const lines = git(dir, ["rev-parse", "--path-format=absolute", "--git-common-dir", "--show-toplevel"]);
-  if (lines.length !== 2) throw new CtxError("NO_GIT_DIR", { path: dir });
-  // .native: one canonical letter case, so one repo always hashes to one projectKey (review-M1 #1).
-  return { commonDir: realpathSync.native(lines[0]), worktree: realpathSync.native(lines[1]) };
+  let cur: string;
+  try {
+    // .native: one canonical letter case, so one repo always hashes to one projectKey (review-M1 #1).
+    cur = realpathSync.native(dir);
+  } catch {
+    throw new CtxError("NO_GIT_DIR", { path: dir });
+  }
+  for (;;) {
+    const gitDir = gitDirAt(join(cur, GIT_DIR_NAME));
+    if (gitDir !== null) {
+      const common = firstLine(join(gitDir, GIT_COMMONDIR_FILE));
+      return { commonDir: realpathSync.native(common === null ? gitDir : resolve(gitDir, common)), worktree: cur };
+    }
+    const up = dirname(cur);
+    if (up === cur) throw new CtxError("NO_GIT_DIR", { path: dir });
+    cur = up;
+  }
+}
+
+// <d>/.git -> the git dir it names, or null when it is absent or names no git dir (no HEAD).
+function gitDirAt(dotGit: string): string | null {
+  let gitDir: string;
+  try {
+    if (statSync(dotGit).isDirectory()) {
+      gitDir = dotGit;
+    } else {
+      const line = firstLine(dotGit);
+      if (line === null || !line.startsWith(GITDIR_FILE_PREFIX)) return null;
+      gitDir = resolve(dirname(dotGit), line.slice(GITDIR_FILE_PREFIX.length));
+    }
+  } catch {
+    return null;
+  }
+  return existsSync(join(gitDir, GIT_HEAD_FILE)) ? gitDir : null;
+}
+
+function firstLine(file: string): string | null {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  const nl = text.indexOf("\n");
+  const line = (nl < 0 ? text : text.slice(0, nl)).trim();
+  return line === "" ? null : line;
 }
 
 function git(dir: string, args: string[]): string[] {
@@ -97,12 +146,18 @@ export function resolveProject(agent: AgentId, src: ProjectSourceInput): Project
   const projectKey = createHash("sha256").update(commonDir).digest("hex").slice(0, PROJECT_KEY_HEX_LEN);
   // D-M1-T3-5: the config dir comes from the process env, not src.env (src.env picks the project only).
   const projectDir = join(resolveConfigDir(process.env), PROJECTS_DIR_NAME, projectKey);
+  // D-M3-F-3 (GS6): `git worktree list` runs on the first read of containmentRoot, not here. Only the
+  // tools that check a path read it; the hook never does, so a hook call spawns git once, not twice.
+  let root: string | undefined;
   return {
     projectKey,
     projectDir,
     dbPath: join(projectDir, DB_FILE_NAME),
     worktree,
-    containmentRoot: containmentRootOf(dir, commonDir),
+    get containmentRoot(): string {
+      root ??= containmentRootOf(dir, commonDir);
+      return root;
+    },
     agent,
     source,
   };

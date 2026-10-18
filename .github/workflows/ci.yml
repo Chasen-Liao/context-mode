@@ -75,6 +75,10 @@ jobs:
       - run: node e2e/cases/run.mjs --milestone "$GATE_MILESTONE"
         name: GP cases tagged <= gate milestone (D-M0-2, D-M2-arch-4)
         shell: bash
+      # v1 `pretest` ran tsc; KEEP-PASS files that import build/*.js (zod3tov4-production) need its
+      # output. tsc only, not the v1 bundle step (D-M3-F-1, same as gate layer keep-pass).
+      - run: npx tsc -p tsconfig.json
+        name: v1 tsc output for KEEP-PASS files that import build/ (D-M3-F-1)
       # --testTimeout: go run / rustc / PowerShell cold starts exceed vitest's 5 s default on CI
       # runners; 60 s is the executor's own rustc compile cap (D-M2-R2-1).
       - run: npx vitest run --config tests/vitest.config.ts --testTimeout=60000 --hookTimeout=60000 $KEEP_PASS_FILES
