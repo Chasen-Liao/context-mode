@@ -1,5 +1,6 @@
 // [M4] Unit tests for src/core/compaction/score.ts (ADR-0009 §3, impl/00 §5.4 step 3).
-// score = WEIGHT[section] * DECAY_X1000[age]/1000 * (1 + floor(log2(repeatCount))), integers only.
+// score = Math.round(WEIGHT[section] * DECAY_X1000[age] * (1 + floor(log2(repeatCount))) / 1000), integers only
+// (DECISIONS-r9 M7: one Math.round at the end; DEVIATIONS D-M4-S1-5).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { scoreCandidate } from "../../../src/core/compaction/score.ts";
@@ -7,13 +8,13 @@ import { WEIGHT, DECAY_X1000 } from "../../../src/core/contracts/constants.ts";
 
 test("[M4] score/age-zero-full-decay-no-repeat", () => {
   const s = scoreCandidate({ section: "prompt", currentTurn: 5, itemTurn: 5, repeatCount: 1 });
-  const expected = Math.floor((WEIGHT.prompt * DECAY_X1000[0]) / 1000);
+  const expected = Math.round((WEIGHT.prompt * DECAY_X1000[0]) / 1000);
   assert.equal(s, expected);
 });
 
 test("[M4] score/half-life-four-turns-matches-decay-table", () => {
   const s = scoreCandidate({ section: "toolerr", currentTurn: 9, itemTurn: 5, repeatCount: 1 });
-  const expected = Math.floor((WEIGHT.toolerr * DECAY_X1000[4]) / 1000);
+  const expected = Math.round((WEIGHT.toolerr * DECAY_X1000[4]) / 1000);
   assert.equal(s, expected);
 });
 
