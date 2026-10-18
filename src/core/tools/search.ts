@@ -1,14 +1,14 @@
 // impl/05 §6, §7; ADR-0009 §8.1 (timeline), §8.3 + §9 (RRF, no MMR); DECISIONS-r6 D2; DECISIONS-r7 R1,
-// O1; DECISIONS-r9 M14-M24, V23; DEVIATIONS D-M2-3, D-M2-6, D-M2-T3-1, D-M2-T9-1, D-M2-T9-2.
+// O1; ADR-0009 §8.2 + DEVIATIONS D-M4-arch-5 (source:"decision"); DECISIONS-r9 M14-M24, V23; DEVIATIONS D-M2-3, D-M2-6, D-M2-T3-1, D-M2-T9-1, D-M2-T9-2.
 // ctx_search: relevance (ContentStore, BM25 / RRF for scope "project", session first) or timeline
 // (ContentStore + SessionDB + auto-memory, oldest first, epoch-ms `after` cursor).
 import { z } from "zod/v4";
-import { OUTPUT_CAP, SEARCH_PAGE_SIZE } from "../contracts/constants.ts";
+import { DECISION_SOURCE, OUTPUT_CAP, SEARCH_PAGE_SIZE } from "../contracts/constants.ts";
 import { formatError } from "../contracts/errors.ts";
 import type { CtxSearchInput, DbHandle, Hit, SearchScope, TimelineRow, ToolContext, ToolReply } from "../contracts/types.ts";
 import { capBytes } from "../sandbox/cap.ts";
 import { closeDb, openDb } from "../store/db.ts";
-import { ftsQuery, ftsQueryTimeline } from "../store/fts.ts";
+import { ftsListSource, ftsQuery, ftsQueryTimeline } from "../store/fts.ts";
 import { readAutoMemory } from "../index/auto-memory.ts";
 
 // DECISIONS-r9 V23, M23: six keys, strict (unknown key -> the SDK's isError); offset/after are
@@ -68,17 +68,31 @@ function callText(queries: string[], scope: SearchScope, source: string | undefi
 
 interface Entry { qi: number; pos: number; hit: Hit; }
 
+// ADR-0009 §8.2: with source:"decision", empty `queries` (or a query with no words) lists every
+// decision row in scope, newest first, paged by `offset` like any relevance page.
+function decisionQueries(input: CtxSearchInput): string[] {
+  return input.source === DECISION_SOURCE && input.queries.length === 0 ? [""] : input.queries;
+}
+
+function page(db: DbHandle, q: string, input: CtxSearchInput, scope: SearchScope, ctx: ToolContext, offset: number): Hit[] {
+  if (input.source === DECISION_SOURCE && q.trim() === "") {
+    return ftsListSource(db, DECISION_SOURCE, scope, ctx.project, ctx.sessionId, SEARCH_PAGE_SIZE, offset);
+  }
+  return ftsQuery(db, q, scope, ctx.project, ctx.sessionId, SEARCH_PAGE_SIZE, offset, input.source);
+}
+
 // impl/05 §6 steps 5-10. Hits are kept whole: when the next hit line would not fit OUTPUT_CAP, that
 // query (and every later one) gets a `More:` line starting at the first hit not shown (D-M2-6).
-function relevance(db: DbHandle, input: CtxSearchInput, scope: SearchScope, ctx: ToolContext): ToolReply {
+function relevance(db: DbHandle, given: CtxSearchInput, scope: SearchScope, ctx: ToolContext): ToolReply {
+  const input: CtxSearchInput = { ...given, queries: decisionQueries(given) };
   const offset = input.offset ?? 0;
   const seen = new Set<string>();
   const entries: Entry[] = [];
   const full = new Set<number>(); // query indexes whose page came back full
   input.queries.forEach((q, qi) => {
-    const page = ftsQuery(db, q, scope, ctx.project, ctx.sessionId, SEARCH_PAGE_SIZE, offset, input.source);
-    if (page.length === SEARCH_PAGE_SIZE) full.add(qi);
-    page.forEach((hit, i) => {
+    const hits = page(db, q, input, scope, ctx, offset);
+    if (hits.length === SEARCH_PAGE_SIZE) full.add(qi);
+    hits.forEach((hit, i) => {
       // Step 6: a (sourceId, ord) pair already returned by an earlier query of this call is dropped.
       const key = hit.sourceId + ":" + hit.ord;
       if (seen.has(key)) return;
