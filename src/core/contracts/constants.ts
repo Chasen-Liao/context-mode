@@ -1,4 +1,5 @@
 // impl/01 §3, impl/00 §3.2, TECH-SPEC §11, DECISIONS-r9. Every constant lives here; no other module writes these literals.
+import type { AgentId } from "./agents.js";
 
 export const SERVER_KEY = "context-mode"; // TECH-SPEC §3.8 rule 3
 export const TOOL_ORDER = Object.freeze(["ctx_execute","ctx_batch","ctx_index","ctx_search","ctx_resume","ctx_stats","ctx_doctor","ctx_upgrade","ctx_purge"] as const); // PRD §8, Q3b
@@ -300,3 +301,121 @@ export const BUNDLE_SHA_DEFINE = "__CTX_BUNDLE_SHA__"; // the one esbuild `defin
 declare const __CTX_BUNDLE_SHA__: string | undefined;
 // Release build: the commit sha of this bundle. Dev/test build (no define): undefined, D1 reports UNKNOWN.
 export const BUNDLE_SHA: string | undefined = typeof __CTX_BUNDLE_SHA__ === "string" ? __CTX_BUNDLE_SHA__ : undefined;
+
+// ctx_doctor (impl/07 §4-§5, ADR-0010; DEVIATIONS D-M5-C2-1). Order is the fixed row order; labels are ADR-0010's check names.
+export const DOCTOR_CHECK_ORDER = Object.freeze(["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"] as const);
+export const DOCTOR_LABEL: Readonly<Record<(typeof DOCTOR_CHECK_ORDER)[number], string>> = Object.freeze({
+  D1: "version", D2: "node", D3: "host config", D4: "v1 leftovers", D5: "hook round trip", D5b: "double-fire",
+  D6: "MCP", D7: "project and worktree", D8: "context.db", D9: "index", D10: "enforcement mode",
+});
+export const HOOK_FIXTURE_DIR = "fixtures"; // impl/00 §1 file tree: <bundle>/fixtures/hook-roundtrip.json (D-M5-arch-4)
+export const HOOK_FIXTURE_FILE = "hook-roundtrip.json"; // D5 fixture, one JSON object keyed by agent id
+export const HOOK_ENTRY_FILE = "hook.mjs"; // D5 runs this next to the server bundle (D-M3-arch-3)
+export const REPORT_HEADER = "| Check | Status | Detail | Fix |"; // impl/07 §4 Output
+export const REPORT_HEADER_RULE = "|---|---|---|---|";
+export const REPORT_TRUNCATED_LINE = `(report truncated at ${REPORT_CAP} B; run ctx_doctor again after the first fix)`; // impl/07 §4 step 4
+export function DOCTOR_FAIL_LINE(host: string, check: string, cause: string, command: string): string {
+  return `FAIL ${host}: ${check} — ${cause}. Fix: ${command}`; // ADR-0010 per-host FAIL string, impl/07 §4 step 2
+}
+export const DOCTOR_FIX_UPGRADE = "run ctx_upgrade"; // D1, D3, D4, D8 stale schema
+export const D1_NO_NETWORK_DETAIL = "no network"; // UNKNOWN
+export const D1_DEV_BUILD_DETAIL = "dev build"; // UNKNOWN: BUNDLE_SHA unset (D-M5-arch-5)
+export const D1_UPDATE_DETAIL = "update available"; // FAIL (D-M5-arch-5)
+export const GIT_LS_REMOTE = "ls-remote"; // git ls-remote <RELEASE_REPO_URL> <RELEASE_BRANCH>
+export const D2_NODE_FIX = `install Node ${NODE_MIN} or later`;
+export function D2_NODE_DETAIL(version: string): string { return `Node ${version} is below ${NODE_MIN}`; }
+export const D2_SQLITE_DETAIL = "node:sqlite failed to load";
+export const D2_SQLITE_FIX = "run ctx_doctor";
+export function D2_BUN_DETAIL(version: string): string { return `running under Bun ${version}`; }
+export const D3_PARTS = Object.freeze(["MCP entry", "hook entries", "hook timeout"] as const); // D3 names which of the 3 is wrong
+export const D4_REASON_JOIN = "; ";
+export const D5_CODEX_UNTRUSTED_DETAIL = "Codex hooks not trusted"; // DECISIONS-r9 R6, status UNKNOWN
+export function D5_NO_FIXTURE_DETAIL(agent: string): string { return `no recorded fixture for ${agent}`; } // D-M5-arch-4
+export const D5B_DETAIL = "both Claude Code hooks and VS Code chat.useClaudeHooks are active for this repo";
+export const D5B_FIX = "disable chat.useClaudeHooks or the Claude Code hooks block";
+export const VSCODE_CLAUDE_HOOKS_SETTING = "chat.useClaudeHooks"; // D5b
+export const VSCODE_SETTINGS_FILE = "settings.json"; // <repo>/.vscode/settings.json (D5b)
+export const D6_UNKNOWN_DETAIL = "no clientInfo or protocolVersion on the request"; // UNKNOWN, never FAIL
+export function D7_DETAIL(got: string): string { return `resolved project source ${got} does not match the host's actual cwd`; }
+export const D7_FIX = "restart the agent in the correct directory";
+export function D8_STALE_SCHEMA_DETAIL(got: number, want: number): string { return `stale schema (v${got}, expected v${want})`; }
+export const D8_INTEGRITY_DETAIL = "integrity_check failed";
+export const D8_INTEGRITY_FIX = "doctor will heal context.db on the next run";
+export const D8_HEALED_LOSSLESS_DETAIL = "healed (lossless)";
+export function D8_HEALED_RECREATE_DETAIL(ts: string): string { return `healed by recreate — old data kept at context.db.${ts}.bak`; }
+export const INTEGRITY_OK = "ok"; // PRAGMA integrity_check single-row pass value
+export const HEAL_BACKUP_SUFFIX = ".bak"; // <file>.<ts>.bak
+export function D9_INDEX_DETAIL(sources: number, chunks: number): string { return `${sources} sources, ${chunks} chunks indexed`; }
+
+// Plugin root and git-checkout upgrade (impl/07 §1, §6; ADR-0010, ADR-0011).
+export const PLUGIN_CACHE_DIR_NAME = "cache"; // ~/.claude/plugins/cache/<marketplace>/context-mode (HOST_CONFIG_DIR_NAME, HOST_PLUGINS_DIR_NAME)
+export const PLUGIN_MARKETPLACE_NAME = "context-mode"; // ADR-0011 install: context-mode@context-mode
+export const DATA_PLUGINS_DIR_NAME = "plugins"; // <DATA_ROOT>/plugins/<agent>/{current,<sha>}
+export const PLUGIN_CURRENT_LINK = "current"; // symlink to the active version dir
+export const PLUGIN_ROLLBACK_GENERATIONS = 1; // impl/07 §6 step 4d: one kept previous dir
+export const RELEASE_SUMS_FILE = "SHA256SUMS"; // impl/07 §6 step 4b
+export const GIT_REMOTE_NAME = "origin";
+export const EXTENSIONS_DIR_NAME = "extensions"; // Gemini/Qwen: <agent home>/extensions/context-mode
+// Agent home dir segments under $HOME (ADR-0011 table; impl/07 §3 `home`). VS Code is project scope (<project>/.vscode).
+export const AGENT_HOME_DIR: Readonly<Record<AgentId, readonly string[]>> = Object.freeze({
+  "claude-code": [".claude"], codex: [".codex"], gemini: [".gemini"], qwen: [".qwen"], "copilot-cli": [".copilot"],
+  vscode: [".vscode"], kiro: [".kiro"], zcode: [".zcode"], pi: [".pi"], opencode: [".config", "opencode"],
+});
+export const UPGRADE_RESTART_LINE = "restart needed"; // impl/07 §6 step 8
+export const UPGRADE_HOST_AREA = "host update"; // impl/07 §6 step 4
+export const UPGRADE_REMOVED = "removed"; // impl/07 §6 step 6
+export const UPGRADE_DATA_KEPT = "user data kept (confirmDelete not set)"; // impl/07 uninstall step 4
+export const UPGRADE_DEFAULT_MODE = "upgrade"; // A-T4
+// ADR-0011 "Release steps" c): host update commands for host-managed agents. Copilot CLI: "test first" (no command yet).
+export const UPGRADE_HOST_COMMAND: Readonly<Partial<Record<AgentId, string>>> = Object.freeze({
+  "claude-code": "claude plugin marketplace update context-mode && claude plugin update context-mode@context-mode",
+  codex: "rewrite config.toml's [mcp_servers.context-mode*] block to the v2 entry, then restart Codex",
+  gemini: "gemini extensions install https://github.com/mksglu/context-mode --ref release --auto-update",
+  qwen: "qwen extensions install https://github.com/mksglu/context-mode --ref release --auto-update",
+});
+export const PI_GIT_PACKAGE = "git:github.com/mksglu/context-mode@release"; // ADR-0011 Pi row
+export const OPENCODE_GIT_SPEC = "git+https://github.com/mksglu/context-mode.git#release"; // ADR-0011 OpenCode row
+
+// v1 footprint names (ADR-0011 "v1 cleanup"; impl/07 §3). Script names are the v1 hooks/**/*.mjs event scripts.
+export const V1_SCRIPT_NAMES = Object.freeze([
+  "afteragentresponse.mjs", "aftermodel.mjs", "aftertool.mjs", "agentspawn.mjs", "beforeagent.mjs", "beforetool.mjs",
+  "posttooluse.mjs", "precompact.mjs", "precompress.mjs", "pretooluse.mjs", "sessionend.mjs", "sessionstart.mjs",
+  "stop.mjs", "userpromptsubmit.mjs",
+] as const);
+export const V1_HOOK_COMMAND = "context-mode hook";
+export const V1_CODEX_HOOK_COMMAND = "context-mode hook codex";
+export const V1_CODEX_HOOKS_DIR = Object.freeze(["hooks", "codex"] as const); // path segments of hooks/codex/*.mjs
+export const V1_CACHE_HEAL_NAME = "context-mode-cache-heal"; // hooks/context-mode-cache-heal.{mjs,sh}
+export const V1_CACHE_HEAL_EXTS = Object.freeze([".mjs", ".sh"] as const);
+export const V1_STATUSLINE_COMMAND = "context-mode statusline"; // report only, never removed
+export const V1_PI_PACKAGE = "npm:context-mode";
+export const V1_OPENCODE_PLUGIN_SPEC = "context-mode"; // bare npm spec in .plugin[]
+export const V1_TMP_PREFIX = "context-mode-"; // <os tmp>/context-mode-*
+export const V1_TOML_SECTION_PREFIX = "[mcp_servers.context-mode"; // codex config.toml section header start
+export const V1_HOOKS_DIR_NAME = "hooks";
+export const SETTINGS_FILE = "settings.json"; // claude-code, gemini, qwen; pi under agent/
+export const CLAUDE_USER_CONFIG_FILE = ".claude.json"; // $HOME/.claude.json
+export const HOOKS_JSON_FILE = "hooks.json"; // codex, zcode cli/
+export const CONFIG_TOML_FILE = "config.toml"; // codex
+export const CONFIG_JSON_FILE = "config.json"; // zcode cli/
+export const ZCODE_CLI_DIR = "cli";
+export const OWN_HOOK_FILE = "context-mode.json"; // copilot-cli ~/.copilot/hooks/, vscode <project>/.github/hooks/
+export const GITHUB_DIR_NAME = ".github";
+export const VSCODE_DIR_NAME = ".vscode";
+export const VSCODE_MCP_FILE = "mcp.json";
+export const KIRO_AGENT_FILE = Object.freeze(["agents", "default.json"] as const);
+export const PI_AGENT_DIR = "agent";
+export const OPENCODE_CONFIG_FILES = Object.freeze(["opencode.jsonc", "opencode.json"] as const); // .jsonc wins (#849)
+export const JSONC_EXT = ".jsonc";
+export const TOML_EXT = ".toml";
+export const MCP_SERVERS_KEY = "mcpServers";
+export const HOOKS_KEY = "hooks";
+export const STATUS_LINE_KEY = "statusLine";
+export const PI_PACKAGES_KEY = "packages";
+export const OPENCODE_PLUGIN_KEY = "plugin";
+export const V1_DATA_DIR_NAME = "context-mode"; // <agent home>/context-mode/
+
+// Pi / OpenCode in-process entries (impl/12 §3.1 A21, §4.1 A28, §4.4 step 1).
+export const PLUGIN_ID = SERVER_KEY;
+export const PLUGIN_NAME = SERVER_KEY;
+export const OPENCODE_TOOL_PREFIX = SERVER_KEY + "_";
