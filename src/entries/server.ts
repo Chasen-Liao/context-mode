@@ -122,16 +122,18 @@ export async function startServer(argv: string[], env: NodeJS.ProcessEnv): Promi
   // impl/00 §5.2 step 5, ADR-0009 §0: one journal row per own call (D-M1-10).
   async function journal(project: ProjectContext, ctx: ToolContext, name: string, reply: ToolReply): Promise<void> {
     const db = await ownDb(project);
+    // D-M2-2: the handler's journal facts when it gives them, else the D-M1-T10-1 defaults (D-M4-A-1).
+    const facts = reply.journal;
     appendEvent(db, {
       session_id: ctx.sessionId,
       worktree: project.worktree,
       agent: project.agent,
-      kind: reply.isError ? "toolerr" : "cmd",
+      kind: reply.isError ? "toolerr" : facts?.kind ?? "cmd", // an error is toolerr, as the hook writes it
       tool: name,
-      key: null, // D-M1-T10-1: the key rule comes with the real handlers (ADR-0009 §1)
-      path: null,
+      key: facts?.key ?? null,
+      path: facts?.path ?? null,
       ok: reply.isError ? 0 : 1,
-      exit_code: null,
+      exit_code: facts?.exit_code ?? null,
       bytes: reply.sandboxBytes,
       body: reply.text,
       turn: ctx.turn,

@@ -3,10 +3,10 @@
     "content": [
       {
         "type": "text",
-        "text": "ctx_stats is not built yet; milestone M4 builds it. Fix: use your normal tools until then."
+        "text": "ctx_stats: 0% kept out all-time, 0% this session.\n\n| Scope | Produced | Returned | Saved | Reduction % |\n|---|---|---|---|---|\n| session | 0 B | 421 B | 0 B | 0 |\n| project | 0 B | 421 B | 0 B | 0 |\n| all-time | 0 B | 421 B | 0 B | 0 |\n| agent claude-code | 0 B | 421 B | 0 B | 0 |"
       }
     ],
-    "isError": true
+    "isError": false
   },
   "rowsBefore": 1,
   "rowsAfterIdle": 1,

@@ -80,7 +80,10 @@ test("[M1] GP8/four-writers-one-db: 0 busy errors reach the tool result, integri
   }
   // One journal row per call: no lost write, no retried duplicate (D-M1-10).
   const events = dumpDb(dbPath, ["events"]).events;
-  const texts = [...new Set(results.map((r) => r?.content?.[0]?.text))].sort();
+  // The table's byte cells depend on which of the 40 concurrent calls journalled first, so the golden
+  // holds the summary line only; every reply must be the stats reply, never an error (DEVIATIONS D-M4-A-4).
+  assert.ok(results.every((r) => r?.isError === false), "every ctx_stats call succeeds");
+  const texts = [...new Set(results.map((r) => (r?.content?.[0]?.text ?? "").split("\n")[0]))].sort();
   checkGolden("GP8", "four-writers-one-db", normalize({ resultsCount: results.length, busyErrors: busyErrors.length, texts, integrity, eventRows: events.length }));
 });
 
