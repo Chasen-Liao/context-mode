@@ -216,3 +216,21 @@ export const SED_QUIET_FLAGS = Object.freeze(["-n", "--quiet", "--silent"] as co
 export const JQ_COMMAND = "jq"; // a dump only with the identity filter (D-M3-E4-7)
 // impl/08 §6.1 step 6: Read input path key per host shape (Claude file_path, Gemini/Qwen absolute_path, path). D-M3-E4-4.
 export const READ_PATH_KEYS = Object.freeze(["file_path", "absolute_path", "path"] as const);
+
+// impl/09 §4 hooks dispatch (DEVIATIONS D-M3-H2-1..6). Keys and texts the dispatch reads; no numbers.
+export const OWN_TOOL_PREFIX = "ctx_"; // §4.6 step 1: canonical names of this server's own tools
+export const SHELL_TOOL = "Bash"; // §4.6 step 2: canonical shell tool -> journal kind "cmd"
+export const EDIT_TOOLS = Object.freeze(["Write", "Edit"] as const); // §4.6 step 2 -> journal kind "edit"
+export const EDIT_PATH_KEYS = Object.freeze(["file_path", "path"] as const); // §4.6 step 3 path field, in order
+export const EXIT_CODE_LINE_PREFIX = "Exit code "; // §4.6 step 3, ADR-0009 §1: first result line
+export const RESUME_HINT_KEY = "resume-hint"; // §4.3 step 2 onceKey
+export const COMPACT_STATE_KEY = "compact-state"; // §4.3 step 1 onceKey
+export const PENDING_COMPACT_KEY = "pending-compact"; // §4.4 step 2 onceKey
+export const PENDING_COMPACT_META_PREFIX = "pending_compact:"; // ADR-0009 §6 meta key, + session id
+export const PENDING_COMPACT_FLAG = "1";
+// §4.3 step 3 text; {prefix} is row.toolNamePrefix so it names the platform tool (GP6/hint-names-platform-tool, D-M3-H2-2).
+export const RESUME_HINT = "This session may have run before. Call {prefix}ctx_resume for a summary of what happened.";
+export const SUBAGENT_SOURCE_PREFIX = "subagent:"; // §4.6 step 5 source label: + canonical name + ":" + turn
+export const RUN_WRAPPER_FILE = "run.mjs"; // §4.5 step 3 case B, D-M3-arch-3: next to hook.mjs
+export const RUN_WRAPPER_NODE = "node"; // case B wrapper command head
+export const AGENT_ARG = "--agent"; // hook entry argv flag (impl/09 §5.2 step 1)
