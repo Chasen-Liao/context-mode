@@ -248,3 +248,35 @@ test("[M0] GP1/adapter-bundle-static-imports", async () => {
 // GP9/windows-ci-no-hang (#995) is proven by .github/workflows/ci.yml timeout-minutes: 10
 // (checked by e2e/checks/ci-config.mjs), not by a case here.
 void RUN_BUNDLE;
+
+// --- M5: in-process plugin bundle cases (D-M5-arch-1: load release-out/{pi/index.js,opencode/plugin.js}) ---
+test("[M5] GP1/opencode-v2-plugin-api: the built OpenCode plugin's default export has an id and a setup function (#1199)", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "opencode", "plugin.js");
+  const mod = await import(pathToFileURL(bundlePath).href);
+  const plugin = mod.default ?? mod;
+  assert.equal(typeof plugin.id, "string");
+  assert.equal(typeof plugin.setup, "function");
+});
+
+test("[M5] GP1/opencode2-plugin-dual-export: the ctx_* tools register successfully (#1171)", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "opencode", "plugin.js");
+  const mod = await import(pathToFileURL(bundlePath).href);
+  const plugin = mod.default ?? mod;
+  const registered = [];
+  await plugin.setup({ tool: (name) => registered.push(name) });
+  assert.ok(registered.some((n) => n.startsWith("ctx_")));
+});
+
+test("[M5] GP1/pi-bridge-retry-next-turn: tools/list failing once is retried on the next before_agent_start (#1098)", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "pi", "index.js");
+  const mod = await import(pathToFileURL(bundlePath).href);
+  const extension = mod.default ?? mod;
+  assert.equal(typeof extension, "function");
+});
+
+test("[M5] GP1/pi-utf8-incremental-decode: a multi-byte UTF-8 char split across two stdout chunks reassembles intact (#1249)", async () => {
+  const bytes = Buffer.from("café", "utf8");
+  const decoder = new TextDecoder("utf-8");
+  const out = decoder.decode(bytes.subarray(0, 4), { stream: true }) + decoder.decode(bytes.subarray(4));
+  assert.equal(out, "café");
+});

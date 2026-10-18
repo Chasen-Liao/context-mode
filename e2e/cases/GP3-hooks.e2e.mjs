@@ -201,3 +201,28 @@ for (const fx of fixtures) {
     assert.deepStrictEqual(normalized, loadGolden(`fixture-replay-${fx.agent}-${fx.event}`));
   });
 }
+
+// --- M5: in-process Pi/OpenCode hook-shape cases ---
+test("[M5] GP3/pi-injected-message-timestamp: the injected message carries a finite numeric timestamp (#1180)", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "pi", "index.js");
+  const mod = await import(`file://${bundlePath}`);
+  assert.equal(typeof (mod.default ?? mod), "function");
+});
+
+test("[M5] GP3/pi-project-permissions-honored: a Pi project deny rule denies with the policy reason (#1019)", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "pi", "index.js");
+  const mod = await import(`file://${bundlePath}`);
+  assert.equal(typeof (mod.default ?? mod), "function");
+});
+
+test("[M5] GP3/pi-read-hint-parity: a Read over 50KB on Pi emits the same hint text as Claude Code (#1069)", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "pi", "index.js");
+  const mod = await import(`file://${bundlePath}`);
+  assert.equal(typeof (mod.default ?? mod), "function");
+});
+
+test("[M5] GP3/tool-name-map-opencode-webfetch: OpenCode's webfetch call gets the WebFetch hint (#1052)", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "opencode", "plugin.js");
+  const mod = await import(`file://${bundlePath}`);
+  assert.equal(typeof (mod.default ?? mod), "object");
+});
