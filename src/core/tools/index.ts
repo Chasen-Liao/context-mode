@@ -1,10 +1,11 @@
 // impl/05 §3 (ctx_index), §4 (SSRF lives in sandbox/fetch.ts), impl/00 §4 (indexText), DECISIONS-r9 M23
 // (ONE_OF_INPUT text from the canonical 00 §3.3 table), DEVIATIONS D-M2-1 (ftsInsert owns the id and
-// the write batches), D-M2-2 (journal facts on the reply), D-M2-6 (capBytes is a final bound), D-M2-T8-1.
+// the write batches), D-M2-2 (journal facts on the reply), D-M2-6 (capBytes is a final bound), D-M2-T8-1,
+// ADR-0009 §8.2 + D-M4-arch-5 (a user label "decision" is stored as "decision (user)").
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { z } from "zod/v4";
-import { EXEC_TIMEOUT_MS, OUTPUT_CAP } from "../contracts/constants.ts";
+import { DECISION_SOURCE, DECISION_USER_LABEL, EXEC_TIMEOUT_MS, OUTPUT_CAP } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import type { CtxIndexInput, DbHandle, ProjectContext, SourceKind, ToolContext, ToolReply } from "../contracts/types.ts";
 import { walkDir } from "../index/walk.ts";
@@ -35,6 +36,12 @@ const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 // One text to index. `read` runs only when the item is stored, so a folder never holds every file at once.
 interface Item { sourceKind: SourceKind; label: string; kind: ChunkKind; read(): string | undefined; }
+
+// ADR-0009 §8.2: "decision" is the reserved ctx_search source; a user text with that label is renamed
+// once, for every branch, so the reserved label only ever names decision rows.
+function userLabel(label: string): string {
+  return label === DECISION_SOURCE ? DECISION_USER_LABEL : label;
+}
 
 function kindOfPath(p: string): ChunkKind {
   return EXT_KIND[extname(p).toLowerCase()] ?? "text";
@@ -105,7 +112,9 @@ async function handler(input: CtxIndexInput, ctx: ToolContext): Promise<ToolRepl
   const given = INPUT_FIELDS.filter((f) => input[f] !== undefined);
   if (given.length !== 1) return { text: new CtxError("ONE_OF_INPUT", { names: INPUT_FIELDS.join(", ") }).toLine(), isError: true, sandboxBytes: 0 };
   try {
-    const { items, from } = await itemsOf(input, ctx);
+    const got = await itemsOf(input, ctx);
+    const items = got.items.map((it) => ({ ...it, label: userLabel(it.label) }));
+    const from = userLabel(got.from);
     // Steps 3-4: one sources row per text, written by ftsInsert in INDEX_WRITE_CHUNK batches.
     const db = await openDb(ctx.project);
     let sources = 0;

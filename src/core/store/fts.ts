@@ -1,10 +1,12 @@
 // impl/02 §9, impl/00 §4 (ftsInsert/ftsQuery signatures), impl/05 §0 + ctx_search steps 5-8,
 // DECISIONS-r9 M19 (order), M20 (RRF_K), M21 (SNIPPET_MAX_BYTES), V24 (tokenizer),
 // ADR-0009 §8.3 (RRF for scope "project"), DEVIATIONS D-M1-8, D-M1-9, D-M1-T8-1..4.
+// M4: ftsListSource (empty-query listing of one source, ADR-0009 §8.2); the timeline skips the
+// reserved "decision" chunk sources, whose rows it already reads from the journal (D-M4-arch-5).
 // M2: ftsInsert returns the new id (D-M2-1); ftsQueryTimeline (ADR-0009 §8.1, DECISIONS-r9 M14-M18,
 // D-M2-3, D-M2-T3-1); rankTexts, the in-memory BM25 form selectChunksInMemory calls (impl/05 §5 step 2).
 import { CtxError } from "../contracts/errors.ts";
-import { INDEX_WRITE_CHUNK, RRF_K, SNIPPET_MAX_BYTES } from "../contracts/constants.ts";
+import { DECISION_SOURCE, INDEX_WRITE_CHUNK, RRF_K, SNIPPET_MAX_BYTES } from "../contracts/constants.ts";
 import type { Chunk, DbHandle, Hit, ProjectContext, SearchScope, SourceRow, TimelineRow } from "../contracts/types.ts";
 import { withWrite } from "./db.ts";
 import { applyMigrations } from "./schema.ts";
@@ -148,6 +150,53 @@ export function ftsQuery(
   }));
 }
 
+// Every chunk of the sources labelled `source` in scope, no MATCH (ADR-0009 §8.2: empty `queries`
+// with source:"decision" returns every decision row in scope). Order = the M19 rule without a score:
+// current session first, current worktree, newest source first, ord asc. Bodies are read for the
+// page rows only, as in QUERY.
+const LIST = `
+WITH p AS (
+  SELECT c.rowid AS rid, c.source_id AS source_id, c.ord AS ord, s.session_id AS session_id,
+         s.worktree AS worktree, s.label AS label
+  FROM chunks c JOIN sources s ON s.id = c.source_id
+  WHERE c.source_id IN (
+    SELECT id FROM sources
+    WHERE label = :source
+      AND (:scope <> 'session' OR session_id = :session_id)
+      AND (:scope <> 'worktree' OR worktree = :worktree))
+  ORDER BY (s.session_id = :session_id) DESC, (s.worktree = :worktree) DESC, c.source_id DESC, c.ord ASC
+  LIMIT :limit OFFSET :offset
+)
+SELECT p.source_id AS source_id, p.label AS label, p.ord AS ord, c.body AS body, 0 AS score
+FROM p JOIN chunks c ON c.rowid = p.rid
+ORDER BY (p.session_id = :session_id) DESC, (p.worktree = :worktree) DESC, p.source_id DESC, p.ord ASC`;
+
+export function ftsListSource(
+  db: DbHandle,
+  source: string,
+  scope: SearchScope,
+  ctx: ProjectContext,
+  sessionId: string,
+  limit: number,
+  offset: number,
+): Hit[] {
+  const rows = db.raw.prepare(LIST).all({
+    source,
+    scope,
+    session_id: sessionId,
+    worktree: ctx.worktree,
+    limit,
+    offset,
+  }) as unknown as QueryRow[];
+  return rows.map((r) => ({
+    sourceId: Number(r.source_id),
+    label: r.label,
+    ord: Number(r.ord),
+    snippet: highlight(r.body, "", SNIPPET_MAX_BYTES),
+    score: Number(r.score),
+  }));
+}
+
 // impl/02 §9.3, impl/05 step 8, D-M1-9, D-M1-T8-3: clip first at a code-point boundary, then
 // escape. The clip stops at the last code point whose escaped form still fits maxBytes, so the
 // escaped output never exceeds maxBytes and never ends inside an entity. No emphasis markers in M1.
@@ -189,6 +238,7 @@ WITH s AS (
   SELECT id, label, created_ts FROM sources
   WHERE created_ts > :after${TL_SCOPE}
     AND (:source IS NULL OR label = :source)
+    AND label <> :reserved
 )
 SELECT id, label, created_ts FROM s
 WHERE created_ts <= IFNULL((SELECT created_ts FROM s ORDER BY created_ts, id LIMIT 1 OFFSET :off), created_ts)
@@ -198,10 +248,13 @@ ORDER BY created_ts ASC, id ASC`;
 const TL_FIRST_CHUNK = `
 SELECT source_id, body FROM chunks WHERE ord = 0 AND source_id IN (SELECT value FROM json_each(:ids))`;
 
+// Content rows skip the reserved "decision" chunk sources: a decision already is a journal row
+// (D-M4-arch-5), so source:"decision" and the unfiltered timeline show it once.
 // Rows remain past the page when either DB source has a row newer than the page's last timestamp.
 const TL_MORE = `
 SELECT EXISTS(SELECT 1 FROM events WHERE created_at > :after${TL_SCOPE} AND (:source IS NULL OR kind = :source))
-    OR EXISTS(SELECT 1 FROM sources WHERE created_ts > :after${TL_SCOPE} AND (:source IS NULL OR label = :source)) AS more`;
+    OR EXISTS(SELECT 1 FROM sources WHERE created_ts > :after${TL_SCOPE} AND (:source IS NULL OR label = :source)
+                 AND label <> :reserved) AS more`;
 
 interface EventTlRow { seq: number; kind: string; key: string | null; path: string | null; body: string | null; created_at: number; }
 interface SourceTlRow { id: number; label: string; created_ts: number; }
@@ -242,6 +295,7 @@ export function ftsQueryTimeline(
     source: source ?? null,
   };
   const from = after ?? -1;
+  const reserved = DECISION_SOURCE;
   const off = limit - 1;
   const merged: TimelineRow[] = [];
 
@@ -257,7 +311,7 @@ export function ftsQueryTimeline(
     });
   }
 
-  const srcRows = db.raw.prepare(TL_SOURCES).all({ ...filter, after: from, off }) as unknown as SourceTlRow[];
+  const srcRows = db.raw.prepare(TL_SOURCES).all({ ...filter, after: from, off, reserved }) as unknown as SourceTlRow[];
   if (srcRows.length > 0) {
     const bodies = new Map<number, string>();
     const ids = JSON.stringify(srcRows.map((r) => Number(r.id)));
@@ -283,7 +337,7 @@ export function ftsQueryTimeline(
   const rows = merged.slice(0, end);
   if (rows.length === 0) return { rows, more: false };
   if (merged.length > end) return { rows, more: true };
-  const res = db.raw.prepare(TL_MORE).get({ ...filter, after: rows[rows.length - 1].ts }) as { more: number };
+  const res = db.raw.prepare(TL_MORE).get({ ...filter, after: rows[rows.length - 1].ts, reserved }) as { more: number };
   return { rows, more: Number(res.more) === 1 };
 }
 
