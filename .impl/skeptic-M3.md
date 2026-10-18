@@ -60,6 +60,41 @@ event (e.g. the detached-write completion in #5 above), never a bare `setTimeout
 --generated-only`) and `node scripts/gate.mjs --milestone M3` three times full: identical counts
 every time (see review-M3.md). No flake reproduced; nothing to fix.
 
+## Re-verification (this pass)
+
+Re-ran two of the mutation checks fresh, from source, not from the prior write-up:
+
+- `src/core/policy/decide.ts`: changed `deny()` to always return `reason: ""`, rebuilt
+  (`build/build.mjs --generated-only`), ran `tests/v2/policy/decide.test.mjs`. Result: fails, e.g.
+  expected `'Blocked by security policy: matches deny pattern Read(...)'`, got `''`. Confirms the
+  test asserts the reason text, not just the verdict. Reverted, rebuilt, re-ran: 0 fail.
+- `src/core/policy/subagent.ts`: made `pickSubagentCase` return `"A"` unconditionally (first line of
+  the function body), rebuilt, ran `tests/v2/hooks/dispatch.test.mjs`. Result: fails on the case-B
+  fixture (`case B PreToolUse deny: reason names run.mjs next to the hook bundle`) — expects the
+  decision to start with `node "` (the run.mjs wrapper line) and gets the case-A/C decision instead.
+  Reverted, rebuilt, re-ran: 0 fail.
+
+Both mutations are exactly "replace the feature's decision with a constant" per the skeptic brief,
+and both are caught. No code change was needed — the existing tests already discriminate.
+
+Did not re-mutate run-wrapper.ts or the hook-entry detached-write ordering test this pass; the prior
+write-up's reasoning for those (file read above) still holds and is not contradicted by anything
+found here.
+
+Full suite after revert, from clean source (no diff against HEAD):
+`node scripts/gate.mjs --milestone M3` → `PASS keep-pass 107/107`, `PASS v2-unit 611/612`,
+`PASS gp-cases ... exit 0`, `PASS prompt-lint`, `PASS live ... 0/16 cases` — run twice, same counts.
+
+## Out-of-scope observation (flagged, not fixed here)
+
+While re-running `node scripts/gate.mjs --milestone M3` to re-check counts, one run actually executed
+live model cases (5/16, real cost) and showed `FAIL T-PAR` and `FAIL T-SUB`, while two other runs in
+the same session reported `0/16 cases` for the same live step. The live suite is not a GP/14a case of
+M3 and is out of this skeptic pass's scope (and each run spends real money), so no further live runs
+were made to chase this down. Flagging only: the 0/16-vs-5/16 run-count difference looks like the live
+step sometimes skips and sometimes runs, which is worth a look outside this review, not a confirmed
+M3 regression.
+
 ## Verdict
 
 M3's test suite discriminates against the regressions it claims to catch (deny vs allow reason text,
