@@ -589,3 +589,94 @@ test("[M2] GP5/snippet-code-point-safe", async () => {
   }
   golden("snippet-code-point-safe", { results });
 });
+
+// ---- M4-I1: ADR-0009 §8.2-§8.4 over MCP (DECISIONS-r6 D2-D4, DEVIATIONS D-M4-arch-5) ----
+// Black-box: two client connections are two sessions in one worktree. Decision rows come from the
+// hook (GP6 decision-* cases); here only the server-side rules are checked.
+
+function hitLabelsOf(text) {
+  const out = [];
+  for (const line of text.split("\n")) {
+    const at = line.indexOf(" #");
+    if (at > 0 && !line.startsWith("Query ") && !line.startsWith("More:")) out.push(line.slice(0, at));
+  }
+  return out;
+}
+
+async function twoSessions(fn) {
+  const home = realpathSync(mkdtempSync(path.join(tmpdir(), "cm-gp5-m4-home-")));
+  const proj = realpathSync(mkdtempSync(path.join(tmpdir(), "cm-gp5-m4-")));
+  execFileSync("git", ["init", "-q", proj]);
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: proj };
+  const init = { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0.0.0" } };
+  const a = spawnBundle(SERVER_BUNDLE, env);
+  const b = spawnBundle(SERVER_BUNDLE, env);
+  try {
+    await a.request("initialize", init);
+    await b.request("initialize", init);
+    const call = (c, name, args) => c.request("tools/call", { name, arguments: args });
+    return await fn({ a: (n, x) => call(a, n, x), b: (n, x) => call(b, n, x) });
+  } finally {
+    await a.close();
+    await b.close();
+    rmSync(proj, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+}
+
+test("[M4] GP5/same-session-outranks-cross-session", async () => {
+  const order = await twoSessions(async ({ a, b }) => {
+    // Older and higher BM25 in the other session; fresh and weaker in the caller's session (#895).
+    await b("ctx_index", { content: "rrfterm rrfterm rrfterm", source: "older-cross" });
+    await a("ctx_index", { content: "rrfterm " + "pad ".repeat(30), source: "fresh-own" });
+    const out = await a("ctx_search", { queries: ["rrfterm"], scope: "project" });
+    assert.equal(out.isError, false);
+    const mine = hitLabelsOf(out.content?.[0]?.text ?? "");
+    const theirs = hitLabelsOf((await b("ctx_search", { queries: ["rrfterm"], scope: "project" })).content?.[0]?.text ?? "");
+    assert.deepEqual(mine, ["fresh-own", "older-cross"]);
+    assert.deepEqual(theirs, ["older-cross", "fresh-own"]);
+    return { mine, theirs };
+  });
+  golden("same-session-outranks-cross-session", order);
+});
+
+test("[M4] GP5/decision-user-label-renamed", async () => {
+  const out = await twoSessions(async ({ a }) => {
+    const indexed = await a("ctx_index", { content: "my decision notes", source: "decision" });
+    assert.equal(indexed.isError, false);
+    assert.ok((indexed.content?.[0]?.text ?? "").endsWith("from decision (user)."));
+    const reserved = await a("ctx_search", { queries: ["notes"], source: "decision" });
+    const user = await a("ctx_search", { queries: ["notes"], source: "decision (user)" });
+    const listed = await a("ctx_search", { queries: [], source: "decision" });
+    assert.ok((reserved.content?.[0]?.text ?? "").startsWith("No hits"));
+    assert.deepEqual(hitLabelsOf(user.content?.[0]?.text ?? ""), ["decision (user)"]);
+    assert.ok((listed.content?.[0]?.text ?? "").startsWith("No hits"));
+    return { indexed, reserved, user, listed };
+  });
+  golden("decision-user-label-renamed", out);
+});
+
+test("[M4] GP5/timeline-repeat-and-session-scope", async () => {
+  await twoSessions(async ({ a, b }) => {
+    await a("ctx_index", { content: "own row", source: "own" });
+    await b("ctx_index", { content: "their row", source: "theirs" });
+    const t1 = (await a("ctx_search", { queries: [], sort: "timeline" })).content?.[0]?.text ?? "";
+    const t2 = (await a("ctx_search", { queries: [], sort: "timeline" })).content?.[0]?.text ?? "";
+    // Each ctx_search call adds its own journal row (00 §5.2 step 5), so the second reply is the
+    // first one, in the same order, plus only rows newer than its last line.
+    assert.ok(t2.startsWith(t1 + "\n"), "same rows, same merged order:\n" + t1 + "\n---\n" + t2);
+    assert.ok(t1.includes("own row") && t1.includes("their row"), t1);
+    const sess = (await a("ctx_search", { queries: [], sort: "timeline", scope: "session" })).content?.[0]?.text ?? "";
+    assert.ok(sess.includes("own row") && !sess.includes("their row"), sess);
+  });
+});
+
+test("[M4] GP5/timeline-offset-relevance-after-invalid-args", async () => {
+  const out = await twoSessions(async ({ a }) => ({
+    offset: await a("ctx_search", { queries: [], sort: "timeline", offset: 0 }),
+    after: await a("ctx_search", { queries: ["x"], after: 0 }),
+  }));
+  assert.equal(out.offset.isError, true);
+  assert.equal(out.after.isError, true);
+  golden("timeline-offset-relevance-after-invalid-args", out);
+});
