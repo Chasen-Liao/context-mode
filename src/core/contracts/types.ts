@@ -159,3 +159,30 @@ export type ParseResult =
   | { ok: false; construct: ParseErrorConstruct };
 
 export type DenyKind = "curl" | "http" | "build" | "webfetch"; // impl/08 §6.2 denyMessage kind
+
+// M4 tools-session (impl/06 "Shared types"; DEVIATIONS D-M4-arch-2: compaction reads JournalRow, so no EventRow).
+export type CandidateSection =
+  | "last_request"
+  | "open_errors"
+  | "changed_files"
+  | "earlier_requests"
+  | "indexed_sources";
+
+export interface Candidate {
+  section: CandidateSection;
+  seq: number;
+  turn: number;
+  text: string;         // whole line, never pre-cut
+  bytes: number;        // UTF-8 byte length of `text`
+  repeatCount: number;  // how many journal rows this candidate folds (same key)
+  pinned: boolean;      // true only for the single "last_request" row
+}
+
+export interface ScoredCandidate extends Candidate {
+  score: number; // integer
+}
+
+// M4 tool inputs (impl/06 §4-§6; zod schemas in src/core/tools/registry.ts). Handlers take (input, ctx: ToolContext), D-M4-arch-3.
+export interface CtxResumeInput { session?: string; seq?: number; }
+export interface CtxStatsInput {} // no fields; any key is STATS_UNKNOWN_FIELD_LINE
+export interface CtxPurgeInput { session?: string; source?: string; project?: boolean; } // exactly one (impl/06 §6 step 1)

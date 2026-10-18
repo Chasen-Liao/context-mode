@@ -160,7 +160,9 @@ test("contracts source: no regex, imports only node:* or local type re-exports",
     assert.equal(/new RegExp|\.match\(|\.matchAll\(|\.replace\(|\.replaceAll\(|\.split\(\s*\//.test(src), false, `${f}: regex use`);
     for (const line of src.split("\n")) {
       const t = line.trim();
-      if (!t.startsWith("import ") && !(t.startsWith("export ") && t.includes(" from "))) continue;
+      // a re-export statement only; a string constant that contains " from " is not an import (M4 RESUME_NO_SESSION_LINE)
+      const reExport = ["export {", "export *", "export type {", "export type *"].some((h) => t.startsWith(h)) && t.includes(" from ");
+      if (!t.startsWith("import ") && !reExport) continue;
       const ok = t.includes('"node:') || t.includes('from "./agents.js"');
       assert.ok(ok, `${f}: forbidden import: ${t}`);
     }

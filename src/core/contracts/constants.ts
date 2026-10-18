@@ -246,3 +246,42 @@ export const SUBAGENT_SOURCE_PREFIX = "subagent:"; // §4.6 step 5 source label:
 export const RUN_WRAPPER_FILE = "run.mjs"; // §4.5 step 3 case B, D-M3-arch-3: next to hook.mjs
 export const RUN_WRAPPER_NODE = "node"; // case B wrapper command head
 export const AGENT_ARG = "--agent"; // hook entry argv flag (impl/09 §5.2 step 1)
+
+// M4 tools-session (impl/06 §2-§6; DEVIATIONS D-M4-arch-3..5). impl/06 gives these as exact reply texts,
+// so they are fixed lines here, not ERROR_TEXT keys (same rule as CANCELLED_LINE); impl/06 owns no constant.
+export const DECAY_SCALE = 1000; // impl/06 §2 step 6: undoes the x1000 baked into DECAY_X1000
+export const PERCENT_SCALE = 100; // impl/06 §5: reduction_pct = saved / max(1, produced) * 100
+export const SQLITE_BUSY_CODE = 5; // impl/06 §6 errors: SQLITE_BUSY primary code (via SQLITE_PRIMARY_CODE_MASK) -> PURGE_BUSY_LINE
+
+// ctx_resume (impl/06 §4 errors and step 5)
+export const RESUME_UNKNOWN_FIELD_LINE = "ctx_resume: unknown field — only session and seq are accepted.";
+export const RESUME_NO_SESSION_LINE = "ctx_resume: no session id — pass session or call from an active session.";
+export function RESUME_NO_ROW_LINE(seq: number): string {
+  return `ctx_resume: no row at seq ${seq} for this session.`;
+}
+export const RESUME_EMPTY_LINE = "ctx_resume: no journal rows for this session yet."; // not an error (step 5)
+
+// ctx_stats (impl/06 §5; DEVIATIONS D-M4-arch-4: sums sandbox_bytes/returned_bytes)
+export const STATS_UNKNOWN_FIELD_LINE = "ctx_stats: unknown field — this tool takes no arguments.";
+export function STATS_SUMMARY(allTimePct: number, sessionPct: number): string {
+  return `ctx_stats: ${allTimePct}% kept out all-time, ${sessionPct}% this session.`;
+}
+export const STATS_COLUMNS = Object.freeze(["Scope", "Produced", "Returned", "Saved", "Reduction %"] as const);
+export const STATS_NO_DATA = "no data — no tool calls recorded yet"; // step 4, PRD §12
+
+// ctx_purge (impl/06 §6)
+export const PURGE_SCOPES = Object.freeze(["session", "source", "project"] as const);
+export const PURGE_NO_SCOPE_LINE = "ctx_purge: pick one scope — session, source, or project.";
+export const PURGE_MANY_SCOPES_LINE = "ctx_purge: pick only one scope — session, source, or project.";
+export const PURGE_BUSY_LINE = "ctx_purge: database busy — try again."; // no retry loop on top of DB_TIMEOUT_MS
+export function PURGE_SUMMARY(rows: number, scope: (typeof PURGE_SCOPES)[number]): string {
+  return `ctx_purge: deleted ${rows} rows (scope: ${scope}). This cannot be undone.`;
+}
+
+// decision rows and the reserved search label (ADR-0009 §8.2, DECISIONS-r6 D3, DEVIATIONS D-M4-arch-5)
+export const DECISION_SOURCE = "decision"; // reserved ctx_search source label and its chunk source label
+export const DECISION_USER_LABEL = "decision (user)"; // ctx_index renames a user label equal to DECISION_SOURCE
+export const DECISION_TOOL = "AskUserQuestion"; // rule 1: PostToolUse of this tool
+export const DECISION_ANSWERS_KEY = "answers"; // rule 1: tool_response.answers (JSON); non-JSON writes no row
+export const DECISION_OPTION_KEY = "option"; // rule 2: journal key of an option-echo row
+export const DECISION_LABEL_JOIN = " | "; // rule 1: multi-select labels
