@@ -34,3 +34,29 @@ test("every ToolDef has a name, description, schema and handler", () => {
 test("no tool named ctx_route is registered (internal-only dispatch target)", () => {
   assert.ok(!TOOLS.some((t) => t.name === "ctx_route"));
 });
+
+// impl/11 §1 step 1, D-M4-arch-3: from M4 the session tools are the real modules, not the not-built stub.
+import { ctxResume } from "../../../src/core/tools/resume.ts";
+import { ctxStats } from "../../../src/core/tools/stats.ts";
+import { ctxPurge } from "../../../src/core/tools/purge.ts";
+
+for (const [name, mod] of [["ctx_resume", ctxResume], ["ctx_stats", ctxStats], ["ctx_purge", ctxPurge]]) {
+  test(name + " uses the real module's handler and schema (M4 stub dropped)", () => {
+    const t = TOOLS.find((x) => x.name === name);
+    assert.equal(t.handler, mod.handler);
+    assert.equal(t.schema, mod.schema);
+  });
+}
+
+test("only ctx_doctor and ctx_upgrade still reply the not-built line (milestone M5)", async () => {
+  const stubbed = [];
+  for (const t of TOOLS) {
+    if (t.name === "ctx_doctor" || t.name === "ctx_upgrade") {
+      const r = await t.handler({}, { sessionId: "s", project: {} });
+      assert.equal(r.text, t.name + " is not built yet; milestone M5 builds it. Fix: use your normal tools until then.");
+      assert.equal(r.isError, true);
+      stubbed.push(t.name);
+    }
+  }
+  assert.deepEqual(stubbed, ["ctx_doctor", "ctx_upgrade"]);
+});

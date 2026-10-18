@@ -1,6 +1,6 @@
 // impl/11 §1. The 9 tools in TOOL_ORDER: name, description (src/prompt/tools/<tool>.md, inlined by
 // build/build.mjs into src/prompt/_generated.ts), zod schema, readOnly, alwaysLoad, handler.
-// M0 skeleton: the tool modules do not exist yet, so each handler returns one isError line naming
+// Tools whose module is not built yet (M5: ctx_doctor, ctx_upgrade) return one isError line naming
 // the milestone that builds it (DEVIATIONS 2026-10-17 registry.ts rows). Each milestone swaps its
 // stub for the real handler import (impl/11 §1 step 1) and moves the schema next to it.
 import { z } from "zod/v4";
@@ -10,7 +10,10 @@ import { TOOL_DESCRIPTIONS } from "../../prompt/_generated.ts";
 import { ctxBatch } from "./batch.ts";
 import { ctxExecute } from "./execute.ts";
 import { ctxIndex } from "./index.ts";
+import { ctxPurge } from "./purge.ts";
+import { ctxResume } from "./resume.ts";
 import { ctxSearch } from "./search.ts";
+import { ctxStats } from "./stats.ts";
 
 export type ToolName = (typeof TOOL_ORDER)[number];
 
@@ -103,6 +106,9 @@ const BUILT: Readonly<Partial<Record<ToolName, BuiltTool>>> = Object.freeze({
   ctx_batch: ctxBatch,
   ctx_index: ctxIndex,
   ctx_search: ctxSearch,
+  ctx_resume: ctxResume, // M4 (D-M4-arch-3: handler (input, ctx), session from ctx.sessionId)
+  ctx_stats: ctxStats,
+  ctx_purge: ctxPurge,
 });
 
 function define(name: ToolName): RegisteredTool<unknown> {
