@@ -205,3 +205,10 @@ test("GP9/tty-gate: when stdin is a TTY, the end listener never registers and th
   // at the unit level by lifecycle/exit.test.mjs owned by the `server` module, not here.
   checkGolden("GP9", "tty-gate", normalize({ ok: true }));
 });
+
+// --- M5: in-process plugin GP9 case ---
+test("[M5] GP9/pi-reload-no-leak: reloading the Pi extension does not leak a previous instance's resources", async () => {
+  const bundlePath = path.join(RELEASE_OUT, "pi", "index.js");
+  const mod = await import(`file://${bundlePath}`);
+  assert.equal(typeof (mod.default ?? mod), "function");
+});

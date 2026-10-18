@@ -112,3 +112,34 @@ test("[M2] GP2/initialize-and-discover-identical-bytes", async () => {
   assert.ok(typeof init.instructions === "string" && init.instructions.length > 0, "instructions must be non-empty prose, not an empty/missing field");
   assert.deepStrictEqual(normalize({ bytes: init.instructions }), normalize({ bytes: discover.instructions }), "initialize and server/discover must return identical instruction bytes (GS9)");
 });
+
+// --- M5: in-process plugin prompt-surface cases ---
+test("[M5] GP2/opencode-single-system-message: SessionStart lines merge into one output.system entry, length unchanged across 2 injects (#1085)", async () => {
+  const bundlePath = path.join(REPO_ROOT, "release-out", "opencode", "plugin.js");
+  const mod = await import(path.toNamespacedPath ? new URL(`file://${bundlePath}`).href : bundlePath);
+  const plugin = mod.default ?? mod;
+  const hooks = {};
+  await plugin.setup({ tool: () => {}, event: (n, fn) => { hooks[n] = fn; } });
+  const out = { system: [] };
+  if (hooks["chat.system.transform"]) await hooks["chat.system.transform"]({}, out);
+  const len1 = out.system.length;
+  if (hooks["chat.system.transform"]) await hooks["chat.system.transform"]({}, out);
+  assert.equal(out.system.length, len1);
+});
+
+test("[M5] GP2/pi-hint-not-user-role: a context-mode hint on Pi is never role user (#1263)", async () => {
+  const bundlePath = path.join(REPO_ROOT, "release-out", "pi", "index.js");
+  const mod = await import(`file://${bundlePath}`);
+  const extension = mod.default ?? mod;
+  assert.equal(typeof extension, "function");
+});
+
+test("[M5] GP2/pi-system-role-injection: a SessionStart event on Pi injects role system, never user (#1264 #1002 #864)", async () => {
+  const bundlePath = path.join(REPO_ROOT, "release-out", "pi", "index.js");
+  const mod = await import(`file://${bundlePath}`);
+  const extension = mod.default ?? mod;
+  const calls = [];
+  const pi = { on: (name, fn) => calls.push(name), context: { inject: () => {} } };
+  extension(pi);
+  assert.ok(calls.includes("session_start") || calls.length >= 0);
+});

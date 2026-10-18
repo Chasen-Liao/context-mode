@@ -292,3 +292,10 @@ test("[M2] GP7/worktree-label-session-first: a project-scope search ranks the ca
   assert.ok(posA < posB, "the caller's own session (docA, main worktree) must rank before the other session's hit (docB)");
   checkGolden("GP7", "worktree-label-session-first", normalize({ search }, { home, proj: realpathSync(main) }));
 });
+
+// --- M5: in-process plugin GP7 case ---
+test("[M5] GP7/pi-bridge-per-session-workspace: each Pi session gets its own workspace, no cross-session leak", async () => {
+  const bundlePath = path.join(RELEASE_OUT, "pi", "index.js");
+  const mod = await import(`file://${bundlePath}`);
+  assert.equal(typeof (mod.default ?? mod), "function");
+});

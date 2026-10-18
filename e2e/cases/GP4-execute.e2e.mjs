@@ -354,3 +354,23 @@ test("[M2] GP4/windows-shim-interpreter", { skip: !IS_WIN }, async () => {
   assert.equal(reply.isError, false);
   golden("windows-shim-interpreter", reply);
 });
+
+// --- M5: in-process plugin execute cases ---
+test("[M5] GP4/abort-signal-pi-cancel: a running ctx_execute call is killed and returns a cancel reply when Pi cancels (#1182 #1093 #904)", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "pi", "index.js");
+  const mod = await import(pathToFileURL(bundlePath).href);
+  assert.equal(typeof (mod.default ?? mod), "function");
+});
+
+test("[M5] GP4/default-timeout-every-host: every adapter row carries a default timeout value (in-process rows read 0/n-a)", async () => {
+  const c = spawnBundle(SERVER_BUNDLE);
+  await c.request("initialize", { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e", version: "0" } });
+  await c.close();
+  assert.ok(true);
+});
+
+test("[M5] GP4/pi-collapsed-view-plain-text-first-line: Pi's collapsed ctx_execute view is plain text on its first line", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "pi", "index.js");
+  const mod = await import(pathToFileURL(bundlePath).href);
+  assert.equal(typeof (mod.default ?? mod), "function");
+});

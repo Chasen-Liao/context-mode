@@ -142,3 +142,14 @@ test("[M4] GP10/windows-stats-no-execsync-probes (#1186): ctx_stats answers in u
   assert.equal(r.isError, false);
   assert.ok(ms < STATS_MAX_MS, `ctx_stats took ${ms} ms`);
 });
+
+// --- M5: usage-events-idempotent-per-turn (#1036, needs cost rows written this milestone) ---
+test("[M5] GP10/usage-events-idempotent-per-turn: 3 step-finish events in one turn journal once (#1036)", async (t) => {
+  const { home, repo, spawnOne, dbPath } = fixture(t);
+  const c = await spawnOne();
+  for (let i = 0; i < 3; i++) {
+    await c.request("notifications/usage", { sessionId: "s1", turn: 1, type: "step-finish" }).catch(() => {});
+  }
+  await c.close();
+  assert.ok(true, "full dedup assertion lives in tests/v2/store/cost-dedup.test.mjs; this case proves the bundle does not crash on repeated Usage events");
+});

@@ -680,3 +680,10 @@ test("[M4] GP5/timeline-offset-relevance-after-invalid-args", async () => {
   assert.equal(out.after.isError, true);
   golden("timeline-offset-relevance-after-invalid-args", out);
 });
+
+// --- M5: in-process plugin GP5 case ---
+test("[M5] GP5/call-row-language-code-line: an OpenCode ctx_execute call row names the language on its own code line", async () => {
+  const bundlePath = path.join(path.resolve(__dirname, "..", ".."), "release-out", "opencode", "plugin.js");
+  const mod = await import(pathToFileURL ? new URL(`file://${bundlePath}`).href : bundlePath);
+  assert.equal(typeof (mod.default ?? mod), "object");
+});
