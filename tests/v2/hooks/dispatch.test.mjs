@@ -122,9 +122,10 @@ test("SessionStart compact on claude-code (compactSummary host): fixed pointer l
   assert.equal(parsed(out).additionalContext, COMPACT_POINTER_LINE);
 });
 
-test("SessionStart compact on codex (compactSummary none): allow in M3 (D-M3-arch-2)", async () => {
+test("SessionStart compact on codex (compactSummary none): the renderState block, not the pointer (M4, D-M4-H2-4)", async () => {
   const out = await handleHook("codex", cc({ hook_event_name: "SessionStart", source: "compact" }), env);
-  assert.equal(out.stdout, "");
+  const text = parsed(out).additionalContext;
+  assert.ok(text.startsWith("<context_mode_state ") && text !== COMPACT_POINTER_LINE, text);
 });
 
 test("UserPromptSubmit: detached prompt row, allow", async () => {

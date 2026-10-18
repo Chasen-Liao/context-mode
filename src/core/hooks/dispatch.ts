@@ -1,10 +1,10 @@
-// impl/09 §4 (handleHook), ADR-0009 §1 and §6, ADR-0016; DEVIATIONS D-M3-arch-2 (no renderState
-// branches in M3), D-M3-arch-3 (case-B wrapper next to the hook bundle), D-M3-H2-1..7.
+// impl/09 §4 (handleHook), ADR-0009 §1, §6 and §8.2, ADR-0016; DEVIATIONS D-M3-arch-3 (case-B wrapper
+// next to the hook bundle), D-M3-H2-1..7, D-M4-arch-5 and D-M4-H2-1..3 (compact "none" branches, decision rows).
 // One path per event. Every failure fails open: allow, one stderr line. Never block the host.
 import { dirname, join } from "node:path";
 import { AGENT_IDS, type AgentId } from "../contracts/agents.ts";
 import {
-  COMPACT_POINTER_LINE, COMPACT_STATE_KEY, EDIT_PATH_KEYS, EDIT_TOOLS, EXIT_CODE_LINE_PREFIX, HINT_KEY,
+  COMPACT_POINTER_LINE, COMPACT_STATE_KEY, DECISION_OPTION_KEY, DECISION_SOURCE, DECISION_TOOL, EDIT_PATH_KEYS, EDIT_TOOLS, EXIT_CODE_LINE_PREFIX, HINT_KEY,
   MCP_HINT_EVERY, OUTPUT_CAP, OWN_TOOL_PREFIX, PARSE_ERROR_DENY_LINE, PENDING_COMPACT_FLAG, PENDING_COMPACT_KEY,
   PENDING_COMPACT_META_PREFIX, POLICY_UNREADABLE_LINE, RESUME_HINT, RESUME_HINT_KEY, RUN_WRAPPER_FILE,
   RUN_WRAPPER_NODE, SHELL_TOOL, SUBAGENT_SOURCE_PREFIX, SYNC_INDEX_MAX_BYTES, TOOL_PREFIX_SLOT,
@@ -12,19 +12,22 @@ import {
   SUBAGENT_RUN_DENY,
 } from "../contracts/constants.ts";
 import type {
-  AdapterRow, CanonicalHookEvent, Decision, EventKind, HookOutput, ProjectContext, ToolCall,
+  AdapterRow, CanonicalHookEvent, Decision, DbHandle, EventKind, HookOutput, ProjectContext, ToolCall,
 } from "../contracts/types.ts";
 import { getAdapter } from "../../adapters/table.ts";
 import { decide } from "../policy/decide.ts";
 import { isSubagentCall, pickSubagentCase, toolSetForAgentType } from "../policy/subagent.ts";
 import { readUserDeny } from "../policy/user-deny.ts";
 import { resolveProject } from "../project/resolve.ts";
-import { metaSet, metaTake, openDb } from "../store/db.ts";
-import { canonicalKey } from "../journal/append.ts";
+import { metaGet, metaSet, metaTake, openDb } from "../store/db.ts";
+import { appendEvent, canonicalKey } from "../journal/append.ts";
+import { readSessionEvents } from "../journal/read.ts";
+import { renderState } from "../compaction/render.ts";
 import { chunkText } from "../index/chunk.ts";
 import { selectChunks, selectChunksInMemory, type Selection } from "../index/select.ts";
 import { indexText } from "../index/text.ts";
 import { appendDetached } from "./detached.ts";
+import { answerDecisions, askOptionLabels, optionEchoDecision, type DecisionPart } from "./decision.ts";
 import { shouldHint } from "./throttle.ts";
 
 const ALLOW: Decision = { kind: "allow" };
@@ -92,13 +95,19 @@ function withPrefix(template: string, row: AdapterRow): string {
 
 // ---------- §4.3 SessionStart ----------
 
+// D6: "host" sends the fixed pointer line only; "none" sends the full renderState block (§4.3 step 1.3,
+// §4.4 step 2.4). Rows are this session's journal, read once per compact delivery.
+function compactText(db: DbHandle, ev: CanonicalHookEvent, row: AdapterRow): string {
+  if (row.compactSummary === "host") return COMPACT_POINTER_LINE;
+  return renderState(readSessionEvents(db, ev.sessionId), ev.turn ?? 0);
+}
+
 async function sessionStart(ev: CanonicalHookEvent, row: AdapterRow, project: ProjectContext): Promise<Decision> {
   if (ev.source === "compact" && row.compactDelivery === "sessionstart") {
-    if (row.compactSummary !== "host") return ALLOW; // D-M3-arch-2: the "none" branch lands in M4 with renderState
     const db = await openDb(project);
     // A23: the throttle marker guards a duplicate SessionStart(compact) in one session.
     if (!shouldHint(db, ev.sessionId, COMPACT_STATE_KEY)) return ALLOW;
-    return { kind: "hint", text: COMPACT_POINTER_LINE, onceKey: COMPACT_STATE_KEY };
+    return { kind: "hint", text: compactText(db, ev, row), onceKey: COMPACT_STATE_KEY };
   }
   const db = await openDb(project);
   if (!shouldHint(db, ev.sessionId, RESUME_HINT_KEY)) return ALLOW;
@@ -114,11 +123,83 @@ async function userPromptSubmit(ev: CanonicalHookEvent, row: AdapterRow, project
     path: null, ok: 1, exit_code: null, bytes: Buffer.byteLength(body), body, turn: ev.turn ?? 0,
     sandbox_bytes: 0, returned_bytes: 0,
   });
-  // D-M3-arch-2, D-M3-H2-3: only the "host" branch exists in M3; the "none" branch leaves the flag for M4.
-  if (row.compactDelivery !== "pending-flag" || row.compactSummary !== "host") return ALLOW;
+  echoDetached(ev, project, body);
+  if (row.compactDelivery !== "pending-flag") return ALLOW;
   const db = await openDb(project);
+  // §4.4 step 2.2: DELETE ... RETURNING inside BEGIN IMMEDIATE, so the delivery fires once.
   if (metaTake(db, PENDING_COMPACT_META_PREFIX + ev.sessionId) === null) return ALLOW;
-  return { kind: "hint", text: COMPACT_POINTER_LINE, onceKey: PENDING_COMPACT_KEY };
+  return { kind: "hint", text: compactText(db, ev, row), onceKey: PENDING_COMPACT_KEY };
+}
+
+// ---------- ADR-0009 §8.2 decision rows (D-M4-arch-5, D-M4-H2-2) ----------
+
+// Meta key that holds the option labels of the last unanswered AskUserQuestion call for one session.
+function optionsKey(sessionId: string): string {
+  return DECISION_SOURCE + ":" + DECISION_OPTION_KEY + ":" + sessionId;
+}
+
+interface PendingOptions { seq: number; labels: string[] }
+
+function readOptions(value: string): PendingOptions | null {
+  try {
+    const v = JSON.parse(value) as unknown;
+    if (typeof v !== "object" || v === null) return null;
+    const { seq, labels } = v as Record<string, unknown>;
+    if (typeof seq !== "number" || !Array.isArray(labels)) return null;
+    return { seq, labels: labels.filter((l): l is string => typeof l === "string") };
+  } catch {
+    return null;
+  }
+}
+
+// Rule 2, detached like the prompt row (A21): the labels offered in the turn before this prompt apply to
+// this prompt only (taken, then gone). The metaGet check keeps a prompt with nothing offered write-free.
+function echoDetached(ev: CanonicalHookEvent, project: ProjectContext, prompt: string): void {
+  if (ev.sessionId === "") return;
+  const key = optionsKey(ev.sessionId);
+  void openDb(project)
+    .then((db) => {
+      if (metaGet(db, key) === null) return;
+      const taken = metaTake(db, key);
+      const offered = taken === null ? null : readOptions(taken);
+      if (offered === null) return;
+      const part = optionEchoDecision(prompt, offered.labels, offered.seq);
+      if (part !== null) writeDecisions(db, ev, project, [part]);
+    })
+    .catch((err: unknown) => {
+      process.stderr.write("hooks: decision write failed: " + message(err) + "\n");
+    });
+}
+
+// One decision = one kind:"decision" journal row + its body as one chunk under DECISION_SOURCE (D-M4-arch-5).
+function writeDecisions(db: DbHandle, ev: CanonicalHookEvent, project: ProjectContext, parts: readonly DecisionPart[]): void {
+  for (const part of parts) {
+    appendEvent(db, {
+      session_id: ev.sessionId, worktree: project.worktree, agent: ev.agent, kind: "decision", tool: DECISION_TOOL,
+      key: part.key, path: null, ok: 1, exit_code: null, bytes: Buffer.byteLength(part.body), body: part.body,
+      turn: ev.turn ?? 0, sandbox_bytes: 0, returned_bytes: 0,
+    });
+    indexText(db, project, ev.sessionId, DECISION_SOURCE, part.body, "text");
+  }
+}
+
+// Rule 1 at PostToolUse, detached like every hook journal write (A21). An answered call writes its rows;
+// an unanswered one keeps its labels for the next prompt, with ref = seq of this turn's prompt row.
+function askDetached(ev: CanonicalHookEvent, project: ProjectContext, tool: ToolCall, text: string): void {
+  const parts = answerDecisions(text);
+  const labels = parts.length === 0 ? askOptionLabels(tool.input) : [];
+  if (parts.length === 0 && labels.length === 0) return;
+  void openDb(project)
+    .then((db) => {
+      if (parts.length > 0) return writeDecisions(db, ev, project, parts);
+      const prompts = readSessionEvents(db, ev.sessionId, "prompt");
+      const last = prompts[prompts.length - 1];
+      if (last === undefined || ev.sessionId === "") return; // no turn to point at: no row (fail-safe)
+      metaSet(db, optionsKey(ev.sessionId), JSON.stringify({ seq: last.seq, labels }));
+    })
+    .catch((err: unknown) => {
+      process.stderr.write("hooks: decision write failed: " + message(err) + "\n");
+    });
 }
 
 // ---------- §4.5 PreToolUse ----------
@@ -209,6 +290,7 @@ async function postToolUse(ev: CanonicalHookEvent, row: AdapterRow, project: Pro
   if (tool === undefined || tool.canonicalName.startsWith(OWN_TOOL_PREFIX)) return ALLOW; // step 1 (ADR-0009 §0)
   const result = ev.result ?? { isError: false, bytes: 0 };
   const text = result.text ?? "";
+  if (tool.canonicalName === DECISION_TOOL) askDetached(ev, project, tool, text); // ADR-0009 §8.2
   const kind = journalKind(tool, row, result.isError); // step 2
   if (kind !== null) {
     const key = kind === "cmd" ? canonicalKey(tool.canonicalName, str(tool.input.command))
