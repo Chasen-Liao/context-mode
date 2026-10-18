@@ -419,3 +419,20 @@ export const V1_DATA_DIR_NAME = "context-mode"; // <agent home>/context-mode/
 export const PLUGIN_ID = SERVER_KEY;
 export const PLUGIN_NAME = SERVER_KEY;
 export const OPENCODE_TOOL_PREFIX = SERVER_KEY + "_";
+
+// ops/plugin-root.ts, ops/host-config.ts (impl/07 §1-§2; DEVIATIONS D-M5-O1-1..3).
+export const SERVER_ENTRY_FILE = "server.mjs"; // the MCP server bundle next to hook.mjs in the release root
+export const HOST_NODE_COMMAND = "node"; // MCP entry `command`
+export const HOST_CONFIG_TMP_SUFFIX = ".tmp"; // write <file>.tmp, then rename over <file>
+export const HOST_CONFIG_TEXT_PATH = "(given text)"; // CONFIG_PARSE_FAILED <path> when mergeOwnEntries parses text with no file
+export const JSON_INDENT_UNIT = "  "; // indent for a file with no indented member to copy from
+export const MCP_COMMAND_FIELD = "command";
+export const MCP_ARGS_FIELD = "args";
+// The one host config file (segments under $HOME) and key path of context-mode's own MCP entry, for the
+// agents whose MCP entry lives in a host config file (installMode config-mcp, mcp-entry, hooks+mcp).
+export const OWN_MCP_ENTRY: Readonly<Partial<Record<AgentId, { file: readonly string[]; key: readonly string[] }>>> = Object.freeze({
+  codex: { file: [".codex", "config.toml"], key: ["mcp_servers", SERVER_KEY] },
+  vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
+  kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
+  zcode: { file: [".zcode", "cli", "config.json"], key: ["mcpServers", SERVER_KEY] },
+});
