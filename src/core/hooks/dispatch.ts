@@ -85,6 +85,8 @@ function dispatch(ev: CanonicalHookEvent, row: AdapterRow, project: ProjectConte
       return postToolUse(ev, row, project, env);
     case "PreCompact":
       return preCompact(ev, project);
+    case "Usage":
+      return usage(ev, project);
   }
   return Promise.resolve(ALLOW); // step 4 defensive default
 }
@@ -336,4 +338,18 @@ async function preCompact(ev: CanonicalHookEvent, project: ProjectContext): Prom
   const db = await openDb(project);
   metaSet(db, PENDING_COMPACT_META_PREFIX + ev.sessionId, PENDING_COMPACT_FLAG);
   return ALLOW;
+}
+
+// ---------- Usage (D-M5-arch-2) ----------
+
+// One kind:"cost" row per Usage event (OpenCode step-finish), detached like every hook journal write (A21).
+// handleHook is the only writer; a repeat for the same (session_id, turn) is dropped by the store's
+// partial unique index, so this path does no dedup of its own. Cost rows are not ctx_stats call rows
+// (D-M4-S3-1): tool stays null and the byte columns stay 0.
+function usage(ev: CanonicalHookEvent, project: ProjectContext): Promise<Decision> {
+  appendDetached(project, ev.sessionId, {
+    session_id: ev.sessionId, worktree: project.worktree, agent: ev.agent, kind: "cost", tool: null, key: null,
+    path: null, ok: 1, exit_code: null, bytes: 0, body: "", turn: ev.turn ?? 0, sandbox_bytes: 0, returned_bytes: 0,
+  });
+  return Promise.resolve(ALLOW);
 }
