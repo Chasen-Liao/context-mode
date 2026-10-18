@@ -9,6 +9,7 @@ import {
   PENDING_COMPACT_META_PREFIX, POLICY_UNREADABLE_LINE, RESUME_HINT, RESUME_HINT_KEY, RUN_WRAPPER_FILE,
   RUN_WRAPPER_NODE, SHELL_TOOL, SUBAGENT_SOURCE_PREFIX, SYNC_INDEX_MAX_BYTES, TOOL_PREFIX_SLOT,
   USER_DENY_REASON_PREFIX,
+  SUBAGENT_RUN_DENY,
 } from "../contracts/constants.ts";
 import type {
   AdapterRow, CanonicalHookEvent, Decision, EventKind, HookOutput, ProjectContext, ToolCall,
@@ -159,7 +160,7 @@ function caseB(ev: CanonicalHookEvent, row: AdapterRow, d0: Extract<Decision, { 
   if (typeof command !== "string") return d0;
   const wrapper = '"' + join(dirname(process.argv[1] ?? ""), RUN_WRAPPER_FILE) + '"';
   const rewritten = [RUN_WRAPPER_NODE, wrapper, b64(command), b64(JSON.stringify(userDeny ?? [])), b64(str(tool.input.description))].join(" ");
-  return { kind: "deny", reason: d0.reason, rewritten };
+  return { kind: "deny", reason: SUBAGENT_RUN_DENY, rewritten }; // D-M3-F-7: no ctx_* tool named
 }
 
 // ---------- §4.6 PostToolUse ----------

@@ -3,7 +3,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -257,6 +257,13 @@ test("case B PreToolUse deny: reason names run.mjs next to the hook bundle (D-M3
   const first = out.permissionDecisionReason.split("\n")[0];
   assert.ok(first.startsWith("node \""));
   assert.ok(first.includes("/run.mjs\" " + Buffer.from(cmd).toString("base64url") + " "));
+  // D-M3-F-7: the rest is the case-B text (drafts.md deny-subagent-run); it names no ctx_* tool the subagent lacks.
+  const md = readFileSync(new URL("../../../docs/v2/prompt/drafts.md", import.meta.url), "utf8");
+  const at = md.indexOf("<!-- id: deny-subagent-run -->");
+  const open = md.indexOf("```text\n", at) + "```text\n".length;
+  assert.ok(at >= 0);
+  assert.equal(out.permissionDecisionReason.slice(first.length + 1), md.slice(open, md.indexOf("\n```", open)));
+  assert.equal(out.permissionDecisionReason.includes("ctx_"), false);
 });
 
 test("case A subagent (no agent file, inherits ctx tools): same deny as the main session", async () => {

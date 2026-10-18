@@ -1,7 +1,11 @@
 // Keyless live E2E harness (ADR-0012, ADR-0017). Default: Sonnet 5, effort low, step mode.
-// Usage: node e2e/live/run.mjs [--all] [--base <git ref>] [--model claude-sonnet-5] [--budget 0.25]
+// Usage: node e2e/live/run.mjs [--all] [--only <id,id>] [--base <git ref>] [--model claude-sonnet-5] [--budget 0.25]
+// A case with "plugin": true runs as ADR-0012 says: cwd = a temp git repo, release-out loaded with --plugin-dir
+// (hooks + MCP server, no --strict-mcp-config), "agents" written to <repo>/.claude/agents/<name>.md (D-M3-F-6).
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
@@ -11,6 +15,7 @@ const MODEL = arg("--model", "claude-sonnet-5");
 const EFFORT = arg("--effort", "low");
 const BUDGET = arg("--budget", "0.25");
 const BASE = arg("--base", "HEAD");
+const ONLY = arg("--only", "");
 
 // real Claude Code binary only (skips the claude-worktree / vibetree shims): Mach-O or ELF magic
 function realClaude() {
@@ -33,8 +38,9 @@ function changedFiles() {
 
 const cases = fs.readdirSync(path.join(ROOT, "e2e/live/cases")).filter((f) => f.endsWith(".json"))
   .map((f) => JSON.parse(fs.readFileSync(path.join(ROOT, "e2e/live/cases", f), "utf8")));
-const changed = ALL ? null : changedFiles();
-const selected = ALL ? cases : cases.filter((c) => c.covers.some((p) => changed.some((f) => f.startsWith(p))));
+const changed = ALL || ONLY ? null : changedFiles();
+const selected = ONLY ? cases.filter((c) => ONLY.split(",").includes(c.id))
+  : ALL ? cases : cases.filter((c) => c.covers.some((p) => changed.some((f) => f.startsWith(p))));
 
 const env = {};
 for (const k of ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "LANG", "LC_ALL", "TERM"]) if (process.env[k]) env[k] = process.env[k];
@@ -45,6 +51,26 @@ const bin = realClaude();
 // built bundle (release-out/server.mjs, built by the gate's gp-cases step) as the one MCP server.
 const MCP_PREFIX = "mcp__context-mode__";
 const MCP_CONFIG = JSON.stringify({ mcpServers: { "context-mode": { command: process.execPath, args: [path.join(ROOT, "release-out", "server.mjs"), "--agent", "claude-code"] } } });
+const PLUGIN_DIR = path.join(ROOT, "release-out");
+
+// Temp git repo with the case's agent files; returns its path.
+function pluginRepo(c) {
+  const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "cm-e2e-" + c.id + "-")));
+  execFileSync("git", ["init", "-q", dir]);
+  for (const [name, text] of Object.entries(c.agents ?? {})) {
+    fs.mkdirSync(path.join(dir, ".claude", "agents"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".claude", "agents", name + ".md"), text);
+  }
+  return dir;
+}
+
+// The hook and run.mjs store under ~/.context-mode/projects/<sha256(git dir) 16 hex> (impl/02 §2); drop it.
+function dropProjectData(repo) {
+  const key = createHash("sha256").update(fs.realpathSync.native(path.join(repo, ".git"))).digest("hex").slice(0, 16);
+  fs.rmSync(path.join(os.homedir(), ".context-mode", "projects", key), { recursive: true, force: true });
+  fs.rmSync(repo, { recursive: true, force: true });
+}
+
 const rows = [];
 for (const c of selected) {
   if (c.kind === "local") {
@@ -55,10 +81,13 @@ for (const c of selected) {
     continue;
   }
   if (!bin) { rows.push({ id: c.id, result: "SKIPPED", cost: 0, note: "no real claude binary on PATH" }); continue; }
+  const repo = c.plugin ? pluginRepo(c) : null;
+  const mcp = c.plugin ? ["--plugin-dir", PLUGIN_DIR]
+    : ["--strict-mcp-config", ...(c.tools.some((t) => t.startsWith(MCP_PREFIX)) ? ["--mcp-config", MCP_CONFIG] : [])];
   const r = spawnSync(bin, ["-p", c.prompt, "--model", MODEL, "--effort", EFFORT, "--max-budget-usd", BUDGET,
-    "--no-session-persistence", "--setting-sources", "project", "--strict-mcp-config", "--output-format", "json",
-    ...(c.tools.some((t) => t.startsWith(MCP_PREFIX)) ? ["--mcp-config", MCP_CONFIG] : []),
-    ...(c.tools.length ? ["--allowedTools", ...c.tools] : ["--tools", ""])], { cwd: ROOT, env, encoding: "utf8", timeout: 600000 });
+    "--no-session-persistence", "--setting-sources", "project", "--output-format", "json", ...mcp,
+    ...(c.tools.length ? ["--allowedTools", ...c.tools] : ["--tools", ""])], { cwd: repo ?? ROOT, env, encoding: "utf8", timeout: 600000 });
+  if (repo) dropProjectData(repo);
   let res; try { res = JSON.parse(r.stdout); } catch { res = { is_error: true, result: (r.stderr || r.stdout || "").slice(0, 200) }; }
   const text = String(res.result || "").trim();
   const ok = !res.is_error && text.startsWith(c.expect.firstLineStartsWith);

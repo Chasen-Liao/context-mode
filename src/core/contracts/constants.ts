@@ -248,6 +248,9 @@ export const RESUME_HINT = "This session may have run before. Call {prefix}ctx_r
 export const SUBAGENT_SOURCE_PREFIX = "subagent:"; // §4.6 step 5 source label: + canonical name + ":" + turn
 export const RUN_WRAPPER_FILE = "run.mjs"; // §4.5 step 3 case B, D-M3-arch-3: next to hook.mjs
 export const RUN_WRAPPER_NODE = "node"; // case B wrapper command head
+// ADR-0016 case B deny reason (drafts.md deny-subagent-run, D-M3-F-7): the subagent has Bash and no ctx tools,
+// so the reason names only the run.mjs line the encoder puts above it, never a ctx_* tool.
+export const SUBAGENT_RUN_DENY = "context-mode: This command sends its body into the conversation.\nRun the command on the line above with Bash instead. It runs the same command in the same folder, indexes the full output and prints only the part that matches your intent, with the same exit code.";
 export const AGENT_ARG = "--agent"; // hook entry argv flag (impl/09 §5.2 step 1)
 
 // M4 tools-session (impl/06 §2-§6; DEVIATIONS D-M4-arch-3..5). impl/06 gives these as exact reply texts,

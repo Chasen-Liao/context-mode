@@ -157,6 +157,12 @@ context-mode: grep output can be larger than you expect. To count, filter or gro
 context-mode: tools of other MCP servers can return large payloads in full. For a page or API you can reach directly, fetch it in {prefix}ctx_execute and print what you need, or store it with {prefix}ctx_index and query it with {prefix}ctx_search.
 ```
 
+<!-- id: deny-subagent-run -->
+```text
+context-mode: This command sends its body into the conversation.
+Run the command on the line above with Bash instead. It runs the same command in the same folder, indexes the full output and prints only the part that matches your intent, with the same exit code.
+```
+
 ## Changes
 
 r3: added the `seq` param to `ctx_resume` (PRD §7, decision A35), bumped status to r3.
@@ -167,3 +173,5 @@ r7 (`DECISIONS-r7.md` R1, R2): `ctx_search` text notes the measured recall gain 
 r8 (`DECISIONS-r8.md` VR): `instructions` and `ctx_execute` texts state that a large file goes through `ctx_execute` with `file` set, or Read with offset/limit; a plain Read of it is now denied, not just hinted. Both texts stay under the 1,024-char cap (1,015 and 732).
 
 r9 M3-E4 (impl/08 B2, DECISIONS-r8 doc edit 5): added the hook text blocks deny-curl, deny-http, deny-build, deny-webfetch, deny-read, hint-bash, hint-read, hint-grep, hint-mcp-followup.
+
+M3 fix (ADR-0016 case B, DEVIATIONS D-M3-F-7): added deny-subagent-run, the case-B deny reason under the run.mjs line.

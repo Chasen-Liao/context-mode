@@ -19,6 +19,16 @@ const OWN_TOOL_GLOB = "ctx_.*";
 const TOOL_EVENTS: readonly string[] = ["PreToolUse", "PostToolUse"]; // canonical events that carry the matcher
 const KIRO_TOOL_MATCHER = "@mcp"; // impl/10 §1.5 kiro row
 const HOOKS_DIR = "hooks";
+// D-M3-F-5: Claude Code runs plugin hooks and the plugin MCP server with cwd = the user's project, so a bare
+// "hook.mjs"/"server.mjs" is not found (live: MODULE_NOT_FOUND, server "failed"). The host expands this
+// variable to the plugin dir in both places (v1 hooks.json and plugin.json used it the same way).
+const PLUGIN_ROOT_VAR: Readonly<Partial<Record<AgentId, string>>> = { "claude-code": "${CLAUDE_PLUGIN_ROOT}" };
+const bundleArg = (row: AdapterRow, file: string): string => {
+  const root = PLUGIN_ROOT_VAR[row.id];
+  return root === undefined ? file : root + "/" + file;
+};
+const bundleCmd = (row: AdapterRow, file: string): string =>
+  PLUGIN_ROOT_VAR[row.id] === undefined ? file : '"' + bundleArg(row, file) + '"';
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 type JsonObject = { [key: string]: Json };
@@ -31,7 +41,7 @@ export function buildMatcher(row: AdapterRow): string {
   return `^(${[...names, escapeRegExp(row.toolNamePrefix) + OWN_TOOL_GLOB].join("|")})$`;
 }
 
-const hookCommand = (row: AdapterRow): string => [NODE_COMMAND, HOOK_BUNDLE, AGENT_FLAG, row.id].join(" ");
+const hookCommand = (row: AdapterRow): string => [NODE_COMMAND, bundleCmd(row, HOOK_BUNDLE), AGENT_FLAG, row.id].join(" ");
 const seconds = (row: AdapterRow): number => row.hookTimeoutMs / MS_PER_SECOND;
 const command = (row: AdapterRow): JsonObject => ({ type: "command", command: hookCommand(row) });
 const events = (row: AdapterRow): [string, string][] => Object.entries(row.eventMap) as [string, string][];
@@ -96,7 +106,7 @@ function mcpManifest(row: AdapterRow): JsonObject {
   return {
     name: SERVER_KEY,
     version: DEV_VERSION,
-    mcpServers: { [SERVER_KEY]: { command: NODE_COMMAND, args: [SERVER_BUNDLE, AGENT_FLAG, row.id] } },
+    mcpServers: { [SERVER_KEY]: { command: NODE_COMMAND, args: [bundleArg(row, SERVER_BUNDLE), AGENT_FLAG, row.id] } },
   };
 }
 

@@ -91,8 +91,10 @@ test("plugin and extension manifests carry name, dev version and the --agent MCP
   const dir = scratch(t);
   generateManifests(dir);
   const entry = (id) => ({ "context-mode": { command: "node", args: ["server.mjs", "--agent", id] } });
+  // D-M3-F-5: Claude Code runs the plugin server with cwd = the project, so the path names the plugin root.
+  const claudeEntry = { "context-mode": { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/server.mjs", "--agent", "claude-code"] } };
   assert.deepEqual(readJson(dir, ".claude-plugin/plugin.json"), {
-    hooks: "./hooks/claude-code.json", mcpServers: entry("claude-code"), name: "context-mode", version: "0.0.0-dev",
+    hooks: "./hooks/claude-code.json", mcpServers: claudeEntry, name: "context-mode", version: "0.0.0-dev",
   });
   assert.deepEqual(readJson(dir, "gemini-extension.json"), { mcpServers: entry("gemini"), name: "context-mode", version: "0.0.0-dev" });
   assert.deepEqual(readJson(dir, "qwen-extension.json"), { mcpServers: entry("qwen"), name: "context-mode", version: "0.0.0-dev" });
@@ -103,9 +105,11 @@ test("hook files follow each host shape of impl/10 §1.5", (t) => {
   const dir = scratch(t);
   generateManifests(dir);
   const cmd = (id) => "node hook.mjs --agent " + id;
+  // D-M3-F-5: Claude Code hooks run with cwd = the project; the command names the plugin root, quoted.
+  const claudeCmd = 'node "${CLAUDE_PLUGIN_ROOT}/hook.mjs" --agent claude-code';
   const claude = readJson(dir, "hooks/claude-code.json");
-  assert.deepEqual(claude.hooks.PreToolUse, [{ hooks: [{ command: cmd("claude-code"), timeout: 5, type: "command" }], matcher: MATCHERS["claude-code"] }]);
-  assert.deepEqual(claude.hooks.SessionStart, [{ hooks: [{ command: cmd("claude-code"), timeout: 5, type: "command" }] }]);
+  assert.deepEqual(claude.hooks.PreToolUse, [{ hooks: [{ command: claudeCmd, timeout: 5, type: "command" }], matcher: MATCHERS["claude-code"] }]);
+  assert.deepEqual(claude.hooks.SessionStart, [{ hooks: [{ command: claudeCmd, timeout: 5, type: "command" }] }]);
   assert.deepEqual(Object.keys(readJson(dir, "hooks/gemini.json").hooks), ["AfterTool", "BeforeAgent", "BeforeTool", "PreCompress", "SessionStart"]);
   assert.deepEqual(readJson(dir, "hooks/gemini.json").hooks.BeforeTool, [{ hooks: [{ command: cmd("gemini"), timeout: 5000, type: "command" }] }]);
   const copilot = readJson(dir, "hooks/copilot-cli.json");
