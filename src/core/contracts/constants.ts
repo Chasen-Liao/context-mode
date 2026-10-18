@@ -87,6 +87,18 @@ export const FETCH_MAX_HOPS = 5; // impl/03 §6 step 5: redirect hops; one more 
 export const SOURCE_LABEL_MAX_CHARS = 80; // impl/04 §2.3 step 15, §4 step 7: label = "<tool>:" + first line of the code, at most 80 chars
 export const CANCELLED_LINE = "Cancelled."; // impl/04 §2.3 step 11: reply on ctx.signal abort (not an ERROR_TEXT key)
 export const BACKGROUND_REPLY_PREFIX = "started in background, pid "; // impl/04 §2.3 step 9, A11 (DECISIONS-r9 S5): + decimal pid, nothing after
+export const PLAIN_OUTPUT_ENV: Readonly<Record<string, string>> = Object.freeze({ NO_COLOR: "1", FORCE_COLOR: "0" }); // impl/04 §2.3 step 6: plain child output (ctx_execute and run.mjs, D-M3-X1-4)
+
+// impl/04 §4, ADR-0016 case B: the run.mjs wrapper and its search.mjs follow-up (DEVIATIONS D-M3-X1-1..5).
+export const RUN_USAGE_LINE = "Usage: run.mjs <base64>"; // §4 step 1
+export const SEARCH_USAGE_LINE = "Usage: search.mjs <source-id> <terms>"; // D-M3-X1-2
+export const RUN_FAIL_EXIT = 1; // §4 steps 1, 4: usage error or deny, the command never runs
+export const RUN_TIMEOUT_EXIT = 124; // §4 step 11, A18: POSIX timeout convention
+export const RUN_LABEL_PREFIX = "run.mjs:"; // §4 step 7 source label, + first line of the command
+export const RUN_MORE_PREFIX = "more: node "; // §4 step 9, ADR-0016 template: + "<bundle>/search.mjs" <source-id> "<terms>"
+export const SEARCH_WRAPPER_FILE = "search.mjs"; // ADR-0016 more: line target, next to run.mjs (D-M3-X1-2)
+export const RUN_WRAPPER_AGENT = "claude-code"; // D-M3-X1-3: case B deny + rewrite is the Claude Code mechanism (ADR-0016 Q3)
+export const RUN_SESSION_PREFIX = "mcp:"; // §4 step 5, 00 A8: no MCP _meta, + a process-local id
 
 // Runtime
 export const NODE_MIN = "24.15.0"; // S-NODE
