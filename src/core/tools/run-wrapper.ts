@@ -36,7 +36,7 @@ import { buildChildEnv } from "../sandbox/env.ts";
 import { findRuntime } from "../sandbox/runtimes.ts";
 import { runProcess } from "../sandbox/spawn.ts";
 import { closeDb, openDb } from "../store/db.ts";
-import { indexText } from "./index.ts";
+import { indexText } from "../index/text.ts";
 
 const SHELL = "shell";
 const BASH = "Bash";

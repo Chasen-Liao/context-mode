@@ -20,7 +20,7 @@ import { buildChildEnv } from "../sandbox/env.ts";
 import { findRuntime } from "../sandbox/runtimes.ts";
 import { runProcess, type RunResult } from "../sandbox/spawn.ts";
 import { closeDb, openDb } from "../store/db.ts";
-import { indexText } from "./index.ts";
+import { indexText } from "../index/text.ts";
 import { unknownField } from "./search.ts";
 
 export type { ExecuteInput } from "../contracts/types.ts";

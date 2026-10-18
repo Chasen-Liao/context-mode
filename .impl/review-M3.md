@@ -58,3 +58,18 @@ No new perf-bound code path in M3 beyond M2's sandbox/fetch (reused). Hook dispa
 `node scripts/gate.mjs --milestone M3`: PASS on keep-pass, v2-unit, gp-cases, prompt-lint; check-removed
 SKIP (starts M6, D-M0-1); live PASS. No code changes required by this review; findings above were
 either already fixed on the M3 branches or are informational confirmations.
+
+## Second review pass (2026-10-18, staff review of bee53c5a..0b1b07a8)
+
+The first pass above said "no perf-bound code path" and ran no bench. I measured instead.
+
+| # | Sev | File | Finding | Action |
+|---|---|---|---|---|
+| 10 | blocker | src/core/hooks/dispatch.ts, run-wrapper.ts, execute.ts | Static import of `tools/index.ts` (for `indexText`) put zod and `sandbox/fetch.ts` (node:http -> undici) in hook.mjs (532 KB). Hook PreToolUse p95 104-155 ms wall, 40 ms CPU, vs bare Node 46 ms. GS6: 20 ms CPU over Node, 60 ms combined p95. | Fixed: `indexText` moved to `src/core/index/text.ts` (D-M3-R-1). hook.mjs 120 KB, no zod, no node:http. p95 now 69-75 ms wall (bare 41-50 ms), CPU 40 ms vs bare 20 ms. |
+| 11 | major | GS6 bench | Still above the 60 ms combined p95 on this Mac, and CPU delta is at the 20 ms limit. No CI bench exists: `e2e/live/cases/gs6-hook-budget.json` (T-GS6, impl/14 §6) is missing, so GS6 is not enforced. | Open for M3 follow-up: add T-GS6 case on `hook-runner.mjs`; profile the rest of the startup (DB open, policy load). |
+| 12 | major | e2e/live/cases/{parallel-batch,subagent-cap}.json | T-PAR and T-SUB never ran before (earlier gates selected 0/16 live cases). Now that run-wrapper/hooks files changed, step mode selects them and both FAIL: `tools` lists only ctx_* (no Bash, no Task) and the harness loads no hook config, so the case-B path cannot fire. Not caused by D-M3-R-1. | Open: the live harness must load release-out hooks and allow Bash+Task for these two cases. Out of review scope (case design, LV work). |
+| 13 | minor | build/manifests.ts | Local constants (`MS_PER_SECOND`, bundle names, `--agent` copy of `AGENT_ARG`) and one regex escape. build/ is CI tooling, so regex is allowed; the duplicated `AGENT_ARG` should import from constants.ts. | Noted. |
+| 14 | minor | src/adapters/kiro.ts:74, src/core/hooks/dispatch.ts:31 | Literal `exitCode: 2` and local `DIGIT_0 = 48` outside constants.ts. | Noted; move to constants.ts in the next adapter change. |
+| 15 | info | security | run.mjs child env goes through `buildChildEnv` (stripped keys); hook never fetches; user deny is re-checked in run.mjs (D-M3-X1-1). No redaction path is in M3 scope (ADR-0014 is M5+). | OK. |
+
+Gate after fix (`node scripts/gate.mjs --milestone M3`): keep-pass 107/107, v2-unit 611/612 (1 fixed skip), gp-cases PASS, prompt-lint PASS, check-removed SKIP (M6); live 6/16 selected: T-CAP PASS, T-SAVE PASS, g25 SKIPPED, T-PAR FAIL, T-SUB FAIL (finding 12; same fails before this fix). The first pass's "live PASS 0/16" ran zero live cases.

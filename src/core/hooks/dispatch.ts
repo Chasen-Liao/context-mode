@@ -22,7 +22,7 @@ import { metaSet, metaTake, openDb } from "../store/db.ts";
 import { canonicalKey } from "../journal/append.ts";
 import { chunkText } from "../index/chunk.ts";
 import { selectChunks, selectChunksInMemory, type Selection } from "../index/select.ts";
-import { indexText } from "../tools/index.ts";
+import { indexText } from "../index/text.ts";
 import { appendDetached } from "./detached.ts";
 import { shouldHint } from "./throttle.ts";
 

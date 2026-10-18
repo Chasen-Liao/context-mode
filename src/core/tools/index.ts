@@ -7,17 +7,16 @@ import { z } from "zod/v4";
 import { EXEC_TIMEOUT_MS, OUTPUT_CAP } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
 import type { CtxIndexInput, DbHandle, ProjectContext, SourceKind, ToolContext, ToolReply } from "../contracts/types.ts";
-import { chunkText } from "../index/chunk.ts";
 import { walkDir } from "../index/walk.ts";
 import { isInside } from "../project/contain.ts";
 import { capBytes } from "../sandbox/cap.ts";
 import { safeFetch } from "../sandbox/fetch.ts";
 import { unknownField } from "./search.ts";
 import { closeDb, openDb } from "../store/db.ts";
-import { ftsInsert } from "../store/fts.ts";
+import { indexText, storeText, type ChunkKind } from "../index/text.ts";
 
 export type { CtxIndexInput } from "../contracts/types.ts";
-type ChunkKind = "md" | "html" | "text";
+export { indexText };
 
 export const ctxIndexSchema = z.object({
   path: z.string().optional(),
@@ -33,27 +32,6 @@ const EXT_KIND: Readonly<Record<string, ChunkKind>> = Object.freeze({ ".md": "md
 const TYPE_KIND: Readonly<Record<string, ChunkKind>> = Object.freeze({ "text/html": "html", "text/markdown": "md" });
 const DEFAULT_CONTENT_LABEL = "content";
 const utf8 = new TextDecoder("utf-8", { fatal: true });
-
-/** impl/00 §4: chunk `text` and store it as one `content` source; the hook and tools-exec path. */
-export function indexText(db: DbHandle, ctx: ProjectContext, sessionId: string, source: string, text: string, kind: ChunkKind): { sourceId: number; chunks: number } {
-  return store(db, ctx, sessionId, "content", source, text, kind);
-}
-
-function store(db: DbHandle, project: ProjectContext, sessionId: string, sourceKind: SourceKind, label: string, text: string, kind: ChunkKind): { sourceId: number; chunks: number } {
-  const chunks = chunkText(text, kind);
-  const sourceId = ftsInsert(db, {
-    projectKey: project.projectKey,
-    sessionId,
-    worktree: project.worktree,
-    agent: project.agent,
-    kind: sourceKind,
-    label,
-    bytes: Buffer.byteLength(text, "utf8"),
-    chunkCount: chunks.length,
-    createdAt: Date.now(),
-  }, chunks);
-  return { sourceId, chunks: chunks.length };
-}
 
 // One text to index. `read` runs only when the item is stored, so a folder never holds every file at once.
 interface Item { sourceKind: SourceKind; label: string; kind: ChunkKind; read(): string | undefined; }
@@ -137,7 +115,7 @@ async function handler(input: CtxIndexInput, ctx: ToolContext): Promise<ToolRepl
       for (const it of items) {
         const text = it.read();
         if (text === undefined) continue;
-        chunks += store(db, ctx.project, ctx.sessionId, it.sourceKind, it.label, text, it.kind).chunks;
+        chunks += storeText(db, ctx.project, ctx.sessionId, it.sourceKind, it.label, text, it.kind).chunks;
         bytes += Buffer.byteLength(text, "utf8");
         sources += 1;
       }
