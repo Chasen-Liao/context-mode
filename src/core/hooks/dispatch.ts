@@ -22,7 +22,6 @@ import { metaSet, metaTake, openDb } from "../store/db.ts";
 import { canonicalKey } from "../journal/append.ts";
 import { chunkText } from "../index/chunk.ts";
 import { selectChunks, selectChunksInMemory, type Selection } from "../index/select.ts";
-import { indexText } from "../tools/index.ts";
 import { appendDetached } from "./detached.ts";
 import { shouldHint } from "./throttle.ts";
 
@@ -227,6 +226,7 @@ async function postToolUse(ev: CanonicalHookEvent, row: AdapterRow, project: Pro
   let selected: Selection;
   if (result.bytes <= SYNC_INDEX_MAX_BYTES) {
     const db = await openDb(project);
+    const { indexText } = await loadIndexer();
     const { sourceId } = indexText(db, project, ev.sessionId, label, text, "text");
     selected = selectChunks(db, sourceId, intent, OUTPUT_CAP);
   } else {
@@ -236,10 +236,16 @@ async function postToolUse(ev: CanonicalHookEvent, row: AdapterRow, project: Pro
   return { kind: "replace", output: selected.text + (selected.more !== null ? "\n" + selected.more : "") };
 }
 
+// GS6 (D-M3-H2-7): tools/index.ts carries the zod schemas of ctx_index; only the case B/C replace path
+// needs indexText, so the module loads on that path and the Pre/Post hot path never evaluates it.
+function loadIndexer(): Promise<typeof import("../tools/index.ts")> {
+  return import("../tools/index.ts");
+}
+
 // F1: above SYNC_INDEX_MAX_BYTES the FTS5 write never blocks the decision; same rules as appendDetached.
 function indexDetached(project: ProjectContext, sessionId: string, label: string, text: string): void {
-  void openDb(project)
-    .then((db) => {
+  void Promise.all([openDb(project), loadIndexer()])
+    .then(([db, { indexText }]) => {
       indexText(db, project, sessionId, label, text, "text");
     })
     .catch((err: unknown) => {
