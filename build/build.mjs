@@ -7,9 +7,10 @@
 //
 // M0 scope (DEVIATIONS D-M0-8): bundles only the rows whose entry exists in M0
 // (server, hook). The milestone that writes run-wrapper.ts / pi.ts / opencode.ts
-// adds its row to BUNDLES. Steps 4-8 of §2.2 (manifests, fixture copy, command
-// skills, `claude plugin validate`, SHA256SUMS) are added with their own files
-// (build/manifests.ts, build/hash.mjs) in later steps.
+// adds its row to BUNDLES. Step 4 (manifests, build/manifests.ts) runs from M3
+// (DEVIATIONS D-M3-arch-4). Steps 5-8 of §2.2 (fixture copy, command skills,
+// `claude plugin validate`, SHA256SUMS) are added with their own files
+// (build/hash.mjs) in later steps.
 //
 // Failure: one stderr line `build failed: <reason>` and exit 1 (impl/13 §1).
 import { readFileSync, writeFileSync, rmSync, mkdirSync, readdirSync } from "node:fs";
@@ -22,6 +23,7 @@ import {
   DESCRIPTION_CAP,
   SURFACE_CAP,
 } from "../src/core/contracts/constants.ts";
+import { generateManifests } from "./manifests.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_OUT = "release-out";
@@ -148,6 +150,7 @@ async function main(outDir) {
   } finally {
     rmSync(GENERATED, { force: true });
   }
+  generateManifests(outDir); // §2.2 step 4: manifests + hook configs from adapters/table.ts (impl/13 §3)
   assertOutTree(outDir);
 }
 

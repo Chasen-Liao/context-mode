@@ -76,7 +76,7 @@ test("eventMap follows impl/10 §1.4", () => {
   assert.deepEqual(getAdapter("claude-code").eventMap, claudeShape);
   assert.deepEqual(getAdapter("codex").eventMap, claudeShape);
   assert.deepEqual(getAdapter("qwen").eventMap, claudeShape);
-  assert.deepEqual(getAdapter("vscode").eventMap, claudeShape);
+  assert.deepEqual(getAdapter("vscode").eventMap, { ...claudeShape, PreCompact: "PreCompact" }); // DEVIATIONS D-M3-A4-1
   assert.deepEqual(getAdapter("zcode").eventMap, claudeShape);
   assert.deepEqual(getAdapter("gemini").eventMap, {
     SessionStart: "SessionStart", UserPromptSubmit: "BeforeAgent", PreToolUse: "BeforeTool", PostToolUse: "AfterTool", PreCompact: "PreCompress",
@@ -95,8 +95,9 @@ test("eventMap follows impl/10 §1.4", () => {
   });
 });
 
+// M3-A7 wired the six spawn adapters; only pi/opencode stay not built (DEVIATIONS D-M3-A7-1).
 test("rows of adapters not built yet: decode throws, encode gives the empty allow shape", () => {
-  for (const id of ["gemini", "qwen", "copilot-cli", "vscode", "kiro", "zcode", "pi", "opencode"]) {
+  for (const id of ["pi", "opencode"]) {
     const row = getAdapter(id);
     assert.throws(() => row.decode({ hook_event_name: "PreToolUse" }), id);
     assert.deepEqual(row.encode({ event: "PreToolUse", agent: id, sessionId: "", cwd: "" }, { kind: "allow" }), { stdout: "", exitCode: 0 }, id);
