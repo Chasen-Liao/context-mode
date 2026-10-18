@@ -97,6 +97,8 @@ export function buildCandidates(
 ): Candidate[];
 ```
 
+Superseded (intern M4 Q9, Q10; DEVIATIONS D-M4-arch-2, D-M4-S1-3): the code is `buildCandidates(rows: readonly JournalRow[], sessionId: string): CandidateSet`, pure over rows the caller already read with `readSessionEvents` (no DB handle, no `upToSeq`). `CandidateSet` holds the five sections, each `seq` ascending. Each candidate also carries `query: string | null`, the `more:` entry render adds when it skips that candidate (M11): `key` for open errors and indexed sources, `path` for changed files, `null` for prompts.
+
 ### Inputs
 - `db`: an open handle from `openDb()`, read-only use only.
 - `sessionId`: the current session id. An empty string is a caller bug, not a DB condition — see Errors.
@@ -172,6 +174,8 @@ export function renderState(
 ): string;
 ```
 
+Superseded (DEVIATIONS D-M4-arch-2, D-M4-S1-1): the code is `renderState(rows: readonly JournalRow[], turn: number): string`; it runs candidates, score and render itself, and takes the session and `upto` from the highest-`seq` row.
+
 Returns the exact `<context_mode_state>` block, ≤ `STATE_BUDGET` UTF-8 bytes.
 
 ### Steps (budgeted lazy greedy, ADR-0009 §4)
@@ -179,7 +183,7 @@ Returns the exact `<context_mode_state>` block, ≤ `STATE_BUDGET` UTF-8 bytes.
 1. Separate the pinned `last_request` candidate (if present) from the rest.
 2. `reserved` = the byte length of the open tag line, the close tag line, and an empty `more: ctx_search(queries:[],scope:"session")` line (M12 — reserved before any item is placed, so the wrapper and an empty `more:` line always fit). `budget = STATE_BUDGET - reserved`. `used = 0` (bytes). If the pinned candidate exists, append its line, `used += pinned.bytes + 1` (newline), regardless of ratio — it is always taken first.
 3. For every remaining candidate, maintain a per-section counter `k` starting at 0, incremented each time a candidate from that section is taken. Compute `ratio = candidate.score * (RATIO_SECTION_DECAY ** k) / candidate.bytes`.
-4. Sort remaining candidates by `ratio` descending. This sort is recomputed once up front using `k = 0` for all (ADR-0009 §4 names ratio order, not a re-sort per pick); ties break by descending `seq` for determinism (M25 — newest first; fixes this file's earlier "ascending" text).
+4. Sort remaining candidates by `ratio` descending. This sort is recomputed once up front using `k = 0` for all (ADR-0009 §4 names ratio order, not a re-sort per pick); ties break by descending `seq` for determinism (M25 — newest first; fixes this file's earlier "ascending" text). Superseded by DEVIATIONS D-M4-S1-4 (intern M4 Q5): there is no one-time sort; each pick takes the best ratio with the live per-section `k`, so the `0.7^k` term has an effect.
 5. Walk the sorted list once. For each candidate:
    a. If `candidate.bytes > POINTER_MIN`, replace its line with a pointer line: `` #<seq> (<bytes> B) ctx_resume(seq:<seq>) `` and use the pointer's own byte length for the budget check (ADR-0009 §4: "An item over 640 B is never cut. It becomes a pointer line.").
    b. If `used + lineBytes + 1 <= budget`, take it: append the line to its section's output, `used += lineBytes + 1`, increment that section's `k`.
@@ -343,6 +347,17 @@ None beyond the DB layer's own timeout constant (owned by `store`, not redefined
 - A-stats-cost-bytes: PRD §12 gives the `saved` formula but not which journal rows carry `bytesProduced`/`bytesReturned`. This spec uses one `cost`-kind row per tool call (Assumption A7 in 00-architecture.md already adds this kind), written once by the handler at return time, matching ADR-0009 §0's single-write-path rule.
 - A-stats-dedup-mechanism: I1-14 requires turn-keyed idempotency but does not name the SQL mechanism. This spec uses `INSERT OR IGNORE` on a `(session_id, turn)` partial unique index for `kind = 'cost'` rows, in `appendEvent()` (owned by `store`, not this module) — `stats.ts` itself does no de-duplication at read time.
 - A-purge-no-dual-hash: v1's `purgeSession()` swept both a canonical and a legacy raw-casing hash because of a mid-life case-fold migration (v1 commit history). v2's single `projectKey` scheme (A5, 00-architecture.md) has no legacy variant, so `purge.ts` deletes rows by SQL `WHERE`, not by sweeping files on disk — v2 has one `context.db` per project, not per-session sidecar files, so the whole file-sweep shape of v1's module does not carry over; this is a deliberate simplification, not a gap.
+- A-intern-M4 (answers to `.impl/intern-M4.md` Q1-Q10, read against `src/core/compaction/*`):
+  - Q1 section order: §3 step 6 fixes it (`last_request`, `open_errors`, `changed_files`, `earlier_requests`, `indexed_sources`, ADR-0009 §5). The order carries meaning because the block has no section headers; a change is a golden change (GP6), not a refactor.
+  - Q2 pointer: strictly greater. "Over 640 B" (TECH-SPEC §11) means a 640 B line stays text and a 641 B line becomes `#<seq> (<bytes> B) ctx_resume(seq:<seq>)`. Use `>`, never `>=`.
+  - Q3 the two `+ 1` in `reserved`: one newline after the open tag line and one after the `more:` line. Lines are joined by `\n`, so the close tag line has no newline after it. Each item line costs its bytes `+ 1` for the same reason.
+  - Q4 empty line: every M4 format has a non-empty prefix (`now: `, `error #`, `edited `, `asked #`, `indexed `), so no input gives 0 bytes. The throw is an assertion of that rule (M9); a skip would hide a format bug.
+  - Q5 sort vs greedy: not equivalent. A one-time sort at `k = 0` ignores `0.7^k`. D-M4-S1-4 (lazy greedy, live `k`) wins; §3 step 4 is marked superseded.
+  - Q6 `k`: lines taken from that section. A skipped candidate does not change `k`.
+  - Q7 bonus: the formula `1 + floor(log2(max(1, n)))` is the rule. The loop counts how often `n` halves before it reaches 1, which is the same integer for every `n >= 1`, with no float `log2`. Both are correct; keep the integer loop (D1 uses integer tables).
+  - Q8 tie to higher `seq`: determinism first (same rows give the same bytes, GP6); newest wins because newer rows are more relevant (same reason as A-section-cap-drop). Do not reverse it.
+  - Q9 `query`: see the superseded note under §1 Export (M11 `more:` entry).
+  - Q10 signature: see the superseded notes under §1 and §3 Export (D-M4-arch-2).
 
 ---
 
