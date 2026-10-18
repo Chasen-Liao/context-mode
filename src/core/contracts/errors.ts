@@ -4,7 +4,8 @@ export type ErrorCode =
   | "NODE_TOO_OLD" | "NO_SQLITE" | "DB_GONE" | "NO_PROJECT" | "UNKNOWN_FIELD"
   | "TIMEOUT" | "NO_RUNTIME" | "FETCH_FAILED" | "SSRF" | "OUTSIDE_ROOT"
   | "INVALID_ARGS" | "ONE_OF_INPUT" | "SPAWN_FAILED"
-  | "DB_CORRUPT" | "SCHEMA_STALE" | "NO_GIT_DIR" | "NO_HOME"; // store additions, DEVIATIONS D-M1-2
+  | "DB_CORRUPT" | "SCHEMA_STALE" | "NO_GIT_DIR" | "NO_HOME" // store additions, DEVIATIONS D-M1-2
+  | "PLUGIN_ROOT_MISSING" | "BUNDLE_HASH_MISMATCH" | "CONFIG_PARSE_FAILED"; // tools-ops additions, impl/07 A-T2
 
 export const ERROR_TEXT: Readonly<Record<ErrorCode, string>> = Object.freeze({
   NODE_TOO_OLD: "Node <v> is below 24.15.0. Fix: install Node 24.15.0 or later.",
@@ -24,6 +25,9 @@ export const ERROR_TEXT: Readonly<Record<ErrorCode, string>> = Object.freeze({
   SCHEMA_STALE: "context.db schema is version <found>, expected <want>. Fix: run ctx_doctor.",
   NO_GIT_DIR: "No git repository at <path>. Fix: run context-mode inside a git repository.",
   NO_HOME: "Env var <name> is not set. Fix: set <name> to your home directory.",
+  PLUGIN_ROOT_MISSING: "Plugin root for <agent> not found at <path>. Fix: run ctx_upgrade.", // impl/07 §1 Errors
+  BUNDLE_HASH_MISMATCH: "Fetched bundle hash does not match SHA256SUMS. Fix: run ctx_upgrade again.", // impl/07 §6 Errors
+  CONFIG_PARSE_FAILED: "<agent> config at <path> did not parse as <format>. Fix: fix the syntax error and re-run ctx_upgrade.", // impl/07 §2 Errors
 });
 
 // impl/01 §4.3: one left-to-right scan for <name> tokens, no regex.

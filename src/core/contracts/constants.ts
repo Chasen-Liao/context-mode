@@ -292,3 +292,11 @@ export const DECISION_TOOL = "AskUserQuestion"; // rule 1: PostToolUse of this t
 export const DECISION_ANSWERS_KEY = "answers"; // rule 1: tool_response.answers (JSON); non-JSON writes no row
 export const DECISION_OPTION_KEY = "option"; // rule 2: journal key of an option-echo row
 export const DECISION_LABEL_JOIN = " | "; // rule 1: multi-select labels
+
+// ctx_doctor D1 / ctx_upgrade release source (impl/07 §5 D1, ADR-0011; DEVIATIONS D-M5-arch-5)
+export const RELEASE_REPO_URL = "https://github.com/mksglu/context-mode.git"; // git ls-remote <repo> release
+export const RELEASE_BRANCH = "release"; // CI build output only (PRD §6)
+export const BUNDLE_SHA_DEFINE = "__CTX_BUNDLE_SHA__"; // the one esbuild `define` key the release build sets to the commit sha
+declare const __CTX_BUNDLE_SHA__: string | undefined;
+// Release build: the commit sha of this bundle. Dev/test build (no define): undefined, D1 reports UNKNOWN.
+export const BUNDLE_SHA: string | undefined = typeof __CTX_BUNDLE_SHA__ === "string" ? __CTX_BUNDLE_SHA__ : undefined;
