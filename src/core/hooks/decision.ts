@@ -78,8 +78,9 @@ function lineLabel(line: string): string {
   if (i === 0 && line.length > 0 && isAsciiLetter(line[0])) i = 1;
   if (i === 0) return "";
   if (line[i] !== "." && line[i] !== ")") return "";
-  if (line[i + 1] !== " ") return "";
-  return line.slice(i + 2).trim();
+  const rest = line.slice(i + 1);
+  if (!rest.startsWith(" ")) return "";
+  return rest.trim();
 }
 
 /** Option labels of a numbered/lettered list (`1.`, `2.`, `A)`, `B)` at line start) in an assistant turn. */
