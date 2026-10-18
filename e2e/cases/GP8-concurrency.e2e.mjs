@@ -1,10 +1,10 @@
 // GP8 — Concurrency: 4 servers + hooks writing one context.db (14-tests.md §4, TECH-SPEC §6.2 GP8 row).
 // covers: src/core/store/. M1 per DEVIATIONS D-M1-14: 4-writer concurrency, V22 cleanup,
-// stats-heartbeat-no-timer-db-open. GP8/runpool-capped-flag and sibling-db-readonly are later milestones.
+// stats-heartbeat-no-timer-db-open. GP8/runpool-capped-flag is M2; GP8/sibling-db-readonly is M4 (D-M4-S3-1).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -186,4 +186,28 @@ test("[M2] GP8/runpool-capped-flag: ctx_batch runs every queued command to compl
   assert.ok(text.startsWith("2 command(s)"), "the summary must count both queued commands as run");
   assert.ok(text.includes("job1") && text.includes("job2"), "both queued commands' output must have been indexed and found");
   checkGolden("GP8", "runpool-capped-flag", normalize({ reply }));
+});
+
+test("[M4] GP8/sibling-db-readonly (#1213): ctx_stats leaves every sibling project DB and its own DB mtime unchanged", async (t) => {
+  const f = fixture(t);
+  const client = f.spawnOne();
+  await client.request("initialize", INIT);
+  await client.request("tools/call", { name: "ctx_execute", arguments: { language: "javascript", code: "process.stdout.write('x'.repeat(5000))" } });
+  const own = onlyProjectDb(f.projectsDir);
+  const siblings = ["b", "c"].map((ch) => path.join(f.projectsDir, ch.repeat(16), "context.db"));
+  for (const s of siblings) {
+    mkdirSync(path.dirname(s), { recursive: true });
+    writeFileSync(s, "sibling probe");
+  }
+  const past = new Date(Date.now() - 60_000);
+  for (const p of [...siblings, own]) utimesSync(p, past, past);
+  const before = siblings.map((p) => statSync(p).mtimeMs);
+  const ownBefore = statSync(own).mtimeMs;
+  const reply = await client.request("tools/call", { name: "ctx_stats", arguments: {} });
+  const siblingsAfter = siblings.map((p) => statSync(p).mtimeMs);
+  // The ctx_stats journal row is the server's own write (impl/00 §5.2 step 5), after the read-only read.
+  await client.close();
+  assert.equal(reply.isError, false);
+  assert.deepEqual(siblingsAfter, before, "a sibling DB was opened for write");
+  checkGolden("GP8", "sibling-db-readonly", normalize({ isError: reply.isError, siblingsUnchanged: true, ownDbExisted: ownBefore > 0 }));
 });
