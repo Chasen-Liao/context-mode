@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { runHookFixture } from "../harness/hook-runner.mjs";
 import { normalize } from "../harness/normalize.mjs";
+import { checkGolden } from "../harness/golden.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
@@ -51,6 +52,121 @@ function discoverFixtures() {
   }
   return out;
 }
+
+// M3 hook-config cases (14a-issue-cases.md GP3 rows; impl/10 §1.5; DECISIONS-r9 R4, T-CX). Black box: they read
+// only release-out/hooks/*.json and recorded fixtures (GS4).
+const HOOKS_OUT = path.join(REPO_ROOT, "release-out", "hooks");
+const readHooks = (id) => JSON.parse(readFileSync(path.join(HOOKS_OUT, `${id}.json`), "utf8"));
+const HOST_TIMEOUT_MAX_S = 10; // #1226: every hook timeout is 10 s or less
+const MS_PER_S = 1000;
+// impl/10 §1.5 "Timeout key" column; value divisor gives seconds.
+const TIMEOUT_UNIT = {
+  "claude-code": ["timeout", 1], codex: ["timeout", 1], gemini: ["timeout", MS_PER_S], qwen: ["timeout", 1],
+  "copilot-cli": ["timeoutSec", 1], vscode: ["timeout", 1], kiro: ["timeout", 1], zcode: ["timeoutMs", MS_PER_S],
+};
+const REGEX_MATCHER_AGENTS = ["claude-code", "codex", "qwen", "zcode"];
+
+function isObj(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+const isCommand = (e) => isObj(e) && e.type === "command" && typeof e.command === "string";
+const keysOf = (o) => Object.keys(o).sort();
+
+// Per-host schema of impl/10 §1.5. Returns the flat entry list or throws an AssertionError naming the host.
+function hostEntries(id) {
+  const doc = readHooks(id);
+  const out = [];
+  const [tKey] = TIMEOUT_UNIT[id];
+  if (id === "kiro") {
+    assert.deepEqual(keysOf(doc), ["hooks", "version"], id);
+    assert.equal(doc.version, "v1", id);
+    assert.ok(Array.isArray(doc.hooks), id);
+    for (const h of doc.hooks) {
+      assert.ok(isCommand(h.action), `${id}: action`);
+      out.push({ event: h.trigger, entry: { ...h.action, timeout: h.timeout }, matcher: h.matcher });
+    }
+  } else if (id === "zcode") {
+    assert.deepEqual(keysOf(doc), ["hooks"], id);
+    assert.deepEqual(keysOf(doc.hooks), ["enabled", "events"], id);
+    assert.equal(doc.hooks.enabled, true, id);
+    for (const [event, list] of Object.entries(doc.hooks.events)) for (const e of list) out.push({ event, entry: e, matcher: e.matcher });
+  } else if (id === "copilot-cli" || id === "vscode") {
+    // Flat schema: entries sit directly under the event, no nested `hooks` array, no host matcher (#1240 class).
+    assert.deepEqual(keysOf(doc), ["hooks", "version"], id);
+    assert.equal(doc.version, 1, id);
+    for (const [event, list] of Object.entries(doc.hooks)) {
+      for (const e of list) {
+        assert.ok(!("hooks" in e) && !("matcher" in e), `${id} ${event}: nested or matcher entry in flat schema`);
+        out.push({ event, entry: e, matcher: undefined });
+      }
+    }
+  } else {
+    assert.deepEqual(keysOf(doc), ["hooks"], id);
+    for (const [event, groups] of Object.entries(doc.hooks)) {
+      for (const g of groups) {
+        assert.ok(Array.isArray(g.hooks), `${id} ${event}: nested hooks array`);
+        if (id === "gemini") assert.ok(!("matcher" in g), `${id}: gemini has no host matcher`);
+        for (const e of g.hooks) out.push({ event, entry: e, matcher: g.matcher });
+      }
+    }
+  }
+  for (const { event, entry } of out) {
+    assert.ok(isCommand(entry), `${id} ${event}: not a command entry`);
+    assert.ok(tKey in entry, `${id} ${event}: no ${tKey}`);
+  }
+  return out;
+}
+
+test("[M3] GP3/hook-timeout-present", () => {
+  const summary = {};
+  for (const id of Object.keys(TIMEOUT_UNIT)) {
+    const [key, div] = TIMEOUT_UNIT[id];
+    const secs = hostEntries(id).map(({ event, entry }) => {
+      const s = entry[key] / div;
+      assert.ok(s > 0 && s <= HOST_TIMEOUT_MAX_S, `${id} ${event}: ${s}s not in (0, ${HOST_TIMEOUT_MAX_S}]`);
+      return s;
+    });
+    summary[id] = [...new Set(secs)];
+  }
+  checkGolden("GP3", "hook-timeout-present", normalize(summary));
+});
+
+// #1104 + T-CX matcher fixture: Codex runs its shell tool `exec` but reports it to hooks as tool_name "Bash"
+// (codex-rs hook_names.rs:53-55). The recorded Codex PreToolUse payload must hit the generated matcher.
+test("[M3] GP3/codex-exec-pretooluse-matcher", () => {
+  const codexDir = path.join(FIXTURES_ROOT, "codex");
+  const recorded = listDirs(codexDir).map((ver) => JSON.parse(readFileSync(path.join(codexDir, ver, "PreToolUse.json"), "utf8")));
+  assert.ok(recorded.length > 0, "no recorded e2e/fixtures/codex/<ver>/PreToolUse.json");
+  const matchers = hostEntries("codex").filter((x) => x.event === "PreToolUse").map((x) => x.matcher);
+  assert.equal(matchers.length, 1, "one codex PreToolUse group");
+  const re = new RegExp(matchers[0]);
+  for (const p of recorded) assert.ok(re.test(p.tool_name), `recorded tool_name ${p.tool_name} not matched`);
+  for (const name of ["Bash", "apply_patch", "mcp__context_mode__ctx_execute"]) assert.ok(re.test(name), name);
+  assert.ok(!re.test("exec"), "raw `exec` is never the hook tool_name");
+  checkGolden("GP3", "codex-exec-pretooluse-matcher", normalize({ matcher: matchers[0], recorded: recorded.map((p) => p.tool_name) }));
+});
+
+// #960 / DECISIONS-r9 R4: matchers list named tools, never a bare `mcp__` prefix. Kiro's `@mcp` (impl/10 §1.5) and the
+// body-filter hosts are filtered in the hook body, not here.
+test("[M3] GP3/unrelated-mcp-tool-no-hook", () => {
+  const foreign = ["mcp__grafana__get_datasource", "mcp__context-mode-x__ctx_execute", "mcp__plugin_other_context-mode__ctx_execute"];
+  const summary = {};
+  for (const id of REGEX_MATCHER_AGENTS) {
+    for (const { event, matcher } of hostEntries(id).filter((x) => x.matcher !== undefined)) {
+      for (const name of foreign) assert.ok(!new RegExp(matcher).test(name), `${id} ${event}: ${name} would spawn a hook`);
+    }
+    summary[id] = foreign.map(() => "no-hook");
+  }
+  checkGolden("GP3", "unrelated-mcp-tool-no-hook", normalize(summary));
+});
+
+// #1240: agy is removed in v2 (ISSUE-OUTCOMES-r2); the class "config validates against the host's own schema" is
+// kept per host (impl/10 §1.5): each generated file matches its host shape, flat hosts stay flat.
+test("[M3] GP3/antigravity-stop-hook-flat-schema", () => {
+  const summary = {};
+  for (const id of Object.keys(TIMEOUT_UNIT)) summary[id] = [...new Set(hostEntries(id).map((x) => x.event))].sort();
+  checkGolden("GP3", "antigravity-stop-hook-flat-schema", normalize(summary));
+});
 
 const fixtures = discoverFixtures();
 
