@@ -200,3 +200,8 @@ export interface V1Finding { file: string; path: string; reason: string; } // AD
 export type UpgradeMode = "upgrade" | "uninstall";
 export interface UpgradeChangeRow { area: string; before: string; after: string; }
 export interface HostConfigEdit { path: string; before: unknown; after: unknown; } // one key changed
+// impl/07 §2 and §5-§6 exports, named here so ops/ and tools/ share one shape (DEVIATIONS D-M5-C2-2).
+export type HostConfigFormat = "json" | "jsonc" | "toml";
+export interface HostConfigResult { text: string; format: HostConfigFormat; edits: HostConfigEdit[]; }
+export interface CtxUpgradeInput { mode?: UpgradeMode; confirmDelete?: boolean; } // A-T4
+export interface CtxDoctorInput {} // A-T3: no fields; any key is UNKNOWN_FIELD

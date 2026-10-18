@@ -413,3 +413,61 @@ test("[M5] release constants for doctor D1 (D-M5-arch-5)", () => {
   assert.equal(C.BUNDLE_SHA, undefined);
   assert.equal("BUNDLE_SHA" in C, true);
 });
+
+// M5-C2 (impl/07 §1-§6, impl/12 §3.1/§4.1, ADR-0010, ADR-0011; DEVIATIONS D-M5-C2-1..3).
+test("[M5] doctor check order, labels and D5 fixture (ADR-0010, impl/07 §5)", () => {
+  assert.deepEqual(C.DOCTOR_CHECK_ORDER, ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"]);
+  assert.deepEqual(Object.keys(C.DOCTOR_LABEL), C.DOCTOR_CHECK_ORDER);
+  assert.equal(C.DOCTOR_LABEL.D1, "version");
+  assert.equal(C.DOCTOR_LABEL.D8, "context.db");
+  assert.equal(C.HOOK_FIXTURE_DIR, "fixtures");
+  assert.equal(C.HOOK_FIXTURE_FILE, "hook-roundtrip.json");
+  assert.equal(C.DOCTOR_FAIL_LINE("codex", "D8", "integrity_check failed", "run ctx_upgrade"), "FAIL codex: D8 — integrity_check failed. Fix: run ctx_upgrade");
+  assert.equal(C.REPORT_HEADER, "| Check | Status | Detail | Fix |");
+  assert.equal(C.REPORT_TRUNCATED_LINE, "(report truncated at 4096 B; run ctx_doctor again after the first fix)");
+  assert.equal(C.D8_STALE_SCHEMA_DETAIL(1, 2), "stale schema (v1, expected v2)");
+  assert.equal(C.D9_INDEX_DETAIL(0, 0), "0 sources, 0 chunks indexed");
+  assert.equal(C.D5_CODEX_UNTRUSTED_DETAIL, "Codex hooks not trusted");
+});
+
+test("[M5] plugin root segments (impl/07 §1, §6)", () => {
+  assert.equal(C.PLUGIN_CACHE_DIR_NAME, "cache");
+  assert.equal(C.PLUGIN_MARKETPLACE_NAME, "context-mode");
+  assert.equal(C.DATA_PLUGINS_DIR_NAME, "plugins");
+  assert.equal(C.PLUGIN_CURRENT_LINK, "current");
+  assert.equal(C.PLUGIN_ROLLBACK_GENERATIONS, 1);
+  assert.equal(C.RELEASE_SUMS_FILE, "SHA256SUMS");
+  assert.equal(C.EXTENSIONS_DIR_NAME, "extensions");
+  assert.deepEqual(Object.keys(C.AGENT_HOME_DIR).sort(), [...AGENT_IDS].sort());
+});
+
+test("[M5] ADR-0011 v1 names", () => {
+  assert.ok(C.V1_SCRIPT_NAMES.includes("pretooluse.mjs"));
+  assert.ok(!C.V1_SCRIPT_NAMES.includes("hook.mjs"), "the v2 hook entry is never a v1 script name");
+  assert.equal(C.V1_HOOK_COMMAND, "context-mode hook");
+  assert.equal(C.V1_CODEX_HOOK_COMMAND, "context-mode hook codex");
+  assert.equal(C.V1_CACHE_HEAL_NAME, "context-mode-cache-heal");
+  assert.deepEqual(C.V1_CACHE_HEAL_EXTS, [".mjs", ".sh"]);
+  assert.equal(C.V1_PI_PACKAGE, "npm:context-mode");
+  assert.equal(C.V1_OPENCODE_PLUGIN_SPEC, "context-mode");
+  assert.equal(C.V1_TMP_PREFIX, "context-mode-");
+  assert.equal(C.PI_GIT_PACKAGE, "git:github.com/mksglu/context-mode@release");
+  assert.equal(C.OPENCODE_GIT_SPEC, "git+https://github.com/mksglu/context-mode.git#release");
+  assert.equal(C.UPGRADE_HOST_COMMAND.codex, "rewrite config.toml's [mcp_servers.context-mode*] block to the v2 entry, then restart Codex");
+});
+
+test("[M5] Pi/OpenCode entry ids (impl/12 A21, A28)", () => {
+  assert.equal(C.PLUGIN_ID, "context-mode");
+  assert.equal(C.PLUGIN_NAME, "context-mode");
+  assert.equal(C.OPENCODE_TOOL_PREFIX, "context-mode_");
+});
+
+test("[M5] types.ts declares host-config and tool input types", () => {
+  const src = readFileSync(join(SRC, "types.ts"), "utf8");
+  for (const s of [
+    'export type HostConfigFormat = "json" | "jsonc" | "toml";',
+    "export interface HostConfigResult { text: string; format: HostConfigFormat; edits: HostConfigEdit[]; }",
+    "export interface CtxUpgradeInput { mode?: UpgradeMode; confirmDelete?: boolean; }",
+    "export interface CtxDoctorInput {}",
+  ]) assert.ok(src.includes(s), s);
+});
