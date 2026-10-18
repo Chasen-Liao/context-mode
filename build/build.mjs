@@ -5,9 +5,9 @@
 //   --generated-only writes src/prompt/_generated.ts (git-ignored), keeps it and exits, so plain
 //   `node --test tests/v2/` resolves the src/ import (DEVIATIONS D-M2-arch-6).
 //
-// M0 scope (DEVIATIONS D-M0-8): bundles only the rows whose entry exists in M0
-// (server, hook). The milestone that writes run-wrapper.ts / pi.ts / opencode.ts
-// adds its row to BUNDLES. Step 4 (manifests, build/manifests.ts) runs from M3
+// Rows land with their entry (DEVIATIONS D-M0-8): server, hook (M0); run and its
+// search.mjs twin (M3, impl/04 §4, D-M2-4, D-M3-X1-2). pi.ts / opencode.ts add
+// their rows with their own milestone. Step 4 (manifests, build/manifests.ts) runs from M3
 // (DEVIATIONS D-M3-arch-4). Steps 5-8 of §2.2 (fixture copy, command skills,
 // `claude plugin validate`, SHA256SUMS) are added with their own files
 // (build/hash.mjs) in later steps.
@@ -30,10 +30,13 @@ const DEFAULT_OUT = "release-out";
 const PROMPT_DIR = path.join(REPO_ROOT, "src", "prompt");
 const GENERATED = path.join(PROMPT_DIR, "_generated.ts");
 
-// impl/13 §2.2 step 2 table, M0 rows only (D-M0-8). Output paths are relative to outDir.
+// impl/13 §2.2 step 2 table, rows whose entry exists (D-M0-8). Output paths are relative to outDir.
+// run.mjs and search.mjs are one entry; the file name picks the job (D-M3-X1-2).
 const BUNDLES = Object.freeze([
   { name: "server", entry: "src/entries/server.ts", out: "server.mjs" },
   { name: "hook", entry: "src/entries/hook.ts", out: "hook.mjs" },
+  { name: "run", entry: "src/entries/run.ts", out: "run.mjs" },
+  { name: "search", entry: "src/entries/run.ts", out: "search.mjs" },
 ]);
 
 // Same options for every row (impl/13 §2.2 step 2, "same").
