@@ -77,6 +77,111 @@ test("[M2] GP1/no-clientinfo-agent-from-flag", async (t) => {
   checkGolden("GP1", "no-clientinfo-agent-from-flag", normalize({ reply }, { home, proj: ws }));
 });
 
+// M3 install cases (14a-issue-cases.md GP1 rows; impl/10 §1.5; impl/13 §3; DECISIONS-r9 R4). They read only the
+// generated release-out/hooks/*.json (build/manifests.ts output) — black box, no src/ import (GS4).
+const HOOKS_OUT = path.join(RELEASE_OUT, "hooks");
+const readHooks = (id) => JSON.parse(readFileSync(path.join(HOOKS_OUT, `${id}.json`), "utf8"));
+const SPAWN_HOOK_AGENTS = ["claude-code", "codex", "gemini", "qwen", "copilot-cli", "vscode", "kiro", "zcode"];
+// impl/10 §1.5 "Timeout key" column: key and unit per host shape.
+const TIMEOUT_KEY = {
+  "claude-code": "timeout", codex: "timeout", gemini: "timeout", qwen: "timeout",
+  "copilot-cli": "timeoutSec", vscode: "timeout", kiro: "timeout", zcode: "timeoutMs",
+};
+
+// Every command entry of a host hook file, flattened: [{ event, entry, matcher }].
+function hookEntries(id) {
+  const doc = readHooks(id);
+  const out = [];
+  if (id === "kiro") {
+    for (const h of doc.hooks) out.push({ event: h.trigger, entry: { ...h.action, timeout: h.timeout }, matcher: h.matcher });
+  } else if (id === "zcode") {
+    for (const [event, list] of Object.entries(doc.hooks.events)) for (const e of list) out.push({ event, entry: e, matcher: e.matcher });
+  } else if (id === "copilot-cli" || id === "vscode") {
+    for (const [event, list] of Object.entries(doc.hooks)) for (const e of list) out.push({ event, entry: e, matcher: undefined });
+  } else {
+    for (const [event, groups] of Object.entries(doc.hooks)) for (const g of groups) for (const e of g.hooks) out.push({ event, entry: e, matcher: g.matcher });
+  }
+  return out;
+}
+
+test("[M3] GP1/default-hook-timeouts", () => {
+  const summary = {};
+  for (const id of SPAWN_HOOK_AGENTS) {
+    const entries = hookEntries(id);
+    assert.ok(entries.length > 0, `${id}: no hook entries`);
+    for (const { event, entry } of entries) {
+      const v = entry[TIMEOUT_KEY[id]];
+      assert.ok(Number.isFinite(v) && v > 0, `${id} ${event}: ${TIMEOUT_KEY[id]} missing or not > 0`);
+    }
+    summary[id] = { key: TIMEOUT_KEY[id], values: [...new Set(entries.map((x) => x.entry[TIMEOUT_KEY[id]]))] };
+  }
+  checkGolden("GP1", "default-hook-timeouts", normalize(summary));
+});
+
+// Host-matcher rows (impl/10 §1.5): the matcher is a regex over tool_name; each named tool must hit exactly one
+// group per tool event, and every group's entries carry a timeout.
+const REGEX_MATCHER_TOOLS = {
+  "claude-code": ["Bash", "Read", "Grep", "WebFetch", "Write", "Edit", "NotebookEdit", ...TOOL_ORDER.map((t) => "mcp__plugin_context-mode_context-mode__" + t)],
+  codex: ["Bash", "apply_patch", ...TOOL_ORDER.map((t) => "mcp__context_mode__" + t)],
+  qwen: ["run_shell_command", "Shell", "read_file", "grep_search", "web_fetch", ...TOOL_ORDER.map((t) => "mcp__context-mode__" + t)],
+  zcode: ["Bash", "Read", "Grep", "WebFetch", "Write", "Edit", "NotebookEdit", ...TOOL_ORDER.map((t) => "mcp__context-mode__" + t)],
+};
+
+test("[M3] GP1/hooks-json-one-matcher-per-tool", () => {
+  const summary = {};
+  for (const [id, tools] of Object.entries(REGEX_MATCHER_TOOLS)) {
+    const entries = hookEntries(id);
+    for (const event of ["PreToolUse", "PostToolUse"]) {
+      const withMatcher = entries.filter((x) => x.event === event);
+      assert.ok(withMatcher.length > 0, `${id} ${event}: no entry`);
+      for (const tool of tools) {
+        const hits = withMatcher.filter((x) => typeof x.matcher === "string" && new RegExp(x.matcher).test(tool));
+        assert.equal(hits.length, 1, `${id} ${event}: ${tool} matched ${hits.length} entries`);
+        assert.ok(Number.isFinite(hits[0].entry[TIMEOUT_KEY[id]]), `${id} ${event}: no timeout`);
+      }
+    }
+    summary[id] = [...new Set(entries.filter((x) => x.matcher !== undefined).map((x) => x.matcher))];
+  }
+  checkGolden("GP1", "hooks-json-one-matcher-per-tool", normalize(summary));
+});
+
+test("[M3] GP1/kiro-hooks-v1-schema", () => {
+  const doc = readHooks("kiro");
+  assert.equal(doc.version, "v1");
+  assert.ok(Array.isArray(doc.hooks) && doc.hooks.length > 0, "hooks must be a non-empty array");
+  for (const h of doc.hooks) {
+    assert.deepEqual(Object.keys(h).filter((k) => k !== "matcher").sort(), ["action", "enabled", "name", "timeout", "trigger"]);
+    assert.equal(h.action.type, "command");
+    assert.equal(typeof h.action.command, "string");
+    assert.equal(h.enabled, true);
+  }
+  checkGolden("GP1", "kiro-hooks-v1-schema", normalize(doc));
+});
+
+// Standalone (non-plugin) installs name the ctx tools with mcp__context-mode__ (qwen, zcode); the Claude plugin
+// keeps its plugin prefix and Codex its underscore key (DECISIONS-r9 R1).
+test("[M3] GP1/standalone-mcp-tool-prefix", () => {
+  const summary = {};
+  for (const id of ["qwen", "zcode"]) {
+    const matchers = hookEntries(id).filter((x) => x.matcher !== undefined).map((x) => x.matcher);
+    assert.ok(matchers.length > 0, `${id}: no matcher`);
+    for (const m of matchers) {
+      assert.ok(m.includes("mcp__context-mode__ctx_"), `${id}: matcher lacks mcp__context-mode__ctx_: ${m}`);
+      for (const t of TOOL_ORDER) assert.ok(new RegExp(m).test("mcp__context-mode__" + t), `${id}: ${t} not matched`);
+      assert.ok(!new RegExp(m).test("mcp__context_mode__ctx_execute"), `${id}: underscore key must not match`);
+    }
+    summary[id] = [...new Set(matchers)];
+  }
+  checkGolden("GP1", "standalone-mcp-tool-prefix", normalize(summary));
+});
+
+// #906: v2 names the platform by the --agent flag, not CONTEXT_MODE_PLATFORM (ADR-0007; DEVIATIONS D-M3-A7-6).
+test("[M3] GP1/codex-platform-env", () => {
+  const commands = [...new Set(hookEntries("codex").map((x) => x.entry.command))];
+  assert.deepEqual(commands, ["node hook.mjs --agent codex"]);
+  checkGolden("GP1", "codex-platform-env", normalize({ commands }));
+});
+
 test("[M0] GP1/harness-smoke", async () => {
   const client = spawnBundle(SERVER_BUNDLE);
   await client.request("initialize", {

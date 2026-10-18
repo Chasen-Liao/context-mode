@@ -1,0 +1,47 @@
+{
+  "hooks": [
+    {
+      "action": {
+        "command": "node hook.mjs --agent kiro",
+        "type": "command"
+      },
+      "enabled": true,
+      "name": "context-mode-SessionStart",
+      "timeout": 5,
+      "trigger": "SessionStart"
+    },
+    {
+      "action": {
+        "command": "node hook.mjs --agent kiro",
+        "type": "command"
+      },
+      "enabled": true,
+      "name": "context-mode-PromptSubmit",
+      "timeout": 5,
+      "trigger": "PromptSubmit"
+    },
+    {
+      "action": {
+        "command": "node hook.mjs --agent kiro",
+        "type": "command"
+      },
+      "enabled": true,
+      "matcher": "@mcp",
+      "name": "context-mode-PreToolUse",
+      "timeout": 5,
+      "trigger": "PreToolUse"
+    },
+    {
+      "action": {
+        "command": "node hook.mjs --agent kiro",
+        "type": "command"
+      },
+      "enabled": true,
+      "matcher": "@mcp",
+      "name": "context-mode-PostToolUse",
+      "timeout": 5,
+      "trigger": "PostToolUse"
+    }
+  ],
+  "version": "v1"
+}
