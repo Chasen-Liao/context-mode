@@ -96,6 +96,67 @@ Call the ctx_upgrade tool and show its table to the user. Then call ctx_doctor a
 Deletes stored data: one session, one indexed source, or everything stored for this project. This cannot be undone. Use it only when the user asks to forget or reset data.
 ```
 
+## Hook texts (deny reasons and hints)
+
+impl/08 §6.1, §6.2, Assumption B2. Built by `src/core/policy/decide.ts` from `src/core/contracts/constants.ts`; `tests/v2/policy/decide.test.mjs` checks that each block below equals what the code returns. Placeholders: `{prefix}` is the agent row's `toolNamePrefix`; `{command}`, `{url}`, `{path}`, `{size}`, `{intent}` come from the call (`{intent}` is the call's description, else `state what you need`). The ids use a hyphen, so the r3 tool-description check in `lint.mjs drafts` skips them (DEVIATIONS D-M3-E4-9).
+
+<!-- id: deny-curl -->
+```text
+context-mode: This curl/wget call sends its body into the conversation.
+Run it here instead; the full output is indexed and only the part that matches your intent comes back.
+Tool: {prefix}ctx_execute
+{"language":"shell","code":"{command}","intent":"{intent}"}
+```
+
+<!-- id: deny-http -->
+```text
+context-mode: This inline HTTP call sends its body into the conversation.
+Run it here instead; the full output is indexed and only the part that matches your intent comes back.
+Tool: {prefix}ctx_execute
+{"language":"shell","code":"{command}","intent":"{intent}"}
+```
+
+<!-- id: deny-build -->
+```text
+context-mode: This build command sends its body into the conversation.
+Run it here instead; the full output is indexed and only the part that matches your intent comes back.
+Tool: {prefix}ctx_execute
+{"language":"shell","code":"{command}","intent":"{intent}"}
+```
+
+<!-- id: deny-webfetch -->
+```text
+context-mode: WebFetch sends its body into the conversation.
+Run it here instead; the full output is indexed and only the part that matches your intent comes back.
+Tool: {prefix}ctx_index, then {prefix}ctx_search
+{"url":"{url}"}
+```
+
+<!-- id: deny-read -->
+```text
+context-mode: this file is {size} bytes, more than the 16384 byte limit for one read. Pick one: read part of it with Read(file_path, offset, limit), for example limit 200; or run code on it with ctx_execute(language, code, file="{path}"), which gives your code the path in CTX_FILE and returns only stdout, up to 16384 bytes; or search it with a bounded command such as grep -n or tail.
+```
+
+<!-- id: hint-bash -->
+```text
+context-mode: when this command's output may be long, or you need a few facts from it, run it with {prefix}ctx_execute and print just what you need. Short fixed output and file changes are fine here.
+```
+
+<!-- id: hint-read -->
+```text
+context-mode: to analyze this file rather than edit it, run code on it with {prefix}ctx_execute and file set to its path; what your code prints comes back, nothing else.
+```
+
+<!-- id: hint-grep -->
+```text
+context-mode: grep output can be larger than you expect. To count, filter or group matches, run the search with {prefix}ctx_execute and print the result.
+```
+
+<!-- id: hint-mcp-followup -->
+```text
+context-mode: tools of other MCP servers can return large payloads in full. For a page or API you can reach directly, fetch it in {prefix}ctx_execute and print what you need, or store it with {prefix}ctx_index and query it with {prefix}ctx_search.
+```
+
 ## Changes
 
 r3: added the `seq` param to `ctx_resume` (PRD §7, decision A35), bumped status to r3.
@@ -105,3 +166,4 @@ r6 (`DECISIONS-r6.md` D6): `ctx_resume` text adds the no-`seq` call: it returns 
 r7 (`DECISIONS-r7.md` R1, R2): `ctx_search` text notes the measured recall gain over plain keyword search. Still under the 1,024-char cap (716).
 r8 (`DECISIONS-r8.md` VR): `instructions` and `ctx_execute` texts state that a large file goes through `ctx_execute` with `file` set, or Read with offset/limit; a plain Read of it is now denied, not just hinted. Both texts stay under the 1,024-char cap (1,015 and 732).
 
+r9 M3-E4 (impl/08 B2, DECISIONS-r8 doc edit 5): added the hook text blocks deny-curl, deny-http, deny-build, deny-webfetch, deny-read, hint-bash, hint-read, hint-grep, hint-mcp-followup.
