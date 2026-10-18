@@ -174,3 +174,45 @@ export const VERBOSE_FLAGS = Object.freeze(["-v", "--verbose"] as const); // any
 // path followed by `pipeLength` (spaces around "|" allowed). Anything else -> not a bounded sink.
 export const JQ_WHITELIST: Readonly<{ identity: "."; length: "length"; pipeLength: "| length"; fieldSep: "." }> =
   Object.freeze({ identity: ".", length: "length", pipeLength: "| length", fieldSep: "." });
+
+// impl/08 §6.1 steps 5d, 6, 7, 8 (DEVIATIONS D-M3-E4-5). Hint templates: TOOL_PREFIX_SLOT is replaced by
+// row.toolNamePrefix. Same text as the drafts.md hint-* id blocks (tests/v2/policy/decide.test.mjs compares them).
+export const TOOL_PREFIX_SLOT = "{prefix}";
+export const BASH_HINT = "context-mode: when this command's output may be long, or you need only part of it, run it with {prefix}ctx_execute and print just what you need. Short fixed output and file changes are fine here.";
+export const GREP_HINT = "context-mode: grep output can be larger than you expect. To count, filter or group matches, run the search with {prefix}ctx_execute and print the result.";
+export const READ_HINT = "context-mode: to analyze this file rather than edit it, run code on it with {prefix}ctx_execute and file set to its path; what your code prints comes back, nothing else.";
+export const MCP_HINT = "context-mode: tools of other MCP servers can return large payloads in full. For a page or API you can reach directly, fetch it in {prefix}ctx_execute and print what you need, or store it with {prefix}ctx_index and query it with {prefix}ctx_search.";
+// onceKey families (impl/08 §6.1): key = family + ev.sessionId. hooks/throttle.ts applies MCP_HINT_EVERY to "mcp:" only.
+export const HINT_KEY = Object.freeze({ bash: "bash:", read: "read:", grep: "grep:", mcp: "mcp:" } as const);
+export const CANONICAL_MCP_PREFIX = "mcp:"; // impl/01 §2: another server's tool is "mcp:<server>:<tool>"
+export const CANONICAL_MCP_SEP = ":";
+export const SHELL_HINT_ONLY_TOOLS = Object.freeze(["PowerShell"] as const); // #1265/#1212: same hint as Bash, no POSIX parse (D-M3-E4-6)
+export const DENY_WEBFETCH_JOIN = ", then "; // "Tool: <p>ctx_index, then <p>ctx_search"
+export const POLICY_UNREADABLE_WARNING = "context-mode: your deny rules could not be read, so they are not applied. Fix: run ctx_doctor."; // E2, flag unset (stderr)
+// ADR-0008 item 6, #1006/#945: WebFetch to these hosts (or a subdomain) is never denied (claude.ai artifacts).
+export const NEVER_DENY_HOSTS = Object.freeze(["claude.ai", "claude.site", "claudeusercontent.com"] as const);
+
+// impl/08 §6.1 step 5c rule tables (argv0 compared lowercased, after unwrap and baseName).
+export const CURL_COMMANDS = Object.freeze(["curl", "wget"] as const);
+// ADR-0008 "#166 silent/verbose curl checks stay" (v1 routing.mjs:745-765): a body that goes to a file or a bounded
+// sink is still a deny when the call is not silent (progress meter on stderr) or is verbose.
+export const CURL_SILENT_FLAGS: Readonly<Record<"curl" | "wget", { short: string; long: string }>> =
+  Object.freeze({ curl: { short: "s", long: "--silent" }, wget: { short: "q", long: "--quiet" } });
+export const CURL_VERBOSE_FLAGS = Object.freeze(["-v", "--verbose", "--trace", "--trace-ascii"] as const);
+export const CURL_DUMP_HEADER_FLAG = "-D"; // "-D -": headers to stdout
+export const BOUNDED_GIT_COMMAND = "git"; // with BOUNDED_GIT_SUBCOMMANDS
+export const BUILD_COMMANDS = Object.freeze(["gradlew", "gradle", "mvnw", "mvn", "sbt"] as const);
+// Inline HTTP: FETCH_CALL + one of FETCH_QUOTES + HTTP_SCHEME, or any INLINE_HTTP_CALLS substring, in a command's raw text.
+export const FETCH_CALL = "fetch(";
+export const FETCH_QUOTES = "'\"`";
+export const HTTP_SCHEME = "http";
+export const INLINE_HTTP_CALLS = Object.freeze(["requests.get(", "requests.post(", "requests.put(", "http.get(", "http.request("] as const);
+// impl/08 §6.1 step 6a (DECISIONS-r8 "Other hosts"): one-file shell dumps on hosts with no Read tool.
+export const SHELL_DUMP_COMMANDS = Object.freeze(["cat", "head", "tail", "sed", "less", "jq", "bat", "more"] as const);
+export const DUMP_COUNT_COMMANDS = Object.freeze(["head", "tail"] as const); // bound by a count flag
+export const DUMP_COUNT_FLAGS = Object.freeze(["-n", "-c", "--lines", "--bytes"] as const); // also "-n20", "--lines=20", "-20"
+export const SED_COMMAND = "sed";
+export const SED_QUIET_FLAGS = Object.freeze(["-n", "--quiet", "--silent"] as const); // "sed -n" only
+export const JQ_COMMAND = "jq"; // a dump only with the identity filter (D-M3-E4-7)
+// impl/08 §6.1 step 6: Read input path key per host shape (Claude file_path, Gemini/Qwen absolute_path, path). D-M3-E4-4.
+export const READ_PATH_KEYS = Object.freeze(["file_path", "absolute_path", "path"] as const);
