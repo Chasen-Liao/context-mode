@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { spawnBundle } from "../harness/mcp-client.mjs";
 import { normalize } from "../harness/normalize.mjs";
