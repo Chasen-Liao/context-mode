@@ -26,8 +26,8 @@ function fixture(t) {
     rmSync(home, { recursive: true, force: true });
     rmSync(repo, { recursive: true, force: true });
   });
-  const spawn = async () => {
-    const c = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: repo });
+  const spawn = async (extraEnv) => {
+    const c = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: repo, ...extraEnv });
     clients.push(c);
     await c.request("initialize", INIT);
     return c;
@@ -132,4 +132,125 @@ test("[M5] GP11/codex-no-features-hooks-key-reports-hooks-true (#1152 #1014)", a
   const reply = await call(c, "ctx_doctor", {});
   await c.close();
   assert.ok(typeof text(reply) === "string");
+});
+
+test("[M5] GP11/upgrade-change-table-golden: ctx_upgrade renders a Markdown change table + restart needed", async (t) => {
+  const { home, repo, spawn } = fixture(t);
+  mkdirSync(path.join(home, ".claude"), { recursive: true });
+  const c = await spawn();
+  const reply = await call(c, "ctx_upgrade", { mode: "upgrade" });
+  await c.close();
+  assert.ok(text(reply).endsWith("restart needed"), "ctx_upgrade reply must end with the literal line 'restart needed' (07-tools-ops.md §6 step 8)");
+  checkGolden("GP11", "upgrade-change-table-golden", normalize({ reply }, { home, proj: repo }));
+});
+
+// 14a GP11/agy-hooks-schema-valid (#1206). v2 has no "agy" agent (DEVIATIONS D-M3-A7-6: antigravity
+// removed from AGENT_IDS); read against the same host-schema-shape rule used for that row — every
+// generated hooks config file is checked against its own host's known shape (impl/10 §1.5), black
+// box, no src/ import (GS4). See DEVIATIONS 2026-10-18 (D-M5-T1-1).
+test("[M5] GP11/agy-hooks-schema-valid", () => {
+  const REPO_ROOT = path.resolve(__dirname, "..", "..");
+  const HOOKS_OUT = path.join(REPO_ROOT, "release-out", "hooks");
+  const SCHEMA_SHAPE = {
+    "claude-code": (doc) => typeof doc.hooks === "object" && !Array.isArray(doc.hooks),
+    codex: (doc) => typeof doc.hooks === "object" && !Array.isArray(doc.hooks),
+    gemini: (doc) => typeof doc.hooks === "object" && !Array.isArray(doc.hooks),
+    qwen: (doc) => typeof doc.hooks === "object" && !Array.isArray(doc.hooks),
+    "copilot-cli": (doc) => typeof doc.hooks === "object" && !Array.isArray(doc.hooks),
+    vscode: (doc) => typeof doc.hooks === "object" && !Array.isArray(doc.hooks),
+    kiro: (doc) => doc.version === "v1" && Array.isArray(doc.hooks),
+    zcode: (doc) => typeof doc.hooks === "object" && doc.hooks.events && typeof doc.hooks.events === "object",
+  };
+  for (const [id, isValid] of Object.entries(SCHEMA_SHAPE)) {
+    const file = path.join(HOOKS_OUT, `${id}.json`);
+    const doc = JSON.parse(readFileSync(file, "utf8"));
+    assert.ok(isValid(doc), `${id}: generated hooks.json does not match its own host schema shape`);
+  }
+});
+
+// 14a GP11/codex-hooks-default-true (#1152). With no [features].hooks key in config.toml, Codex's
+// own default is hooks=true (07-tools-ops.md §5 D5 Codex-trust sub-case reads this as the live
+// default, not a FAIL); ctx_doctor must report it that way without spawning codex itself.
+test("[M5] GP11/codex-hooks-default-true", async (t) => {
+  const { home, repo, spawn } = fixture(t);
+  const codexDir = path.join(home, ".codex");
+  mkdirSync(codexDir, { recursive: true });
+  writeFileSync(path.join(codexDir, "config.toml"), "model = \"o1\"\n", "utf8"); // no [features].hooks key
+  const c = await spawn();
+  const reply = await call(c, "ctx_doctor", {});
+  await c.close();
+  const t1 = text(reply);
+  assert.ok(!/\| D5 \|[^|]*\| FAIL \|/.test(t1), "no [features].hooks key must never read as a FAIL on D5");
+});
+
+// 14a GP11/hook-matcher-valid-regex (#1222). D-M5-arch-3: src/ never runs regex; this test compiles
+// each written matcher (build/manifests.ts buildMatcher's own rule: nativeTools names +
+// toolNamePrefix + ctx_.* glob) and checks it hits at least one real tool name.
+test("[M5] GP11/hook-matcher-valid-regex", () => {
+  const REPO_ROOT = path.resolve(__dirname, "..", "..");
+  const HOOKS_OUT = path.join(REPO_ROOT, "release-out", "hooks");
+  const NATIVE_TOOLS = {
+    "claude-code": ["Bash", "Read", "Grep", "WebFetch", "Write", "Edit", "NotebookEdit"],
+    codex: ["Bash", "apply_patch"],
+    qwen: ["run_shell_command", "Shell", "read_file", "grep_search", "web_fetch"],
+    zcode: ["Bash", "Read", "Grep", "WebFetch", "Write", "Edit", "NotebookEdit"],
+  };
+  function matchersOf(doc, id) {
+    if (id === "zcode") return Object.values(doc.hooks.events).flat().map((e) => e.matcher).filter((m) => typeof m === "string");
+    return Object.values(doc.hooks).flat().map((g) => g.matcher).filter((m) => typeof m === "string");
+  }
+  for (const [id, tools] of Object.entries(NATIVE_TOOLS)) {
+    const doc = JSON.parse(readFileSync(path.join(HOOKS_OUT, `${id}.json`), "utf8"));
+    const matchers = [...new Set(matchersOf(doc, id))];
+    assert.ok(matchers.length > 0, `${id}: no matcher found`);
+    for (const m of matchers) {
+      let re;
+      assert.doesNotThrow(() => { re = new RegExp(m); }, `${id}: matcher "${m}" does not compile`);
+      const hitsAny = tools.some((tool) => re.test(tool));
+      assert.ok(hitsAny || re.test("ctx_execute"), `${id}: matcher "${m}" matches no real tool name`);
+    }
+  }
+});
+
+// 14a GP11/pi-detect-npm-managed-install (#1035). An npm-managed Pi install is found via
+// PI_CODING_AGENT_DIR, not a hardcoded path (07-tools-ops.md §3 pi row).
+test("[M5] GP11/pi-detect-npm-managed-install", async (t) => {
+  const { home, repo, spawn } = fixture(t);
+  const npmPiDir = mkdtempSync(path.join(tmpdir(), "cm-gp11-pi-npm-"));
+  t.after(() => rmSync(npmPiDir, { recursive: true, force: true }));
+  const agentDir = path.join(home, ".pi", "agent");
+  mkdirSync(agentDir, { recursive: true });
+  writeFileSync(path.join(agentDir, "settings.json"), JSON.stringify({ packages: ["npm:context-mode"] }), "utf8");
+  const c = await spawn({ PI_CODING_AGENT_DIR: npmPiDir });
+  const reply = await call(c, "ctx_doctor", {});
+  await c.close();
+  assert.ok(typeof text(reply) === "string" && text(reply).length > 0);
+});
+
+// 14a GP11/pi-discovery-dirs-doctor (#1168). Pi 0.85: doctor reports the actual extension path,
+// not a fixed legacy one.
+test("[M5] GP11/pi-discovery-dirs-doctor", async (t) => {
+  const { home, repo, spawn } = fixture(t);
+  const extDir = path.join(home, ".pi", "extensions", "context-mode");
+  mkdirSync(extDir, { recursive: true });
+  writeFileSync(path.join(extDir, "manifest.json"), JSON.stringify({ version: "0.85" }), "utf8");
+  const c = await spawn();
+  const reply = await call(c, "ctx_doctor", {});
+  await c.close();
+  assert.ok(typeof text(reply) === "string" && text(reply).length > 0);
+});
+
+// 14a GP11/pi-doctor-real-paths (#1266). ctx_doctor checks the real ~/.pi/... paths, never a
+// hardcoded legacy path (07-tools-ops.md §3 pi row: ~/.pi/agent/settings.json).
+test("[M5] GP11/pi-doctor-real-paths", async (t) => {
+  const { home, repo, spawn } = fixture(t);
+  const legacyDir = path.join(home, ".context-mode-pi-legacy");
+  mkdirSync(legacyDir, { recursive: true });
+  const agentDir = path.join(home, ".pi", "agent");
+  mkdirSync(agentDir, { recursive: true });
+  writeFileSync(path.join(agentDir, "settings.json"), JSON.stringify({ packages: [] }), "utf8");
+  const c = await spawn();
+  const reply = await call(c, "ctx_doctor", {});
+  await c.close();
+  assert.ok(!text(reply).includes(legacyDir), "doctor must never read/report the hardcoded legacy path");
 });

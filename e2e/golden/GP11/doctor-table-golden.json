@@ -1,0 +1,11 @@
+{
+  "reply": {
+    "content": [
+      {
+        "type": "text",
+        "text": "| Check | Status | Detail | Fix |\n|---|---|---|---|\n| D1 | UNKNOWN | no network | |\n| D2 | PASS | node:sqlite available | |\n| D3 | FAIL | host config: MCP entry missing | run ctx_upgrade |\n| D4 | PASS | no v1 footprint found | |\n| D5 | FAIL | hook entry not installed | run ctx_upgrade |\n| D5b | PASS | not applicable | |\n| D6 | PASS | clientInfo: e2e, protocolVersion: 2024-11-05 | |\n| D7 | PASS | resolved project source matches the host's actual cwd | |\n| D8 | PASS | context.db healthy | |\n| D9 | PASS | 0 sources, 0 chunks indexed | |\n| D10 | PASS | enforcement mode: deny | |"
+      }
+    ],
+    "isError": false
+  }
+}
