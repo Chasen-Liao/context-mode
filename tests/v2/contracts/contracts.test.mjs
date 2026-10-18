@@ -160,7 +160,9 @@ test("contracts source: no regex, imports only node:* or local type re-exports",
     assert.equal(/new RegExp|\.match\(|\.matchAll\(|\.replace\(|\.replaceAll\(|\.split\(\s*\//.test(src), false, `${f}: regex use`);
     for (const line of src.split("\n")) {
       const t = line.trim();
-      if (!t.startsWith("import ") && !(t.startsWith("export ") && t.includes(" from "))) continue;
+      // a re-export statement only; a string constant that contains " from " is not an import (M4 RESUME_NO_SESSION_LINE)
+      const reExport = ["export {", "export *", "export type {", "export type *"].some((h) => t.startsWith(h)) && t.includes(" from ");
+      if (!t.startsWith("import ") && !reExport) continue;
       const ok = t.includes('"node:') || t.includes('from "./agents.js"');
       assert.ok(ok, `${f}: forbidden import: ${t}`);
     }
@@ -304,5 +306,66 @@ test("[M3] no-literal-number lint on src/core/policy (only 0 and 1)", () => {
   const files = existsSync(POLICY) ? readdirSync(POLICY).filter((f) => f.endsWith(".ts")) : [];
   for (const f of files) {
     assert.deepEqual(numberLiterals(readFileSync(join(POLICY, f), "utf8")), [], `${f}: use a constants.ts name`);
+  }
+});
+
+// M4 (impl/06 §1-§6 constants table and exact error texts; ADR-0009 §8.2, DECISIONS-r6 D3; DEVIATIONS D-M4-arch-2..5).
+// impl/06 texts are tool reply lines, not ERROR_TEXT keys (same rule as CANCELLED_LINE): ERROR_TEXT keeps its 17 codes.
+test("[M4] ctx_resume reply lines are the impl/06 §4 texts", () => {
+  assert.equal(C.RESUME_UNKNOWN_FIELD_LINE, "ctx_resume: unknown field — only session and seq are accepted.");
+  assert.equal(C.RESUME_NO_SESSION_LINE, "ctx_resume: no session id — pass session or call from an active session.");
+  assert.equal(C.RESUME_NO_ROW_LINE(42), "ctx_resume: no row at seq 42 for this session.");
+  assert.equal(C.RESUME_EMPTY_LINE, "ctx_resume: no journal rows for this session yet.");
+});
+
+test("[M4] ctx_stats reply text is the impl/06 §5 text", () => {
+  assert.equal(C.STATS_UNKNOWN_FIELD_LINE, "ctx_stats: unknown field — this tool takes no arguments.");
+  assert.equal(C.STATS_SUMMARY(81.2, 40), "ctx_stats: 81.2% kept out all-time, 40% this session.");
+  assert.deepEqual([...C.STATS_COLUMNS], ["Scope", "Produced", "Returned", "Saved", "Reduction %"]);
+  assert.ok(Object.isFrozen(C.STATS_COLUMNS));
+  assert.equal(C.STATS_NO_DATA, "no data — no tool calls recorded yet");
+  assert.equal(C.PERCENT_SCALE, 100); // reduction_pct = saved / max(1, produced) * 100
+});
+
+test("[M4] ctx_purge reply text and scopes are the impl/06 §6 texts", () => {
+  assert.deepEqual([...C.PURGE_SCOPES], ["session", "source", "project"]);
+  assert.ok(Object.isFrozen(C.PURGE_SCOPES));
+  assert.equal(C.PURGE_NO_SCOPE_LINE, "ctx_purge: pick one scope — session, source, or project.");
+  assert.equal(C.PURGE_MANY_SCOPES_LINE, "ctx_purge: pick only one scope — session, source, or project.");
+  assert.equal(C.PURGE_BUSY_LINE, "ctx_purge: database busy — try again.");
+  assert.equal(C.PURGE_SUMMARY(7, "session"), "ctx_purge: deleted 7 rows (scope: session). This cannot be undone.");
+  assert.equal(C.SQLITE_BUSY_CODE, 5); // primary code, read through SQLITE_PRIMARY_CODE_MASK like SQLITE_CORRUPT_CODE
+});
+
+test("[M4] DECAY_SCALE undoes the x1000 of DECAY_X1000 (impl/06 §2 step 6)", () => {
+  assert.equal(C.DECAY_SCALE, 1000);
+  assert.equal(C.DECAY_X1000[0], C.DECAY_SCALE);
+});
+
+test("[M4] reserved decision label and decision row keys (ADR-0009 §8.2, DECISIONS-r6 D3, D-M4-arch-5)", () => {
+  assert.equal(C.DECISION_SOURCE, "decision");
+  assert.equal(C.DECISION_USER_LABEL, "decision (user)");
+  assert.equal(C.DECISION_TOOL, "AskUserQuestion");
+  assert.equal(C.DECISION_ANSWERS_KEY, "answers");
+  assert.equal(C.DECISION_OPTION_KEY, "option");
+  assert.equal(C.DECISION_LABEL_JOIN, " | ");
+});
+
+test("[M4] types.ts declares the impl/06 compaction and tool input types", () => {
+  const src = readFileSync(join(SRC, "types.ts"), "utf8");
+  for (const name of ["export type CandidateSection", "export interface Candidate {", "export interface ScoredCandidate extends Candidate",
+    "export interface CtxResumeInput", "export interface CtxStatsInput", "export interface CtxPurgeInput"]) {
+    assert.ok(src.includes(name), name);
+  }
+  for (const s of ['"last_request"', '"open_errors"', '"changed_files"', '"earlier_requests"', '"indexed_sources"']) assert.ok(src.includes(s), s);
+  for (const f of ["section: CandidateSection;", "repeatCount: number;", "pinned: boolean;", "score: number;"]) assert.ok(src.includes(f), f);
+});
+
+// impl/06: "This module owns none of its own constants" -> the no-literal-number lint covers every M4 file.
+const M4_FILES = ["compaction/candidates.ts", "compaction/score.ts", "compaction/render.ts", "tools/resume.ts",
+  "tools/stats.ts", "tools/purge.ts", "hooks/decision.ts"].map((f) => join(SRC, "..", f));
+test("[M4] no-literal-number lint on M4 files (only 0 and 1)", () => {
+  for (const f of M4_FILES.filter((p) => existsSync(p))) {
+    assert.deepEqual(numberLiterals(readFileSync(f, "utf8")), [], `${f}: use a constants.ts name`);
   }
 });
