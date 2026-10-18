@@ -414,6 +414,37 @@ export const STATUS_LINE_KEY = "statusLine";
 export const PI_PACKAGES_KEY = "packages";
 export const OPENCODE_PLUGIN_KEY = "plugin";
 export const V1_DATA_DIR_NAME = "context-mode"; // <agent home>/context-mode/
+// detectV1 (impl/07 §3; DEVIATIONS D-M5-O2-1..3). v1 wrote only these entries under ~/.context-mode/ (v1 main:
+// "content" dir, "platform.json"); v2 shares the dir (DATA_ROOT), so only these names are v1 content.
+export const V1_DATA_ROOT_ENTRIES = Object.freeze(["content", "platform.json"] as const);
+export const V1_SESSIONS_DIR_NAME = "sessions"; // VS Code: <.github|.vscode>/context-mode/sessions/
+export const V1_SCRIPT_EXT = ".mjs"; // hooks/codex/*.mjs
+export const V1_BIN_COMMAND = SERVER_KEY; // v1 global npm bin; v2 never runs it ("no npm for users")
+export const VSCODE_MCP_SERVERS_KEY = "servers"; // .vscode/mcp.json {servers:{<name>:{command,args}}}
+export const ZCODE_EVENTS_KEY = "events"; // ~/.zcode/cli/config.json hooks.events.<Event>[]
+export const PI_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR"; // Pi agent-dir override (#1035); caller passes it to detectV1 as scope.piAgentDir
+export const PI_PACKAGE_SOURCE_KEY = "source"; // Pi packages[] entry: a string or {source,...}
+export const V1_PATH_SEPS = Object.freeze(["/", "\\"] as const); // hooks/codex/ in a command, POSIX or Windows
+// V1Finding.reason texts, used verbatim in the D4 row and the upgrade change table (impl/07 §3 step 3).
+export const V1_REASON = Object.freeze({
+  hook: "v1 hook entry: command contains context-mode and a v1 script name or context-mode hook",
+  cacheHealHook: "v1 cache-heal SessionStart hook entry",
+  cacheHealFile: "v1 cache-heal script file",
+  statusLine: "v1 statusLine (context-mode statusline): report only, never removed",
+  mcpEntry: "v1 MCP entry mcpServers.context-mode",
+  codexHook: "v1 Codex hook entry: context-mode hook codex or hooks/codex/*.mjs",
+  codexToml: "v1 config.toml [mcp_servers.context-mode*] section",
+  hookFile: "v1 hook file context-mode.json (runs context-mode hook)",
+  vscodeMcp: "v1 MCP entry servers.context-mode in .vscode/mcp.json: report only, never removed",
+  kiroHook: "v1 Kiro flat hook entry: command contains context-mode and a v1 script name or context-mode hook",
+  piNpm: "v1 Pi package npm:context-mode",
+  opencodePlugin: "v1 OpenCode plugin spec context-mode",
+  zcodeHook: "v1 ZCode hook entry: command contains context-mode hook",
+  dataDir: "v1 data dir <agent home>/context-mode/",
+  dataDirShared: "v1 data dir ~/.gemini/context-mode/: delete only after a prompt (Antigravity shares it)",
+  dataRoot: "v1 content under ~/.context-mode/",
+  tmpFile: "v1 temp file context-mode-* under the OS temp dir",
+} as const);
 
 // Pi / OpenCode in-process entries (impl/12 §3.1 A21, §4.1 A28, §4.4 step 1).
 export const PLUGIN_ID = SERVER_KEY;
