@@ -467,3 +467,12 @@ export const OWN_MCP_ENTRY: Readonly<Partial<Record<AgentId, { file: readonly st
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: { file: [".zcode", "cli", "config.json"], key: ["mcpServers", SERVER_KEY] },
 });
+
+// ctx_doctor report env lines (impl/07 §4, ADR-0014 §3; DEVIATIONS D-M5-O3-1). Header, rule, FAIL string and
+// truncation line are REPORT_HEADER, REPORT_HEADER_RULE, DOCTOR_FAIL_LINE, REPORT_TRUNCATED_LINE above.
+export const REPORT_INVALID = "<invalid>"; // ADR-0014 §3: a value that fails the typed scanner is dropped whole
+export const REPORT_ENV_PREFIX = "env."; // one `env.<KEY>: <value>` line per env key, after the table
+// ADR-0014 §3: an env value passes only as a member of its key's closed enum; every other value is REPORT_INVALID.
+export const REPORT_ENV_ENUMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  NODE_ENV: Object.freeze(["development", "production", "test"]),
+});
