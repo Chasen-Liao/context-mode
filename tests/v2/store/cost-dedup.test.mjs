@@ -9,13 +9,35 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { SCHEMA_VERSION } from "../../../src/core/contracts/constants.ts";
-import { openDb } from "../../../src/core/store/db.ts";
+import { openDb, closeDb } from "../../../src/core/store/db.ts";
 import { appendEvent } from "../../../src/core/journal/append.ts";
 
-function fixture(t) {
+// Fixture follows the 00-architecture contract (DEVIATIONS D-M5-S1-1): openDb(ProjectContext),
+// appendEvent(DbHandle, NewJournalRow) with snake_case columns, queries via DbHandle.raw.
+async function fixture(t) {
   const dir = mkdtempSync(path.join(tmpdir(), "cm-cost-dedup-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  return openDb(path.join(dir, "context.db"));
+  const projectKey = "c".repeat(16);
+  const db = await openDb({
+    projectKey,
+    projectDir: path.join(dir, "projects", projectKey),
+    dbPath: path.join(dir, "projects", projectKey, "context.db"),
+    worktree: dir,
+    containmentRoot: dir,
+    agent: "opencode",
+    source: "env:CLAUDE_PROJECT_DIR",
+  });
+  t.after(() => {
+    closeDb(db);
+    rmSync(dir, { recursive: true, force: true });
+  });
+  return db;
+}
+
+function row(kind, turn, bytes = 0) {
+  return {
+    session_id: "s1", worktree: "/w", agent: "opencode", kind, tool: null, key: null, path: null, ok: 1,
+    exit_code: null, bytes, body: "", turn, sandbox_bytes: bytes, returned_bytes: bytes,
+  };
 }
 
 test("[M5] SCHEMA_VERSION is 2 after the Usage/cost dedup migration", () => {
@@ -23,35 +45,34 @@ test("[M5] SCHEMA_VERSION is 2 after the Usage/cost dedup migration", () => {
 });
 
 test("[M5] cost-dedup/usage-events-idempotent-per-turn: 3 step-finish events in one turn journal once", async (t) => {
-  const db = fixture(t);
-  const row = { kind: "cost", sessionId: "s1", turn: 1, tool: null, bytesProduced: 0, returnedBytes: 0 };
-  await appendEvent(db, row);
-  await appendEvent(db, row);
-  await appendEvent(db, row);
-  const count = db.prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'cost' AND session_id = ? AND turn = ?").get("s1", 1);
+  const db = await fixture(t);
+  const first = appendEvent(db, row("cost", 1));
+  assert.equal(appendEvent(db, row("cost", 1)), first, "a duplicate returns the kept row's seq");
+  appendEvent(db, row("cost", 1));
+  const count = db.raw.prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'cost' AND session_id = ? AND turn = ?").get("s1", 1);
   assert.equal(count.n, 1, "INSERT OR IGNORE must keep exactly one cost row per (session_id, turn)");
 });
 
 test("[M5] cost-dedup/different-turn-not-deduped: a new turn gets its own cost row", async (t) => {
-  const db = fixture(t);
-  await appendEvent(db, { kind: "cost", sessionId: "s1", turn: 1, tool: null, bytesProduced: 0, returnedBytes: 0 });
-  await appendEvent(db, { kind: "cost", sessionId: "s1", turn: 2, tool: null, bytesProduced: 0, returnedBytes: 0 });
-  const count = db.prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'cost' AND session_id = ?").get("s1");
+  const db = await fixture(t);
+  appendEvent(db, row("cost", 1));
+  appendEvent(db, row("cost", 2));
+  const count = db.raw.prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'cost' AND session_id = ?").get("s1");
   assert.equal(count.n, 2);
 });
 
 test("[M5] cost-dedup/non-cost-rows-not-deduped: identical non-cost rows with the same turn both insert", async (t) => {
-  const db = fixture(t);
-  const row = { kind: "prompt", sessionId: "s1", turn: 1, tool: null, bytesProduced: 0, returnedBytes: 0 };
-  await appendEvent(db, row);
-  await appendEvent(db, row);
-  const count = db.prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'prompt' AND session_id = ? AND turn = ?").get("s1", 1);
+  const db = await fixture(t);
+  const a = appendEvent(db, row("prompt", 1));
+  const b = appendEvent(db, row("prompt", 1));
+  assert.notEqual(a, b);
+  const count = db.raw.prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'prompt' AND session_id = ? AND turn = ?").get("s1", 1);
   assert.equal(count.n, 2, "the partial unique index applies only WHERE kind = 'cost'");
 });
 
 test("[M5] cost-dedup/ctx_stats-excludes-cost: stats call rows still exclude cost (D-M4-S3-1)", async (t) => {
-  const db = fixture(t);
-  await appendEvent(db, { kind: "cost", sessionId: "s1", turn: 1, tool: null, bytesProduced: 999, returnedBytes: 999 });
-  const row = db.prepare("SELECT COALESCE(SUM(returned_bytes),0) AS returned FROM events WHERE tool IS NOT NULL AND kind <> 'cost'").get();
-  assert.equal(row.returned, 0);
+  const db = await fixture(t);
+  appendEvent(db, row("cost", 1, 999));
+  const r = db.raw.prepare("SELECT COALESCE(SUM(returned_bytes),0) AS returned FROM events WHERE tool IS NOT NULL AND kind <> 'cost'").get();
+  assert.equal(r.returned, 0);
 });

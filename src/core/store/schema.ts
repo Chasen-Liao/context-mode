@@ -1,4 +1,4 @@
-// impl/02 §5 (DDL version 1 + applyMigrations), DEVIATIONS D-M1-4 (columns = JournalRow / SourceRow),
+// impl/02 §5 (DDL version 1 + applyMigrations), DEVIATIONS D-M5-arch-2 (version 2: cost dedup index), DEVIATIONS D-M1-4 (columns = JournalRow / SourceRow),
 // DECISIONS-r9 M14 (table names), M16 (sources.created_at), V24 (tokenizer), DECISIONS-r6 D3 ('decision' kind).
 import type { DatabaseSync } from "node:sqlite";
 import { DB_TIMEOUT_MS, SCHEMA_VERSION as SCHEMA_VERSION_CONST } from "../contracts/constants.ts";
@@ -70,8 +70,18 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 `;
 
+// Version 2 (DEVIATIONS D-M5-arch-2, impl/06 A-stats-dedup-mechanism): one `cost` row per
+// (session_id, turn). appendEvent writes cost rows with INSERT OR IGNORE against this index.
+// No dedup step before it: no v1 code path wrote `cost` rows, so a v1 DB holds none.
+export const DDL_V2: string = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_cost_session_turn ON events(session_id, turn) WHERE kind = 'cost';
+`;
+
 // Ascending by version; step N brings the DB from N-1 to N.
-const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [{ version: 1, sql: DDL }];
+const MIGRATIONS: ReadonlyArray<{ version: number; sql: string }> = [
+  { version: 1, sql: DDL },
+  { version: 2, sql: DDL_V2 },
+];
 
 export function applyMigrations(db: DatabaseSync, fromVersion: number): void {
   if (fromVersion === SCHEMA_VERSION) return;

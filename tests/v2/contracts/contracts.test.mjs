@@ -39,7 +39,8 @@ test("constants carry the impl/00 §3.2 values", () => {
     DATA_ROOT: "~/.context-mode", LIVE_MODEL: "claude-sonnet-5", LIVE_EFFORT: "low", LIVE_BUDGET_USD: 0.25,
     LIVE_SKIP_LIMIT: 3, RRF_K: 60, SEARCH_P95_MS: 30, HOOK_TIMEOUT_MS: 5000,
     // store additions (impl/02 §0, DEVIATIONS D-M1-3)
-    PROJECT_KEY_HEX_LEN: 16, SCHEMA_VERSION: 1, RETENTION_IDLE_DAYS: 30, RETENTION_SIZE_CAP_BYTES: 524288000,
+    PROJECT_KEY_HEX_LEN: 16, SCHEMA_VERSION: 2, // D-M5-arch-2: v2 = cost dedup index
+    RETENTION_IDLE_DAYS: 30, RETENTION_SIZE_CAP_BYTES: 524288000,
     PROJECT_DEAD_IDLE_DAYS: 14, MS_PER_DAY: 86400000,
   };
   for (const [k, v] of Object.entries(want)) assert.equal(C[k], v, k);
@@ -131,7 +132,7 @@ test("every formatted error is one line with '. Fix: ' and no '<' left (A-C6)", 
 });
 
 test("SCHEMA_STALE formats with SCHEMA_VERSION as <want>", () => {
-  assert.equal(formatError("SCHEMA_STALE", { found: 3, want: C.SCHEMA_VERSION }), "context.db schema is version 3, expected 1. Fix: run ctx_doctor.");
+  assert.equal(formatError("SCHEMA_STALE", { found: 3, want: C.SCHEMA_VERSION }), "context.db schema is version 3, expected 2. Fix: run ctx_doctor.");
 });
 
 test("every error code formats with its vars", () => {
