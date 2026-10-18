@@ -18,7 +18,44 @@ function freshDb(dir) {
 
 test("SCHEMA_VERSION equals the constants.ts SCHEMA_VERSION", () => {
   assert.equal(SCHEMA_VERSION, C.SCHEMA_VERSION);
-  assert.equal(SCHEMA_VERSION, 1);
+  assert.equal(SCHEMA_VERSION, 2); // D-M5-arch-2: v2 adds the cost dedup index
+});
+
+test("v2 (D-M5-arch-2): a fresh DB has the partial unique index events(session_id, turn) WHERE kind = 'cost'", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cm-schema-"));
+  try {
+    const db = freshDb(dir);
+    applyMigrations(db, 0);
+    const idx = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_events_cost_session_turn'").get();
+    assert.ok(idx, "missing idx_events_cost_session_turn");
+    assert.ok(idx.sql.includes("UNIQUE") && idx.sql.includes("(session_id, turn)") && idx.sql.includes("WHERE kind = 'cost'"));
+    const ins = (kind, turn) => db.exec(`INSERT INTO events(session_id, worktree, agent, kind, turn, created_at, accessed_at) VALUES ('s','w','claude-code','${kind}',${turn},0,0)`);
+    ins("cost", 1);
+    assert.throws(() => ins("cost", 1), "second cost row for the same (session_id, turn) must violate the index");
+    ins("cost", 2);
+    ins("prompt", 1);
+    ins("prompt", 1); // non-cost rows are not covered by the partial index
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("v2 (D-M5-arch-2): a version-1 DB migrates to 2 without losing rows", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cm-schema-"));
+  try {
+    const db = freshDb(dir);
+    db.exec(DDL);
+    db.exec("PRAGMA user_version = 1");
+    db.exec("INSERT INTO events(session_id, worktree, agent, kind, turn, created_at, accessed_at) VALUES ('s','w','claude-code','prompt',1,0,0)");
+    applyMigrations(db, 1);
+    assert.equal(db.prepare("PRAGMA user_version").get().user_version, 2);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM events").get().n, 1);
+    assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'idx_events_cost_session_turn'").get());
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("applyMigrations on a fresh DB (fromVersion 0) creates events, sources, chunks, meta and sets user_version", () => {
