@@ -1,14 +1,12 @@
 // ADR-0009 §4-§5, impl/06 §3, impl/00 §4 renderState(rows, turn) (DEVIATIONS D-M4-arch-2), DECISIONS-r6 D1,
 // DECISIONS-r9 M8/M10-M13/M25. Pure: same rows -> same bytes; result <= STATE_BUDGET UTF-8 bytes.
 // No line is ever cut: a line over POINTER_MIN becomes a ctx_resume(seq) pointer line.
-import { POINTER_MIN, RATIO_SECTION_DECAY, STATE_BUDGET } from "../contracts/constants.ts";
+import { POINTER_MIN, RATIO_SECTION_DECAY, STATE_BUDGET, STATE_CLOSE_TAG } from "../contracts/constants.ts";
 import type { CandidateSection, JournalRow } from "../contracts/types.ts";
 import { buildCandidates, type SectionCandidate } from "./candidates.ts";
 import { scoreCandidates } from "./score.ts";
 
 type Scored = SectionCandidate & { score: number };
-
-const CLOSE_TAG = "</context_mode_state>";
 
 function bytesOf(s: string): number {
   return Buffer.byteLength(s, "utf8");
@@ -37,7 +35,7 @@ export function renderState(rows: readonly JournalRow[], turn: number): string {
   // step 2 (DECISIONS-r9 M12): reserve the wrapper and an empty more: line before any item.
   const openTag = `<context_mode_state session="${sessionId}" upto="${upto}">`;
   const emptyMoreBytes = bytesOf(moreLine([]));
-  const budget = STATE_BUDGET - (bytesOf(openTag) + 1 + emptyMoreBytes + 1 + bytesOf(CLOSE_TAG));
+  const budget = STATE_BUDGET - (bytesOf(openTag) + 1 + emptyMoreBytes + 1 + bytesOf(STATE_CLOSE_TAG));
   let used = 0;
   const pinnedLine = set.lastRequest === null ? null : lineOf(set.lastRequest);
   if (pinnedLine !== null) used += bytesOf(pinnedLine) + 1; // always taken first
@@ -90,6 +88,6 @@ export function renderState(rows: readonly JournalRow[], turn: number): string {
     queries.push(c.query);
     seen.add(c.query);
   }
-  lines.push(moreLine(queries), CLOSE_TAG);
+  lines.push(moreLine(queries), STATE_CLOSE_TAG);
   return lines.join("\n");
 }

@@ -9,6 +9,7 @@ export const STATE_BUDGET = 2048; // ADR-0009 §4
 export const RESUME_CAP = 2048; // ADR-0009, GP6
 export const REPORT_CAP = 4096; // ADR-0014
 export const POINTER_MIN = 640; // ADR-0009 §4
+export const STATE_CLOSE_TAG = "</context_mode_state>"; // impl/06 §3 block close line
 export const INDEX_WRITE_CHUNK = 1048576; // PRD §4
 export const SYNC_INDEX_MAX_BYTES = 65536; // DECISIONS-r9 F1
 export const MAX_CHUNK_BYTES = 4096; // DECISIONS-r9 §C
