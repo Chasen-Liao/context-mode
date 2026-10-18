@@ -4,7 +4,7 @@
 // PLUGIN_ROOT_MISSING when the resolved path does not exist.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -12,7 +12,8 @@ import { resolvePluginRoot } from "../../../src/core/ops/plugin-root.ts";
 import { CtxError } from "../../../src/core/contracts/errors.ts";
 
 function tmp(t) {
-  const dir = mkdtempSync(path.join(tmpdir(), "cm-plugin-root-"));
+  // impl/07 §1 step 2 returns a realpath; macOS tmpdir() is a symlink (/var -> /private/var).
+  const dir = realpathSync.native(mkdtempSync(path.join(tmpdir(), "cm-plugin-root-")));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -40,7 +41,7 @@ test("[M5] plugin-root/missing-path-throws-PLUGIN_ROOT_MISSING", (t) => {
   const home = tmp(t);
   assert.throws(
     () => resolvePluginRoot({ id: "pi", installMode: "plugin" }, { HOME: home }),
-    (err) => err instanceof CtxError && err.key === "PLUGIN_ROOT_MISSING",
+    (err) => err instanceof CtxError && err.code === "PLUGIN_ROOT_MISSING",
   );
 });
 
