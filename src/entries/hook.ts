@@ -18,12 +18,14 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(parts).toString("utf8");
 }
 
-function finish(out: HookOutput): never {
-  process.stdout.write(out.stdout, () => process.exit(out.exitCode));
-  return undefined as never;
+// D-M3-H2-8: no process.exit. The answer goes out first; the process then ends when the event loop is
+// empty, so a detached journal or index write (dispatch §4.4, §4.6) lands instead of being cut off.
+function finish(out: HookOutput): void {
+  process.exitCode = out.exitCode;
+  process.stdout.write(out.stdout);
 }
 
-export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<never> {
+export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<void> {
   // Step 1: --agent <id>; unknown -> fail open.
   const i = argv.indexOf(AGENT_ARG);
   const agent = i >= 0 ? argv[i + 1] ?? "" : "";
