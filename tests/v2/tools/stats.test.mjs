@@ -87,14 +87,21 @@ test("[M4] GP10/reduction-pct-net-bytes (#1042): 10 KB produced, 2 KB returned -
   assert.deepEqual(row(out.text, "session"), ["10240 B", "2048 B", "8192 B", "80"]);
 }));
 
+test("[M4] GP10/reduction-pct-net-bytes (#1042): 10 KB indexed, 2 KB later returned by search in the same session -> 8 KB", () => withRoot(async (root) => {
+  const ctx = ctxFor(root);
+  await addRows(ctx, [["s1", "claude-code", 10240, 0, "index"], ["s1", "claude-code", 0, 2048]]);
+  const out = await ctxStats.handler({}, ctx);
+  assert.deepEqual(row(out.text, "session"), ["10240 B", "2048 B", "8192 B", "80"]);
+}));
+
 test("[M4] GP10/real-savings-only + binary-read-zero-savings (#952, #1252, #1151): bytes that reached the model are not saved", () => withRoot(async (root) => {
   const ctx = ctxFor(root);
   // A host Read of a 1 MB binary (hook row: sandbox == returned) and a ctx_search reply (no sandbox, 500 B returned).
   await addRows(ctx, [["s1", "claude-code", 1048576, 1048576], ["s1", "claude-code", 0, 500]]);
   const out = await ctxStats.handler({}, ctx);
   const r = row(out.text, "session");
-  assert.equal(n(r[2]), 0, "saved is 0");
-  assert.equal(n(r[0]), n(r[1]), "produced equals returned");
+  assert.equal(n(r[2]), 0, "saved is 0, never negative");
+  assert.equal(r[3], "0");
   assert.equal(out.text.split("\n")[0], STATS_SUMMARY(0, 0));
 }));
 
@@ -103,12 +110,14 @@ test("[M4] GP10/stats-totals-consistent (#950, I1-19): session <= project <= all
   await addRows(ctx, [
     ["s1", "claude-code", 5000, 1000], ["s1", "claude-code", 0, 300], ["s2", "codex", 9000, 500],
     ["s2", "claude-code", 100, 100], ["s1", "claude-code", 50, 0, "prompt"],
+    ["s3", "claude-code", 0, 400], // a session of only ctx_stats/ctx_search replies: net negative, adds 0
   ]);
   const out = await ctxStats.handler({}, ctx);
   const [s, p, a] = ["session", "project", "all-time"].map((l) => n(row(out.text, l)[2]));
   assert.ok(s <= p && p <= a, `session ${s} <= project ${p} <= all-time ${a}`);
-  assert.deepEqual(row(out.text, "session"), ["5300 B", "1300 B", "4000 B", "75.5"]);
-  assert.deepEqual(row(out.text, "all-time"), ["14400 B", "1900 B", "12500 B", "86.8"]);
+  assert.deepEqual(row(out.text, "session"), ["5000 B", "1300 B", "3700 B", "74"]);
+  assert.deepEqual(row(out.text, "project"), ["14100 B", "2300 B", "12200 B", "86.5"]);
+  assert.deepEqual(row(out.text, "all-time"), ["14100 B", "2300 B", "12200 B", "86.5"]);
 }));
 
 test("[M4] GP10/per-agent-rows-sum-to-total (V19): agent rows add up to the all-time row exactly", () => withRoot(async (root) => {
