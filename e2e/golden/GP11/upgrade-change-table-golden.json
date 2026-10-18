@@ -1,0 +1,11 @@
+{
+  "reply": {
+    "content": [
+      {
+        "type": "text",
+        "text": "| Area | Before | After |\n|---|---|---|\n| host config | | mcp entry written |\n\nrestart needed"
+      }
+    ],
+    "isError": false
+  }
+}
