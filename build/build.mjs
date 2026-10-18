@@ -46,6 +46,7 @@ const BUNDLES = Object.freeze([
   { name: "hook", entry: "src/entries/hook.ts", out: "hook.mjs" },
   { name: "run", entry: "src/entries/run.ts", out: "run.mjs" },
   { name: "search", entry: "src/entries/run.ts", out: "search.mjs" },
+  { name: "opencode", entry: "src/entries/opencode.ts", out: "opencode/plugin.js" }, // impl/13 §2.2 step 2 (D-M5-P2-1)
 ]);
 
 // Same options for every row (impl/13 §2.2 step 2, "same").
