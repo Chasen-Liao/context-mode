@@ -208,6 +208,7 @@ ADR-0017 `covers`: `src/core/hooks/`, `src/entries/hook.ts`.
 - A26: a non-`ctx_*` journal row's stored `body` is capped at `POINTER_MIN` (640 B); this is a storage bound only, unrelated to the full-text `ctx_resume`/pointer mechanism which reads from the host's own result, not from this copy.
 - A27: an adapter whose `eventMap` has no `PreCompact` entry never produces a `PreCompact`-shaped `CanonicalHookEvent`; `dispatch.ts` has no agent-name branch for this, it is purely adapter-table-driven.
 - A28: the Kiro `stdout == ""` rule lives inside `adapters/kiro.ts`'s `encode`, never as an agent-name special case inside `hook.ts` or `dispatch.ts`.
+- A29 (intern M3 Q2, Q3, Q9): the hook entry sets `process.exitCode` and never calls `process.exit`, so detached journal/index writes land first (D-M3-H2-8). There is no `caseCNoReplaceAlternative`: case C keeps the PreToolUse decision, the replace happens at PostToolUse, and an adapter with no replace channel drops it in `encode` (D-M3-H2-4). PreToolUse calls the real export `readUserDeny(project.worktree, agent)` and opens the DB only for the hint throttle marker (D-M3-H2-7).
 
 ## Changes
 
