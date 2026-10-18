@@ -4,7 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 export type { AgentId } from "./agents.js";
 
 export type CanonicalEventName = "SessionStart" | "UserPromptSubmit" | "PreToolUse" | "PostToolUse"; // ADR-0001, PRD §10.1
-export type AuxEventName = "PreCompact"; // only for pending_compact on gemini, copilot-cli, vscode (ADR-0009 §6)
+export type AuxEventName = "PreCompact" | "Usage"; // PreCompact: pending_compact on gemini, copilot-cli, vscode (ADR-0009 §6); Usage: OpenCode step-finish cost row (D-M5-arch-2)
 
 export interface CanonicalHookEvent {
   event: CanonicalEventName | AuxEventName;
@@ -186,3 +186,17 @@ export interface ScoredCandidate extends Candidate {
 export interface CtxResumeInput { session?: string; seq?: number; }
 export interface CtxStatsInput {} // no fields; any key is STATS_UNKNOWN_FIELD_LINE
 export interface CtxPurgeInput { session?: string; source?: string; project?: boolean; } // exactly one (impl/06 §6 step 1)
+
+// tools-ops (impl/07 §0, A-T1; ADR-0010, ADR-0011)
+export type DoctorCheckId = "D1" | "D2" | "D3" | "D4" | "D5" | "D5b" | "D6" | "D7" | "D8" | "D9" | "D10";
+export interface DoctorRow {
+  id: DoctorCheckId;
+  label: string;                 // e.g. "version", "context.db"
+  status: "PASS" | "FAIL" | "UNKNOWN";
+  detail: string;                // the <cause>, plain English, one line
+  fixCommand?: string;           // the <command>; omitted when status is PASS
+}
+export interface V1Finding { file: string; path: string; reason: string; } // ADR-0011 §"v1 cleanup"
+export type UpgradeMode = "upgrade" | "uninstall";
+export interface UpgradeChangeRow { area: string; before: string; after: string; }
+export interface HostConfigEdit { path: string; before: unknown; after: unknown; } // one key changed

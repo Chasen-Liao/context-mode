@@ -79,6 +79,9 @@ const VARS = {
   INVALID_ARGS: { field: "offset", action: "drop offset with sort:\"timeline\"" }, ONE_OF_INPUT: { names: "code, file" },
   SPAWN_FAILED: { detail: "ENOENT" },
   DB_CORRUPT: {}, SCHEMA_STALE: { found: 2, want: 1 }, NO_GIT_DIR: { path: "/repo" }, NO_HOME: { name: "HOME" },
+  // tools-ops additions (impl/07 A-T2)
+  PLUGIN_ROOT_MISSING: { agent: "pi", path: "/home/u/.context-mode/plugins/pi/current" }, BUNDLE_HASH_MISMATCH: {},
+  CONFIG_PARSE_FAILED: { agent: "codex", path: "/home/u/.codex/config.toml", format: "toml" },
 };
 const EXPECTED = {
   NODE_TOO_OLD: "Node 22.1.0 is below 24.15.0. Fix: install Node 24.15.0 or later.",
@@ -99,10 +102,14 @@ const EXPECTED = {
   SCHEMA_STALE: "context.db schema is version 2, expected 1. Fix: run ctx_doctor.",
   NO_GIT_DIR: "No git repository at /repo. Fix: run context-mode inside a git repository.",
   NO_HOME: "Env var HOME is not set. Fix: set HOME to your home directory.",
+  // tools-ops additions (impl/07 §1 Errors, §2 Errors, §6 Errors; A-T2)
+  PLUGIN_ROOT_MISSING: "Plugin root for pi not found at /home/u/.context-mode/plugins/pi/current. Fix: run ctx_upgrade.",
+  BUNDLE_HASH_MISMATCH: "Fetched bundle hash does not match SHA256SUMS. Fix: run ctx_upgrade again.",
+  CONFIG_PARSE_FAILED: "codex config at /home/u/.codex/config.toml did not parse as toml. Fix: fix the syntax error and re-run ctx_upgrade.",
 };
 
-test("ERROR_TEXT has exactly the 17 codes, each one line with '. Fix: ' (A-C6)", () => {
-  assert.equal(Object.keys(ERROR_TEXT).length, 17);
+test("ERROR_TEXT has exactly the 20 codes, each one line with '. Fix: ' (A-C6, impl/07 A-T2)", () => {
+  assert.equal(Object.keys(ERROR_TEXT).length, 20);
   assert.deepEqual(Object.keys(ERROR_TEXT).sort(), Object.keys(EXPECTED).sort());
   assert.ok(Object.isFrozen(ERROR_TEXT));
   for (const [code, text] of Object.entries(ERROR_TEXT)) {
@@ -310,7 +317,7 @@ test("[M3] no-literal-number lint on src/core/policy (only 0 and 1)", () => {
 });
 
 // M4 (impl/06 §1-§6 constants table and exact error texts; ADR-0009 §8.2, DECISIONS-r6 D3; DEVIATIONS D-M4-arch-2..5).
-// impl/06 texts are tool reply lines, not ERROR_TEXT keys (same rule as CANCELLED_LINE): ERROR_TEXT keeps its 17 codes.
+// impl/06 texts are tool reply lines, not ERROR_TEXT keys (same rule as CANCELLED_LINE): ERROR_TEXT keeps its 17 codes (M5 adds 3: impl/07 A-T2).
 test("[M4] ctx_resume reply lines are the impl/06 §4 texts", () => {
   assert.equal(C.RESUME_UNKNOWN_FIELD_LINE, "ctx_resume: unknown field — only session and seq are accepted.");
   assert.equal(C.RESUME_NO_SESSION_LINE, "ctx_resume: no session id — pass session or call from an active session.");
@@ -368,4 +375,41 @@ test("[M4] no-literal-number lint on M4 files (only 0 and 1)", () => {
   for (const f of M4_FILES.filter((p) => existsSync(p))) {
     assert.deepEqual(numberLiterals(readFileSync(f, "utf8")), [], `${f}: use a constants.ts name`);
   }
+});
+
+// M5 (impl/07 §0 A-T1, A-T2; DEVIATIONS D-M5-arch-2, D-M5-arch-5).
+test("[M5] types.ts declares the impl/07 §0 tools-ops types (A-T1)", () => {
+  const src = readFileSync(join(SRC, "types.ts"), "utf8");
+  for (const s of [
+    'export type DoctorCheckId = "D1" | "D2" | "D3" | "D4" | "D5" | "D5b" | "D6" | "D7" | "D8" | "D9" | "D10";',
+    "export interface DoctorRow {", "id: DoctorCheckId;", "label: string;", 'status: "PASS" | "FAIL" | "UNKNOWN";',
+    "detail: string;", "fixCommand?: string;",
+    "export interface V1Finding { file: string; path: string; reason: string; }",
+    'export type UpgradeMode = "upgrade" | "uninstall";',
+    "export interface UpgradeChangeRow { area: string; before: string; after: string; }",
+    "export interface HostConfigEdit { path: string; before: unknown; after: unknown; }",
+  ]) assert.ok(src.includes(s), s);
+});
+
+test("[M5] AuxEventName adds Usage (D-M5-arch-2)", () => {
+  const src = readFileSync(join(SRC, "types.ts"), "utf8");
+  assert.ok(src.includes('export type AuxEventName = "PreCompact" | "Usage";'));
+});
+
+test("[M5] tools-ops error keys are the impl/07 texts (A-T2)", () => {
+  assert.equal(ERROR_TEXT.PLUGIN_ROOT_MISSING, "Plugin root for <agent> not found at <path>. Fix: run ctx_upgrade.");
+  assert.equal(ERROR_TEXT.BUNDLE_HASH_MISMATCH, "Fetched bundle hash does not match SHA256SUMS. Fix: run ctx_upgrade again.");
+  assert.equal(ERROR_TEXT.CONFIG_PARSE_FAILED, "<agent> config at <path> did not parse as <format>. Fix: fix the syntax error and re-run ctx_upgrade.");
+  const e = new CtxError("CONFIG_PARSE_FAILED", VARS.CONFIG_PARSE_FAILED);
+  assert.equal(e.code, "CONFIG_PARSE_FAILED");
+  assert.equal(e.toLine(), EXPECTED.CONFIG_PARSE_FAILED);
+});
+
+test("[M5] release constants for doctor D1 (D-M5-arch-5)", () => {
+  assert.equal(C.RELEASE_REPO_URL, "https://github.com/mksglu/context-mode.git");
+  assert.equal(C.RELEASE_BRANCH, "release");
+  assert.equal(C.BUNDLE_SHA_DEFINE, "__CTX_BUNDLE_SHA__");
+  // dev/test build: no esbuild define, so the sha is unset (D1 reports UNKNOWN "dev build")
+  assert.equal(C.BUNDLE_SHA, undefined);
+  assert.equal("BUNDLE_SHA" in C, true);
 });
