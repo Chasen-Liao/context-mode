@@ -178,7 +178,7 @@ export const JQ_WHITELIST: Readonly<{ identity: "."; length: "length"; pipeLengt
 // impl/08 §6.1 steps 5d, 6, 7, 8 (DEVIATIONS D-M3-E4-5). Hint templates: TOOL_PREFIX_SLOT is replaced by
 // row.toolNamePrefix. Same text as the drafts.md hint-* id blocks (tests/v2/policy/decide.test.mjs compares them).
 export const TOOL_PREFIX_SLOT = "{prefix}";
-export const BASH_HINT = "context-mode: when this command's output may be long, or you need a few facts from it, run it with {prefix}ctx_execute and print just what you need. Short fixed output and file changes are fine here.";
+export const BASH_HINT = "context-mode: when this command's output may be long, or you need only part of it, run it with {prefix}ctx_execute and print just what you need. Short fixed output and file changes are fine here.";
 export const GREP_HINT = "context-mode: grep output can be larger than you expect. To count, filter or group matches, run the search with {prefix}ctx_execute and print the result.";
 export const READ_HINT = "context-mode: to analyze this file rather than edit it, run code on it with {prefix}ctx_execute and file set to its path; what your code prints comes back, nothing else.";
 export const MCP_HINT = "context-mode: tools of other MCP servers can return large payloads in full. For a page or API you can reach directly, fetch it in {prefix}ctx_execute and print what you need, or store it with {prefix}ctx_index and query it with {prefix}ctx_search.";

@@ -285,8 +285,10 @@ function countFlag(a: string): number {
 function sedScript(script: string): "range" | "all" | null {
   if (script === SED_PRINT) return "all";
   if (!script.endsWith(SED_PRINT)) return null;
-  const parts = script.slice(0, script.length - SED_PRINT.length).split(SED_RANGE_SEP);
-  return parts.length <= 2 && parts.every(allDigits) ? "range" : null;
+  const body = script.slice(0, script.length - SED_PRINT.length);
+  const comma = body.indexOf(SED_RANGE_SEP);
+  const range = comma < 0 ? allDigits(body) : allDigits(body.slice(0, comma)) && allDigits(body.slice(comma + SED_RANGE_SEP.length));
+  return range ? "range" : null;
 }
 
 /** D-M3-E4-7: exactly one file operand; the bound comes from the command's own flags. */

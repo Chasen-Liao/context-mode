@@ -139,7 +139,7 @@ context-mode: this file is {size} bytes, more than the 16384 byte limit for one 
 
 <!-- id: hint-bash -->
 ```text
-context-mode: when this command's output may be long, or you need a few facts from it, run it with {prefix}ctx_execute and print just what you need. Short fixed output and file changes are fine here.
+context-mode: when this command's output may be long, or you need only part of it, run it with {prefix}ctx_execute and print just what you need. Short fixed output and file changes are fine here.
 ```
 
 <!-- id: hint-read -->
