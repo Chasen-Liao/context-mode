@@ -9,6 +9,8 @@
 //   1 keep-pass      npx vitest run --config tests/vitest.config.ts <files>   (DECISIONS-r9 G5)
 //   1a v2-unit       node build/build.mjs --generated-only, then
 //                    node --test --test-reporter=tap tests/v2/                (>= M1, D-M1-13, D-M2-arch-6)
+//   1b ci-checks     node scripts/gen-keep-pass.mjs --check, node scripts/ci-gs4-lint.mjs,
+//                    node build/check-readme.mjs: the ci.yml steps no other layer runs (D-M4-GS4-1)
 //   2 gp-cases       node build/build.mjs --out release-out, then
 //                    node e2e/cases/run.mjs --milestone Mn                   (DEVIATIONS D-M0-2, D-M0-F1-1)
 //   3 prompt-lint    node docs/v2/prompt/lint.mjs drafts docs/v2/prompt/drafts.md   (< M2)
@@ -29,9 +31,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const MILESTONES = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7"];
 // v2-unit sits right after keep-pass: unit tests before E2E, the TEST-TRIAGE-r2 order
 // (impl/14 §8 step 3); D-M1-13 names the layer but not its place.
-const LAYERS = ["keep-pass", "v2-unit", "gp-cases", "prompt-lint", "check-removed", "live"];
+// ci-checks sits before gp-cases so the local gate runs every check ci.yml runs (D-M4-GS4-1).
+const LAYERS = ["keep-pass", "v2-unit", "ci-checks", "gp-cases", "prompt-lint", "check-removed", "live"];
 // First milestone at which each layer runs (DEVIATIONS D-M0-1). Before it the layer is SKIP.
-const LAYER_START = { "keep-pass": 0, "v2-unit": 1, "gp-cases": 0, "prompt-lint": 0, "check-removed": 6, live: 0 };
+const LAYER_START = { "keep-pass": 0, "v2-unit": 1, "ci-checks": 0, "gp-cases": 0, "prompt-lint": 0, "check-removed": 6, live: 0 };
 const PROMPT_LINT_BUNDLE_FROM = 2; // M2: lint the built bundle instead of drafts.md (impl/13 §7)
 const LIVE_BASE_REF = "origin/v2-design";
 const CHILD_MAX_BUFFER = 256 * 1024 * 1024;
@@ -157,6 +160,27 @@ function v2Unit() {
   return { status: "PASS", detail: `node --test tests/v2/: ${pass}/${tests} tests pass` };
 }
 
+// ---- layer 1b: ci.yml checks no other layer runs (DEVIATIONS D-M4-GS4-1) ----
+// Same commands and order as the ci.yml steps "KEEP-PASS list is current", "GS4 lint" and
+// "README line cap". Before this layer a CI-only check could fail on a gate-green commit.
+const CI_CHECKS = [
+  ["scripts/gen-keep-pass.mjs", "--check"],
+  ["scripts/ci-gs4-lint.mjs"],
+  ["build/check-readme.mjs"],
+];
+function ciChecks() {
+  const gone = missing(CI_CHECKS.map((c) => c[0]));
+  if (gone) return gone;
+  for (const args of CI_CHECKS) {
+    const r = run(process.execPath, args);
+    if (r.status !== 0) {
+      dumpChild("ci-checks", r);
+      return { status: "FAIL", detail: `node ${args.join(" ")} exit ${r.status}` };
+    }
+  }
+  return { status: "PASS", detail: CI_CHECKS.map((c) => c.join(" ")).join("; ") + ": exit 0" };
+}
+
 // ---- layer 2: GP + 14a cases tagged <= Mn (impl/14 §5, DEVIATIONS D-M0-2, D-M0-5) ----
 // The GP cases read release-out/, so this layer builds it first, the same order as a CI cell
 // (impl/14 §8 step 2: build, then cases). A failed build is this layer's FAIL (D-M0-F1-1).
@@ -250,6 +274,7 @@ function main() {
   const runners = {
     "keep-pass": () => keepPass(ms),
     "v2-unit": () => v2Unit(),
+    "ci-checks": () => ciChecks(),
     "gp-cases": () => gpCases(ms),
     "prompt-lint": () => promptLint(ms),
     "check-removed": () => checkRemoved(),

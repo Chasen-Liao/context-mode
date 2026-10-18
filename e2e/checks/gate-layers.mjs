@@ -2,7 +2,7 @@
 // e2e/checks/gate-layers.mjs — local check for live case gate-layers (14-tests.md §8,
 // scripts/gate.mjs, DEVIATIONS D-M0-1, D-M1-13). Runs `node scripts/gate.mjs --milestone Mn
 // --quick` for M0 and M1 and checks the output has one "PASS|FAIL|SKIP <layer> ..." line per
-// layer, in order: keep-pass, v2-unit, gp-cases, prompt-lint, check-removed, live.
+// layer, in order: keep-pass, v2-unit, ci-checks, gp-cases, prompt-lint, check-removed, live.
 // M0: v2-unit prints "SKIP v2-unit starts at M1". M1: v2-unit runs (PASS or FAIL, never SKIP
 // unless an earlier layer failed). Prints one JSON line, never throws.
 import { existsSync } from "node:fs";
@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..", "..");
 const GATE_PATH = path.join(REPO_ROOT, "scripts", "gate.mjs");
-const LAYER_ORDER = ["keep-pass", "v2-unit", "gp-cases", "prompt-lint", "check-removed", "live"];
+const LAYER_ORDER = ["keep-pass", "v2-unit", "ci-checks", "gp-cases", "prompt-lint", "check-removed", "live"];
 const STATUSES = ["PASS", "FAIL", "SKIP"];
 
 function fail(reason, extra) {
