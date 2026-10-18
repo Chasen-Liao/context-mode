@@ -91,7 +91,7 @@ test("eventMap follows impl/10 §1.4", () => {
     SessionStart: "session_start", UserPromptSubmit: "input", PreToolUse: "tool_call", PostToolUse: "tool_result",
   });
   assert.deepEqual(getAdapter("opencode").eventMap, {
-    SessionStart: "context", UserPromptSubmit: "prompt", PreToolUse: "execute.before", PostToolUse: "execute.after", PreCompact: "compaction",
+    SessionStart: "context", UserPromptSubmit: "prompt", PreToolUse: "execute.before", PostToolUse: "execute.after", PreCompact: "compaction", Usage: "step-finish", // D-M5-arch-2
   });
 });
 

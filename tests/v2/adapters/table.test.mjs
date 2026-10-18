@@ -1,4 +1,5 @@
-// Unit tests for src/adapters/table.ts (impl/10 §1.1-§1.5; DECISIONS-r9 R1, R4, R5; DEVIATIONS D-M3-A7-1).
+// Unit tests for src/adapters/table.ts (impl/10 §1.1-§1.5, §10, §11; DECISIONS-r9 R1, R4, R5; DEVIATIONS D-M3-A7-1,
+// D-M5-arch-2, D-M5-A1-1).
 // Expected values are copied from the impl/10 tables, not from table.ts. Unit tests may import src/ (TECH-SPEC §6.2a).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -13,6 +14,8 @@ import * as copilotCli from "../../../src/adapters/copilot-cli.ts";
 import * as vscode from "../../../src/adapters/vscode.ts";
 import * as kiro from "../../../src/adapters/kiro.ts";
 import * as zcode from "../../../src/adapters/zcode.ts";
+import * as pi from "../../../src/adapters/pi.ts";
+import * as opencode from "../../../src/adapters/opencode.ts";
 
 // impl/10 §1.3 main table: installMode, projectSource, toolNamePrefix, compactDelivery, compactSummary, hookTimeoutMs, denyChannel.
 const MAIN = {
@@ -55,10 +58,11 @@ const EVENTS = {
   kiro: { SessionStart: "SessionStart", UserPromptSubmit: "PromptSubmit", PreToolUse: "PreToolUse", PostToolUse: "PostToolUse" },
   zcode: CLAUDE_EVENTS,
   pi: { SessionStart: "session_start", UserPromptSubmit: "input", PreToolUse: "tool_call", PostToolUse: "tool_result" },
-  opencode: { SessionStart: "context", UserPromptSubmit: "prompt", PreToolUse: "execute.before", PostToolUse: "execute.after", PreCompact: "compaction" },
+  // Usage: OpenCode step-finish cost row (DEVIATIONS D-M5-arch-2).
+  opencode: { SessionStart: "context", UserPromptSubmit: "prompt", PreToolUse: "execute.before", PostToolUse: "execute.after", PreCompact: "compaction", Usage: "step-finish" },
 };
 
-const MODULES = { "claude-code": claudeCode, codex, gemini, qwen, "copilot-cli": copilotCli, vscode, kiro, zcode };
+const MODULES = { "claude-code": claudeCode, codex, gemini, qwen, "copilot-cli": copilotCli, vscode, kiro, zcode, pi, opencode };
 
 test("ADAPTERS has one row per AgentId, in AGENT_IDS order (impl/10 §1.2, §1.3)", () => {
   assert.deepEqual(ADAPTERS.map((r) => r.id), [...AGENT_IDS]);
@@ -93,7 +97,7 @@ test("toolNamePrefix equals each adapter module's TOOL_NAME_PREFIX", () => {
   for (const [id, mod] of Object.entries(MODULES)) assert.equal(getAdapter(id).toolNamePrefix, mod.TOOL_NAME_PREFIX, id);
 });
 
-test("the 8 spawn adapters are wired to their own decode/encode (no not-built stub)", () => {
+test("all 10 adapters are wired to their own decode/encode (no not-built stub)", () => {
   for (const [id, mod] of Object.entries(MODULES)) {
     const r = getAdapter(id);
     assert.equal(r.decode, mod.decode, id + " decode");
@@ -119,10 +123,63 @@ test("each newly wired row decodes its own native PreToolUse and encodes allow a
   }
 });
 
-test("pi and opencode keep the not-built rows until their M5 adapters land (DEVIATIONS D-M3-A7-1)", () => {
-  for (const id of ["pi", "opencode"]) {
-    const r = getAdapter(id);
-    assert.throws(() => r.decode({}), new RegExp(id + ": adapter not built yet"));
-    assert.deepEqual(r.encode({ event: "PreToolUse", agent: id, sessionId: "s", cwd: "/p" }, { kind: "allow" }), { stdout: "", exitCode: 0 });
-  }
+test("pi decodes its call-site payloads (impl/10 §10, DEVIATIONS D-M5-A1-1)", () => {
+  const r = getAdapter("pi");
+  const pre = r.decode({ type: "tool_call", sessionId: "s", cwd: "/p", toolName: "ctx_execute", toolCallId: "c1", input: { code: "1" } });
+  assert.deepEqual(pre, { event: "PreToolUse", agent: "pi", sessionId: "s", cwd: "/p", tool: { name: "ctx_execute", canonicalName: "ctx_execute", input: { code: "1" }, callId: "c1" } });
+  assert.equal(r.decode({ type: "session_start", sessionId: "s", cwd: "/p" }).source, "startup");
+  assert.equal(r.decode({ type: "session_compact", sessionId: "s", cwd: "/p" }).source, "compact");
+  assert.equal(r.decode({ type: "input", sessionId: "s", cwd: "/p", message: "hi" }).prompt, "hi");
+  const post = r.decode({ type: "tool_result", sessionId: "s", cwd: "/p", toolName: "bash", input: {}, content: "abc", isError: true });
+  assert.deepEqual(post.result, { isError: true, bytes: 3, text: "abc" });
+  assert.throws(() => r.decode({ type: "turn_end" }), /pi: unknown hook event turn_end/);
+  assert.throws(() => r.decode(null), /pi: hook payload is not an object/);
+});
+
+test("pi encode: allow is the empty shape; injected text is a custom-role message with a timestamp", () => {
+  const r = getAdapter("pi");
+  const ss = { event: "SessionStart", agent: "pi", sessionId: "s", cwd: "/p" };
+  const pre = { event: "PreToolUse", agent: "pi", sessionId: "s", cwd: "/p" };
+  assert.deepEqual(r.encode(pre, { kind: "allow" }), { stdout: "", exitCode: 0 });
+  const hint = r.encode(ss, { kind: "hint", text: "use ctx_resume", onceKey: "k" });
+  assert.equal(hint.stdout, "use ctx_resume");
+  assert.equal(hint.exitCode, 0);
+  assert.equal(hint.role, "custom");
+  assert.equal(hint.content, "use ctx_resume");
+  assert.ok(Number.isFinite(hint.timestamp));
+  assert.equal(r.encode(pre, { kind: "hint", text: "x", onceKey: "k" }).stdout, "", "no tool_call hint field: dropped");
+  const deny = r.encode(pre, { kind: "deny", reason: "use ctx_execute", rewritten: "node run.mjs x" });
+  assert.equal(deny.exitCode, 2);
+  assert.equal(deny.stdout, "node run.mjs x\nuse ctx_execute");
+  assert.deepEqual(pi.checkPermission(deny), { block: true, reason: "node run.mjs x\nuse ctx_execute" });
+  assert.equal(pi.checkPermission({ stdout: "", exitCode: 0 }), undefined);
+  assert.equal(r.encode({ ...pre, event: "PostToolUse" }, { kind: "replace", output: "short" }).stdout, "short");
+});
+
+test("opencode decodes its call-site payloads, webfetch is WebFetch, step-finish is Usage (impl/10 §11, D-M5-arch-2)", () => {
+  const r = getAdapter("opencode");
+  const pre = r.decode({ type: "execute.before", sessionID: "s", directory: "/p", tool: "webfetch", callID: "c1", args: { url: "https://x.test" } });
+  assert.deepEqual(pre, { event: "PreToolUse", agent: "opencode", sessionId: "s", cwd: "/p", tool: { name: "webfetch", canonicalName: "WebFetch", input: { url: "https://x.test" }, callId: "c1" } });
+  assert.equal(r.decode({ type: "execute.before", sessionID: "s", directory: "/p", tool: "context-mode_ctx_execute", args: {} }).tool.canonicalName, "ctx_execute");
+  assert.equal(r.decode({ type: "execute.before", sessionID: "s", directory: "/p", tool: "bash", args: {} }).tool.canonicalName, "bash");
+  assert.equal(r.toCanonicalTool("webfetch"), "WebFetch");
+  assert.equal(r.decode({ type: "context", sessionID: "s", directory: "/p" }).event, "SessionStart");
+  assert.equal(r.decode({ type: "compaction", sessionID: "s", directory: "/p" }).event, "PreCompact");
+  assert.equal(r.decode({ type: "prompt", sessionID: "s", directory: "/p", message: "hi" }).prompt, "hi");
+  const usage = r.decode({ type: "step-finish", sessionID: "s", directory: "/p", turn: 3 });
+  assert.deepEqual(usage, { event: "Usage", agent: "opencode", sessionId: "s", cwd: "/p", turn: 3 });
+  const post = r.decode({ type: "execute.after", sessionID: "s", directory: "/p", tool: "bash", args: {}, output: "abc" });
+  assert.deepEqual(post.result, { isError: false, bytes: 3, text: "abc" });
+  assert.throws(() => r.decode({ type: "message.updated" }), /opencode: unknown hook event message.updated/);
+});
+
+test("opencode encode: hint only on session text, deny exits 2 on execute.before only, prompt never fails", () => {
+  const r = getAdapter("opencode");
+  const base = { agent: "opencode", sessionId: "s", cwd: "/p" };
+  assert.deepEqual(r.encode({ ...base, event: "PreToolUse" }, { kind: "allow" }), { stdout: "", exitCode: 0 });
+  assert.deepEqual(r.encode({ ...base, event: "SessionStart" }, { kind: "hint", text: "t", onceKey: "k" }), { stdout: "t", exitCode: 0 });
+  assert.deepEqual(r.encode({ ...base, event: "PreToolUse" }, { kind: "hint", text: "t", onceKey: "k" }), { stdout: "", exitCode: 0 });
+  assert.deepEqual(r.encode({ ...base, event: "PreToolUse" }, { kind: "deny", reason: "why" }), { stdout: "why", exitCode: 2 });
+  assert.deepEqual(r.encode({ ...base, event: "UserPromptSubmit" }, { kind: "deny", reason: "why" }), { stdout: "", exitCode: 0 });
+  assert.deepEqual(r.encode({ ...base, event: "PostToolUse" }, { kind: "replace", output: "o" }), { stdout: "", exitCode: 0 });
 });
