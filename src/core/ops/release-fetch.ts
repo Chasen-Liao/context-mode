@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
-  DATA_PLUGINS_DIR_NAME, GIT_BIN, GIT_CLONE_ARGS, GIT_EXIT_LABEL, GIT_HEAD_SHA_ARGS, GIT_NO_PROMPT_ENV, GIT_NOT_STARTED,
+  DATA_PLUGINS_DIR_NAME, GIT_BIN, GIT_CLONE_ARGS, GIT_EXIT_LABEL, GIT_HEAD_SHA_ARGS, GIT_NO_CRLF_ENV, GIT_NO_PROMPT_ENV, GIT_NOT_STARTED,
   RELEASE_BRANCH, UPGRADE_AREA_KEY_SEP, UPGRADE_FETCH_DIR_PREFIX, UPGRADE_GIT_TIMEOUT_MS,
 } from "../contracts/constants.ts";
 import { CtxError } from "../contracts/errors.ts";
@@ -47,7 +47,7 @@ export async function fetchRelease(agent: AgentId, url: string, env: NodeJS.Proc
   const gitBin = findRuntime(GIT_BIN, env);
   if (gitBin === null) throw new CtxError("FETCH_FAILED", { code: GIT_NOT_STARTED });
   // DEVIATIONS D-M7-CI-1: no CRLF rewrite on Windows (set by env, argv stays as the spec), so the cloned bytes match SHA256SUMS.
-  const childEnv = buildChildEnv(env, { ...GIT_NO_PROMPT_ENV, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.autocrlf", GIT_CONFIG_VALUE_0: "false" });
+  const childEnv = buildChildEnv(env, { ...GIT_NO_PROMPT_ENV, ...GIT_NO_CRLF_ENV });
   try {
     await git(gitBin, [...GIT_CLONE_ARGS, RELEASE_BRANCH, url, fetchDir], agentDir, childEnv, signal);
     const sha = await git(gitBin, GIT_HEAD_SHA_ARGS, fetchDir, childEnv, signal);
