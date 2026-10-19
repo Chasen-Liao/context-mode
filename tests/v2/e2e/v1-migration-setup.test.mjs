@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { AGENT_IDS as SETUP_AGENT_IDS, plantV1Install, v1GlobalBin, v1NpmPrefix, v1Project } from "../../../e2e/live/cases/v1-migration-setup.mjs";
+import { AGENT_IDS as SETUP_AGENT_IDS, plantV1Install, v1GlobalBin, v1NpmBinDir, v1NpmPrefix, v1Project } from "../../../e2e/live/cases/v1-migration-setup.mjs";
 import { AGENT_IDS } from "../../../src/core/contracts/agents.ts";
 import { V1_REASON } from "../../../src/core/contracts/constants.ts";
 import { detectV1 } from "../../../src/core/ops/detect-v1.ts";
@@ -98,10 +98,23 @@ test("[M7] v1-migration-setup/kiro-agent-name-and-steering-doc (A37)", (t) => {
 test("[M7] v1-migration-setup/fake-global-bin-under-temp-npm-prefix (D-M7-arch-6)", (t) => {
   const home = tmp(t, "bin");
   plantV1Install("copilot-cli", home);
+  const win = process.platform === "win32";
+  const prefix = v1NpmPrefix(home);
   const bin = v1GlobalBin(home);
-  assert.ok(bin.startsWith(v1NpmPrefix(home) + path.sep), "bin lives under the temp prefix");
-  assert.ok(existsSync(path.join(v1NpmPrefix(home), "lib", "node_modules", "context-mode", "package.json")));
-  if (process.platform !== "win32") {
+  // npm's global layout: POSIX prefix/lib/node_modules + prefix/bin/<name>; Windows prefix/node_modules +
+  // prefix/<name>.cmd (the bin dir is the prefix itself).
+  const binDir = win ? prefix : path.join(prefix, "bin");
+  const pkgRoot = win ? path.join(prefix, "node_modules") : path.join(prefix, "lib", "node_modules");
+  assert.equal(bin, path.join(binDir, win ? "context-mode.cmd" : "context-mode"));
+  assert.equal(v1NpmBinDir(home), binDir, "the dir the case puts first on PATH holds the bin");
+  assert.ok(existsSync(path.join(pkgRoot, "context-mode", "package.json")));
+  // npm itself agrees on the package root for this prefix (`npm root -g`).
+  const npmRoot = execFileSync(win ? "npm.cmd" : "npm", ["root", "-g"], {
+    env: { ...process.env, npm_config_prefix: prefix }, encoding: "utf8", shell: win,
+  }).trim();
+  assert.equal(path.resolve(npmRoot), path.resolve(pkgRoot));
+  if (win) assert.ok(readFileSync(bin, "utf8").startsWith("@echo off\r\n"), "bin is a cmd shim");
+  else {
     assert.ok(statSync(bin).mode & 0o111, "bin is executable");
     execFileSync(bin, ["hook", "copilot-cli", "pretooluse"], { input: "{}" }); // exit 0 or throws
   }

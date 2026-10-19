@@ -2,6 +2,7 @@
 // Spec: docs/v2/impl/15-v1-transition.md §3.1, §7 A3 (literal fixtures from ADR-0011's "v1 cleanup" table);
 // DECISIONS-r4 A37 (Kiro agents/*.json name == context-mode, .kiro/steering/KIRO.md), B28 (VS Code both
 // session-data dirs, .vscode/mcp.json entry); DEVIATIONS D-M7-arch-6 (fake global bin under a temp npm prefix).
+// npm global layout: POSIX <prefix>/bin + <prefix>/lib/node_modules, Windows <prefix> + <prefix>/node_modules.
 // Rules: no src/ import (own literal agent list, GS4); never deletes and never overwrites an agent file
 // (files open with flag "wx"); the caller creates `home` fresh and owns its removal.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -20,16 +21,26 @@ export function v1Project(home) {
   return path.join(home, PROJECT_DIR);
 }
 
-/** Temp npm prefix: the case sets npm_config_prefix to this and puts its bin dir first on PATH. */
+/** Temp npm prefix: the case sets npm_config_prefix to this and puts v1NpmBinDir first on PATH. */
 export function v1NpmPrefix(home) {
   return path.join(home, NPM_PREFIX_DIR);
 }
 
+/** npm's global bin dir for the prefix: <prefix>/bin on POSIX, the prefix itself on Windows. */
+export function v1NpmBinDir(home) {
+  return process.platform === "win32" ? v1NpmPrefix(home) : path.join(v1NpmPrefix(home), "bin");
+}
+
+/** npm's global package root (`npm root -g`): <prefix>/lib/node_modules on POSIX, <prefix>/node_modules on Windows. */
+function v1NpmRoot(home) {
+  return process.platform === "win32"
+    ? path.join(v1NpmPrefix(home), "node_modules")
+    : path.join(v1NpmPrefix(home), "lib", "node_modules");
+}
+
 /** The fake v1 global bin; the case removes it to stand for `npm uninstall -g context-mode`. */
 export function v1GlobalBin(home) {
-  return process.platform === "win32"
-    ? path.join(v1NpmPrefix(home), BIN + ".cmd")
-    : path.join(v1NpmPrefix(home), "bin", BIN);
+  return path.join(v1NpmBinDir(home), process.platform === "win32" ? BIN + ".cmd" : BIN);
 }
 
 const json = (v) => JSON.stringify(v, null, 2) + "\n";
@@ -60,9 +71,7 @@ const nested = (agent, events) => ({
 const flat = (agent, events) => Object.fromEntries(events.map((e) => [e, [{ type: "command", command: hookCmd(agent, e.toLowerCase()) }]]));
 
 function plantGlobalBin(home) {
-  const prefix = v1NpmPrefix(home);
-  const pkgDir = process.platform === "win32" ? path.join(prefix, "node_modules", BIN) : path.join(prefix, "lib", "node_modules", BIN);
-  putShared(path.join(pkgDir, "package.json"), json({ name: BIN, version: V1_VERSION, bin: { [BIN]: "cli.js" } }));
+  putShared(path.join(v1NpmRoot(home), BIN, "package.json"), json({ name: BIN, version: V1_VERSION, bin: { [BIN]: "cli.js" } }));
   const script = process.platform === "win32"
     ? "@echo off\r\nmore >nul\r\nexit /b 0\r\n"
     : "#!/bin/sh\n# fake v1 context-mode global bin: reads the hook payload, allows, exits 0\ncat >/dev/null\nexit 0\n";
