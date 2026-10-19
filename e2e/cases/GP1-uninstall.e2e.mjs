@@ -57,6 +57,9 @@ for (const { agent, file, user } of AGENTS) {
 
     const up = await call(c, "ctx_upgrade", { mode: "upgrade" });
     assert.equal(up.isError, false, text(up));
+    // The install must have written something: otherwise "no residue" passes with a no-op installer.
+    const installed = walkFiles(home).filter((f) => readFileSync(f, "utf8").includes(OWN_NAME));
+    assert.ok(installed.length >= 1, "ctx_upgrade wrote at least one context-mode entry before the uninstall");
     await call(c, "ctx_execute", { language: "javascript", code: "1" }); // opens the project DB: owner file + data
     const un = await call(c, "ctx_upgrade", { mode: "uninstall", confirmDelete: true });
     assert.equal(un.isError, false, text(un));

@@ -75,6 +75,7 @@ test("[M7] GP3/hook-perf-posttool-async: a plain ls PreToolUse spawns nothing an
     const r = f.hook(lsCall(f.repo, "perf-pre", "PreToolUse"));
     assert.equal(r.status, 0, r.stderr);
     // The Bash hint fires once per session (impl/09 §2 step 3); every later call is the empty allow.
+    if (i === 0) assert.ok(r.stdout.includes("ctx_execute"), "the first Bash call carries the once-per-session hint");
     if (i > 0) assert.equal(r.stdout, "", "a plain ls is allowed with the native empty answer");
     assert.deepEqual(r.calls, [], "PreToolUse for ls starts no child process");
     hookCpu.push(r.cpuMs);

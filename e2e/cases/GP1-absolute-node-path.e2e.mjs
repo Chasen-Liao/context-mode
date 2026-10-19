@@ -36,6 +36,7 @@ test("[M7] GP1/absolute-node-path-cursor-windows: no written MCP server command 
     const file = path.join(OUT, m);
     if (!existsSync(file)) continue;
     const servers = Object.values(readJson(m).mcpServers ?? {});
+    assert.ok(servers.length >= 1, `${m}: declares no MCP server (a missing entry must not pass)`);
     for (const s of servers) {
       assert.notEqual(s.command, "npx", `${m}: MCP server command is npx, not an absolute node path`);
       assert.ok(!String(s.command).includes("npx"), `${m}: MCP server command names npx`);
@@ -45,8 +46,11 @@ test("[M7] GP1/absolute-node-path-cursor-windows: no written MCP server command 
 
 test("[M7] GP1/absolute-node-path-cursor-windows: no written hook command uses npx (#1282)", () => {
   assert.ok(existsSync(OUT), "release-out/ missing (run build/build.mjs first)");
+  assert.ok(hookFiles().length >= 8, "release-out/hooks holds one file per hook-capable agent");
   for (const h of hookFiles()) {
+    assert.ok(commands(readJson(h)).length >= 1, `${h}: declares no hook command`);
     for (const c of commands(readJson(h))) {
+      assert.ok(c.includes("hook.mjs"), `${h}: hook command does not run hook.mjs: ${c}`);
       assert.ok(!c.includes("npx"), `${h}: hook command names npx: ${c}`);
     }
   }

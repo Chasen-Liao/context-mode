@@ -40,3 +40,30 @@ test("[M7] GP1/opencode-clientinfo-detect: clientInfo.name opencode with --agent
   assert.ok(text.split("\n").some((l) => l.startsWith("| D6 MCP | PASS")), "D6 sees the opencode clientInfo");
   assert.ok(text.includes("opencode"), "doctor report names adapter opencode");
 });
+
+// Skeptic M7: D6 PASS and the word "opencode" appear for any clientInfo, so the case above cannot tell
+// detection from a constant. The adapter must come from --agent and not from clientInfo.name (ADR-0007 d4).
+test("[M7] GP1/opencode-clientinfo-detect: --agent decides the adapter even when clientInfo.name names another host (#1276)", async (t) => {
+  const home = mkdtempSync(path.join(tmpdir(), "cm-gp1-oc2-home-"));
+  const repo = mkdtempSync(path.join(tmpdir(), "cm-gp1-oc2-repo-"));
+  t.after(() => {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(repo, { recursive: true, force: true });
+  });
+  execFileSync("git", ["init", "-q"], { cwd: repo });
+  const env = { ...process.env, HOME: home, USERPROFILE: home, TMPDIR: home };
+  delete env.CLAUDE_PROJECT_DIR;
+  const before = process.cwd();
+  process.chdir(repo);
+  const c = spawnBundle(SERVER_BUNDLE, env, ["--agent", "opencode"]);
+  process.chdir(before);
+  t.after(() => c.kill());
+  await c.request("initialize", { ...INIT, clientInfo: { name: "claude-code", version: "9" } });
+  const reply = await c.request("tools/call", { name: "ctx_doctor", arguments: {} });
+  await c.close();
+  const text = reply?.content?.[0]?.text ?? "";
+  const d3 = text.split("\n").find((l) => l.startsWith("| D3 ")) ?? "";
+  assert.ok(d3.includes("opencode"), `D3 names the --agent adapter, not clientInfo: ${d3}`);
+  assert.ok(!text.includes("claude-code"), "no row names the clientInfo host");
+  assert.ok(text.split("\n").some((l) => l.startsWith("| D7 ") && l.includes("| PASS |")), "D7 resolves the project from the opencode spawn cwd");
+});

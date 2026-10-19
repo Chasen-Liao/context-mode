@@ -125,6 +125,12 @@ const SCHEMA = {
   },
 };
 
+// Each host's own pre-tool event name, as the generated files carry it (key or kiro trigger).
+const PRE_TOOL_EVENT = {
+  "claude-code": "PreToolUse", codex: "PreToolUse", gemini: "BeforeTool", qwen: "PreToolUse",
+  "copilot-cli": "preToolUse", vscode: "PreToolUse", kiro: "PreToolUse", zcode: "PreToolUse",
+};
+
 test("[M7] GP11/agy-hooks-schema-valid: each generated hook file passes its own host schema (#1206)", () => {
   const files = readdirSync(path.join(OUT, "hooks")).filter((f) => f.endsWith(".json")).sort();
   assert.deepEqual(files.map((f) => f.slice(0, -5)), Object.keys(SCHEMA).sort());
@@ -132,5 +138,12 @@ test("[M7] GP11/agy-hooks-schema-valid: each generated hook file passes its own 
     const id = f.slice(0, -5);
     const doc = JSON.parse(readFileSync(path.join(OUT, "hooks", f), "utf8"));
     assert.doesNotThrow(() => SCHEMA[id](doc), id);
+    // Walk the parsed strings: the Claude command quotes the plugin root ("${CLAUDE_PLUGIN_ROOT}/hook.mjs"), so the
+    // stringified doc holds an escaped quote between hook.mjs and --agent.
+    const strings = [];
+    const walk = (v) => { if (typeof v === "string") strings.push(v); else if (v && typeof v === "object") Object.values(v).forEach(walk); };
+    walk(doc);
+    assert.ok(strings.some((c) => c.includes("hook.mjs") && c.endsWith(" --agent " + id)), `${id}: file must name its own agent in a hook command`);
+    assert.ok(strings.includes(PRE_TOOL_EVENT[id]) || JSON.stringify(doc).includes(JSON.stringify(PRE_TOOL_EVENT[id])), `${id}: declares its pre-tool event ${PRE_TOOL_EVENT[id]}`);
   }
 });
