@@ -36,6 +36,9 @@ const FIXTURE_FALLBACK_AGENT = "claude-code"; // agents with no recorded fixture
 const INIT = { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "e2e-v1-migration", version: "0" } };
 const HOOK_TIMEOUT_MS = 30000;
 const ROW_SEP = " | ";
+const DATA_DIR_REASON = "v1 data dir "; // V1_REASON.dataDir text start
+const D4_PREFIX = "| D4 "; // report.ts rowLine: "| " + id + " " + label
+const WORKSPACE_FOLDER_FLAG = "--workspace-folder"; // VS Code project source (D-M1-5)
 
 // impl/15 §3.2: the six agents whose v1 hooks (or v1 data) the R8 set rehearses.
 const CASE_AGENTS = Object.freeze(["claude-code", "codex", "gemini", "copilot-cli", "vscode", "kiro"]);
@@ -61,11 +64,12 @@ function finish(tempDir) {
 
 const text = (r) => r?.content?.[0]?.text ?? "";
 
-/** The D4 row's cells [check, label, status, detail, ...] from the doctor table, or null. */
+/** The D4 row {status, detail, line} from the doctor table ("| D4 v1 leftovers | FAIL | <detail> | <fix> |"), or null. */
 function d4Row(report) {
   for (const line of report.split("\n")) {
-    const cells = line.split(ROW_SEP).map((c) => c.trim());
-    if (cells[0] === "| D4" || cells[0] === "D4") return cells;
+    if (!line.startsWith(D4_PREFIX)) continue;
+    const cells = line.split(ROW_SEP);
+    return { status: cells[1], detail: cells[2] ?? "", line };
   }
   return null;
 }
@@ -126,7 +130,7 @@ async function main() {
   // Step 3: doctor (before) -> upgrade -> doctor (after), one server process, cwd = project.
   const prevCwd = process.cwd();
   process.chdir(project);
-  const c = spawnBundle(SERVER_BUNDLE, env, ["--agent", agent]);
+  const c = spawnBundle(SERVER_BUNDLE, env, ["--agent", agent, ...(agent === "vscode" ? [WORKSPACE_FOLDER_FLAG, project] : [])]);
   process.chdir(prevCwd);
   let before = "", upgrade = "", after = "", upgradeErr = false;
   try {
@@ -146,26 +150,29 @@ async function main() {
 
   // Step 4: D4 before lists v1 leftovers; after is clean except the report-only ones.
   const d4Before = d4Row(before);
-  step("doctor-before-d4-fail", d4Before !== null && d4Before.includes("FAIL"), d4Before?.join(ROW_SEP) ?? before.split("\n")[0]);
+  step("doctor-before-d4-fail", d4Before?.status === "FAIL", d4Before?.line ?? before.split("\n")[0]);
   step("upgrade", !upgradeErr && upgrade.length > 0, upgrade.split("\n").slice(0, 3).join(" / "));
   const d4After = d4Row(after);
   const kept = KEPT[agent] ?? [];
   if (d4After === null) step("doctor-after-d4", false, "no D4 row: " + after.split("\n")[0]);
-  else if (d4After.includes("PASS")) step("doctor-after-d4", kept.length === 0, d4After.join(ROW_SEP));
+  else if (d4After.status === "PASS") step("doctor-after-d4", kept.length === 0, d4After.line);
   else {
-    const detail = d4After[3] ?? "";
+    const detail = d4After.detail;
     const reasons = detail.split("; ").filter(Boolean);
     const unexpected = reasons.filter((r) => !kept.some((k) => r.includes(k) || r.includes(path.basename(k))));
     step("doctor-after-d4", unexpected.length === 0, unexpected.length ? "unexpected: " + unexpected.join("; ") : detail);
   }
   for (const k of kept) {
     const where = k.startsWith(".vscode") || k.startsWith(".kiro") ? path.join(project, k) : path.join(home, k);
-    step(`kept ${k}`, existsSync(where) && (d4After?.[3] ?? "").includes(path.basename(k)), where);
+    step(`kept ${k}`, existsSync(where) && (d4After?.detail ?? "").includes(path.basename(k)), where);
   }
   if (agent === "vscode") {
     const sessions = [path.join(project, ".github", "context-mode", "sessions"), path.join(home, ".vscode", "context-mode", "sessions")];
-    const row = d4Before?.join(ROW_SEP) ?? "";
-    step("vscode-both-session-paths", sessions.every((s) => row.includes(s)), sessions.join(", "));
+    // The D4 detail joins reasons only (doctor-config.ts), so each path shows as one data-dir reason there and
+    // by name in the ctx_upgrade change table (D-M7-V2-1).
+    const dataReasons = (d4Before?.detail ?? "").split("; ").filter((r) => r.startsWith(DATA_DIR_REASON)).length;
+    step("vscode-both-session-paths", dataReasons >= sessions.length && sessions.every((s) => upgrade.includes(s)),
+      `${dataReasons} data-dir reasons; ` + sessions.join(", "));
   }
 
   // Step 5: npm uninstall -g (R3: last).
