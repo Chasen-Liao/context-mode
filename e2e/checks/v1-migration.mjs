@@ -25,7 +25,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { spawnBundle } from "../harness/mcp-client.mjs";
-import { plantV1Install, v1GlobalBin, v1NpmPrefix, v1Project } from "../live/cases/v1-migration-setup.mjs";
+import { plantV1Install, v1GlobalBin, v1NpmBinDir, v1NpmPrefix, v1Project } from "../live/cases/v1-migration-setup.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const RELEASE_OUT = path.join(ROOT, "release-out");
@@ -121,7 +121,7 @@ async function main() {
   step("plant", existsSync(bin), bin);
 
   const env = {
-    PATH: path.join(v1NpmPrefix(home), "bin") + path.delimiter + (process.env.PATH ?? ""),
+    PATH: v1NpmBinDir(home) + path.delimiter + (process.env.PATH ?? ""),
     HOME: home, USERPROFILE: home, TMPDIR: tmp, TMP: tmp, TEMP: tmp,
     npm_config_prefix: v1NpmPrefix(home),
     ...(agent === "claude-code" ? { CLAUDE_PROJECT_DIR: project } : {}),
