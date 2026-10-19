@@ -77,6 +77,8 @@ async function one(id, i, bin, root) {
   const f = FIXTURES[i % FIXTURES.length];
   const big = f.facts.find((x) => Buffer.byteLength(x.value) > 640).value;
   const s = setupArm(id, { releaseOut: RELEASE_OUT, root });
+  const data = projectDir(s.cwd);
+  const ours = !existsSync(data); // drop only the store this run created (fresh temp git dir, fresh key)
   try {
     const r = await runSession({ bin, turns: f.turns, nextRequest: f.nextRequest, budgetUsd: BUDGET, cwd: s.cwd, args: s.args, reset: s.reset });
     const after = f.turns.length + 1; // turn index of the next request (turns, reset, next)
@@ -91,7 +93,7 @@ async function one(id, i, bin, root) {
       costUsd: r.costUsd,
     };
   } finally {
-    rmSync(projectDir(s.cwd), { recursive: true, force: true });
+    if (ours) rmSync(data, { recursive: true, force: true });
     s.cleanup();
   }
 }

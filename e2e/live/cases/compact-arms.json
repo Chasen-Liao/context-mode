@@ -2,6 +2,6 @@
   "id": "T-CMP",
   "kind": "local",
   "covers": ["src/core/compaction/", "src/core/tools/resume.ts"],
-  "run": ["node", "e2e/live/compact/driver.mjs"],
+  "run": ["node", "e2e/live/compact/run.mjs"],
   "expect": { "jsonField": "ok", "equals": true }
 }
