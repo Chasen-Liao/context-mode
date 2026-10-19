@@ -184,5 +184,19 @@ Paired cc+v2 vs cc: 2 better, 4 worse, 14 same (not significant, sign test p ~0.
    `context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").`
    The 2,048 B block is still computed on demand: `ctx_resume()` with no `seq` returns it.
 2. **Host has no own summary, or it is not yet verified:** inject the 2,048 B block (D1 algorithm, unchanged), through the ADR-0009 §6 delivery path of that agent.
-3. Which mode an agent uses is one column in `adapters/table.ts`: `compactSummary: "host" | "none"`. Claude Code = `"host"`. Every other agent = `"none"` until a live check (LV-COMPACT, one per agent, M3) shows the host writes a summary the model sees; then the row flips to `"host"`. One path per agent, no fallback.
+3. Which mode an agent uses is one column in `adapters/table.ts`: `compactSummary: "host" | "none"`. Claude Code = `"none"` since 2026-10-19 (see "Re-measure" below); it was `"host"` when D6 was accepted. Every other agent = `"none"` until a live check (LV-COMPACT, one per agent, M3) shows the host writes a summary the model sees; then the row flips to `"host"`. One path per agent, no fallback.
 4. The pointer line is byte-stable (no clock, no counts), bare tool names, framed as data.
+
+**Re-measure (2026-10-19): the Claude Code `"host"` choice did not hold.** T-CMP live, keyless, 10 sessions per arm, 0.25 USD cap per session, effort low:
+
+| Model | Arm | Correct (gate 0.80 for a) | Call rate (gate 0.70 for a) |
+|---|---|---|---|
+| Sonnet 5 | (a) CC summary + pointer | 7/10 | 0/10 |
+| Sonnet 5.5 | (a) CC summary + pointer | 7/10 | 0/10 |
+| Sonnet 5.5 | (b) summary + block | 7/10 | 0/10 |
+| Sonnet 5.5 | (c) summary only | 7/10 | 0/10 |
+| Sonnet 5.5 | (d) block only | 7/10 | 0/10 |
+| Sonnet 5.5 | (e) pointer only | 7/10 | 0/10 |
+| Opus 5.5 | (a) CC summary + pointer | 4/10 (3 sessions hit the cap) | 0/10 |
+
+List-price cost of the 2026-10-19 runs: Sonnet 5.5 arms a-e 6.0232 USD (2.3009 + 3.7223), Opus 5.5 arm a 2.1133 USD. No session called `ctx_resume` or `ctx_search` after the reset turn. The pointer rule in item 1 fails its own gate, so the `claude-code` row stays `"none"` (D-M7-CL-1): item 2 applies, the 2,048 B block is injected once. Item 1 stays valid for an agent whose live check shows a pointer works. Raw rows: `e2e/live/compact/results/`.
