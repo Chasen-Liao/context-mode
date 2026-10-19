@@ -26,6 +26,9 @@ export const CLIENT_NAME_TO_PLATFORM: Record<string, PlatformId> = {
   "Codex": "codex",
   "codex-mcp-client": "codex",
   "Kilo Code": "kilo",
+  // #1276: OpenCode sends clientInfo.name = "opencode". v2 routing still takes the agent id
+  // from --agent (ADR-0007 decision 4); this row is for detection/display only.
+  "opencode": "opencode",
   "Kiro CLI": "kiro",
   "Pi CLI": "pi",
   "Pi Coding Agent": "pi",
