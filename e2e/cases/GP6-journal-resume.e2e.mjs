@@ -32,7 +32,7 @@ const INIT = { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { na
 const STATE_BUDGET = 2048; // ADR-0009 §4 "Budget B = 2,048 UTF-8 bytes"
 const RESUME_CAP = 2048; // ADR-0009 Golden cases: ctx_resume() returns the same <= 2,048 B block
 const POINTER_MIN = 640; // ADR-0009 §4 "An item over 640 B is never cut. It becomes a pointer line"
-const POINTER_LINE = // DECISIONS-r6 D6 item 1 (byte-stable pointer line for compactSummary "host")
+const POINTER_LINE = // DECISIONS-r6 D6 item 1 (pointer line of compactSummary "host"; no row is "host" after D-M7-CL-1)
   'context-mode: earlier work of this session is in ctx_resume (state block) and ctx_search(scope:"session", sort:"timeline").';
 const CLOSE_TAG = "</context_mode_state>"; // ADR-0009 §5 block
 const EMPTY_MORE = 'more: ctx_search(queries:[], scope:"session")'; // ADR-0009 §5 block, DECISIONS-r9 M11
@@ -188,14 +188,20 @@ test("[M4] GP6/D1-open-error-budget-skip golden", async (t) => {
   checkGolden("GP6", "D1-open-error-budget-skip", normalize(first, { home: f.home, proj: f.repo }));
 });
 
-// Claude Code compactSummary:"host" (DECISIONS-r6 D6, impl/10 §1.3): SessionStart(compact) injects the fixed
-// pointer line only, never the block; ctx_resume() still returns the <= RESUME_CAP block on demand.
-test("[M4] GP6/compact-summary-host", async (t) => {
+// Claude Code compactSummary:"none" (DECISIONS-r9 V9: T-CMP arm (a) failed live, D-M7-CL-1; impl/10 §1.3 note):
+// SessionStart(compact) injects the full <= STATE_BUDGET block once, never the pointer line; a second
+// SessionStart(compact) in the same session is throttled (impl/09 A23). ctx_resume() returns the same block.
+test("[M4] GP6/compact-summary-claude-code-none", async (t) => {
   const f = fixture(t);
-  const sid = "gp6-host";
+  const sid = "gp6-cc-none";
   assert.equal(await f.hook("claude-code", sid, { hook_event_name: "UserPromptSubmit", prompt: "rename the config loader" }), null);
-  const hint = await f.hook("claude-code", sid, { hook_event_name: "SessionStart", source: "compact" });
-  assert.equal(hint, POINTER_LINE);
+  const text = await f.hook("claude-code", sid, { hook_event_name: "SessionStart", source: "compact" });
+  assert.ok(text !== null, "SessionStart(compact) delivers the block");
+  assertStateBlock(text, sid);
+  assert.notEqual(text, POINTER_LINE);
+  assert.ok(!text.includes(POINTER_LINE), text);
+  assert.ok(linesOf(text).includes("now: rename the config loader"), text);
+  assert.equal(await f.hook("claude-code", sid, { hook_event_name: "SessionStart", source: "compact" }), null, "delivered once");
 
   const c = await f.server();
   const resumed = textOf(await call(c, "ctx_resume", {}, { sessionId: sid }));
