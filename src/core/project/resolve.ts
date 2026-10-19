@@ -128,7 +128,7 @@ function git(dir: string, args: string[]): string[] {
 // <repo>/.git -> parent of <repo>; a bare <repo>.git -> its own parent.
 // D-M2-R7-1: a registered worktree outside that dir (git worktree add /elsewhere) is inside too:
 // the root is the deepest dir holding the repo's parent and every registered worktree, so
-// ctx_execute_file accepts what ctx_batch_execute runs in, from every session of the project.
+// ctx_execute_file accepts what ctx_batch runs in, from every session of the project.
 function containmentRootOf(dir: string, commonDir: string): string {
   const repoDir = basename(commonDir) === GIT_DIR_NAME ? dirname(commonDir) : commonDir;
   const worktrees = git(dir, ["worktree", "list", "--porcelain"])
