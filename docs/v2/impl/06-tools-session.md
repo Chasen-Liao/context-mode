@@ -358,6 +358,17 @@ None beyond the DB layer's own timeout constant (owned by `store`, not redefined
   - Q8 tie to higher `seq`: determinism first (same rows give the same bytes, GP6); newest wins because newer rows are more relevant (same reason as A-section-cap-drop). Do not reverse it.
   - Q9 `query`: see the superseded note under §1 Export (M11 `more:` entry).
   - Q10 signature: see the superseded notes under §1 and §3 Export (D-M4-arch-2).
+- A-intern-M6 (answers to `.impl/intern-M6.md` Q1-Q10, read against `src/core/compaction/*`, `src/core/tools/{resume,stats}.ts`):
+  - Q1 pinned item: `last_request` is never dropped by the `MAX_CANDIDATES_TOTAL` cap. It counts toward the total, and the drop set is taken from the other sections only (oldest `seq` first), so they keep `MAX_CANDIDATES_TOTAL - 1`.
+  - Q2 same key in two sections: one query per distinct key in the `more:` line (M11 dedup), whatever section it came from.
+  - Q3 close tag: `STATE_CLOSE_TAG = "</context_mode_state>"` in `constants.ts`.
+  - Q4 empty body: valid journal row. Every line has a non-empty prefix (A-intern-M4 Q4), so an empty first line still gives a line of 5 B or more; the throw cannot fire from an empty body.
+  - Q5 `repeatCount`: a count built in `candidates.ts` (1 or more), never read from the DB. `max(1, n)` is part of the formula, not a guard.
+  - Q6 section order: A-intern-M4 Q1; the GP6 goldens assert it.
+  - Q7 no rows: `ctx_resume` returns `RESUME_EMPTY_LINE` before it calls `renderState`. A compact delivery with no rows renders the wrapper with `session="" upto="0"`, no item line and an empty `more:` line. This is the defined "nothing yet" block; it names no search.
+  - Q8 `RESUME_CAP` and `STATE_BUDGET`: both 2048 (V21). `tests/v2/contracts` asserts both values and `resume.ts` throws on a block over `RESUME_CAP`. A change to one is a change to both.
+  - Q9 tie-break: a journal row has one kind, so it feeds at most one section; `seq` is unique among candidates and the `seq` tie-break is total. Concatenation order does not change the result.
+  - Q10 `ctx_stats` errors: the tool has no input fields. An MCP call always sends an object, so `unrecognized_keys` is the only issue that can occur; it maps to `STATS_UNKNOWN_FIELD_LINE`.
 
 ---
 
