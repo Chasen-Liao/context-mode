@@ -119,7 +119,7 @@
             "id": "toolu_01QKAHCnayLG962tZ3wvqZRP",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-b97tEX-project/memory/journal-writer-shared-queue.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-b97tEX-project/memory/journal-writer-shared-queue.md",
               "content": "---\nname: journal-writer-shared-queue\ndescription: Decision on how two processes write the journal: one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes write the journal through one shared writer queue. A lock file was considered and rejected.\n\n**Why:** The user chose the queue over the lock file (2026-10-19). No further rationale was given.\n**How to apply:** Route all journal writes through the shared queue. Don't add lock-file-based coordination.\n"
             }
           },
@@ -128,7 +128,7 @@
             "id": "toolu_01Koh17Ac91WuVvQUGgWWSwt",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-b97tEX-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-b97tEX-project/memory/MEMORY.md",
               "content": "- [Journal writer: shared queue](journal-writer-shared-queue.md) — two processes write the journal via one shared writer queue, not a lock file\n"
             }
           },
@@ -173,7 +173,7 @@
             "name": "mcp__plugin_context-mode_context-mode__ctx_execute",
             "input": {
               "language": "shell",
-              "code": "d=\"/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-oJUtO6-project/memory\"\ncat > \"$d/config-loader-design.md\" <<'EOF'\n---\nname: config-loader-design\ndescription: Decided config loader design (option C, layered, cfg-schema-v4) and the reasons the alternatives were rejected\nmetadata:\n  type: project\n---\n\nConfig loader uses option C, a layered loader: built-in defaults, then project file, then user file. The merged result is checked against one schema, version `cfg-schema-v4`.\n\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- The loader must refuse any file declaring a schema version newer than cfg-schema-v4.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (single JSON file, hard-fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over file, no schema) silently ignored typo'd variable names, which cost an afternoon in the last release.\n\n**How to apply:** Do not propose hard-failing on unknown keys or schema-less env merging. Keep per-value layer provenance for the doctor command.\nEOF\necho \"- [Config loader design](config-loader-design.md) — option C layered loader, cfg-schema-v4, warn on unknown keys\" >> \"$d/MEMORY.md\"\nls \"$d\""
+              "code": "d=\"/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-oJUtO6-project/memory\"\ncat > \"$d/config-loader-design.md\" <<'EOF'\n---\nname: config-loader-design\ndescription: Decided config loader design (option C, layered, cfg-schema-v4) and the reasons the alternatives were rejected\nmetadata:\n  type: project\n---\n\nConfig loader uses option C, a layered loader: built-in defaults, then project file, then user file. The merged result is checked against one schema, version `cfg-schema-v4`.\n\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- The loader must refuse any file declaring a schema version newer than cfg-schema-v4.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (single JSON file, hard-fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over file, no schema) silently ignored typo'd variable names, which cost an afternoon in the last release.\n\n**How to apply:** Do not propose hard-failing on unknown keys or schema-less env merging. Keep per-value layer provenance for the doctor command.\nEOF\necho \"- [Config loader design](config-loader-design.md) — option C layered loader, cfg-schema-v4, warn on unknown keys\" >> \"$d/MEMORY.md\"\nls \"$d\""
             }
           },
           {
@@ -292,7 +292,7 @@
             "id": "toolu_01Pga4gjdx6XSCNzTguAaEBJ",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-lCCczz-project/memory/config-loader-layered-design.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-lCCczz-project/memory/config-loader-layered-design.md",
               "content": "---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as a three-layer loader (option C) with schema cfg-schema-v4\nmetadata:\n  type: project\n---\n\nConfig loader design: option C, a layered loader.\n\n- Layers, in order: built-in defaults, then the project file, then the user file. The merged result is validated against one schema.\n- Schema version for the merged result is `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (one JSON file, hard fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) silently ignored typos in variable names, which cost an afternoon in the last release.\n\n**How to apply:** Implement the loader and the doctor provenance output to match this design. Do not reintroduce hard failure on unknown keys or schema-less env merging.\n"
             }
           }
@@ -426,7 +426,7 @@
             "name": "mcp__plugin_context-mode_context-mode__ctx_execute",
             "input": {
               "language": "shell",
-              "code": "d=\"/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-9njjv7-project/memory\"\ncat > \"$d/config-loader-layered-design.md\" <<'EOF'\n---\nname: config-loader-layered-design\ndescription: Decided design for the config loader: option C, three-layer loader with one schema (cfg-schema-v4)\nmetadata:\n  type: project\n---\n\nConfig loader design chosen: option C, a layered loader.\n\n- Layers, in order: built-in defaults, then project file, then user file. The merged result is validated against one schema.\n- Unknown keys produce a warning naming the key and the layer, never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Schema version for the merged result is `cfg-schema-v4`. The loader must refuse any file declaring a newer schema version.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (single JSON file, hard-fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over file, no schema) silently ignored typo'd variable names and cost an afternoon in the last release.\n**How to apply:** Implement the loader as layered with provenance tracking; warn on unknown keys, reject newer schema versions than cfg-schema-v4.\nEOF\necho \"- [Config loader design](config-loader-layered-design.md) — option C layered loader, cfg-schema-v4, warn on unknown keys\" >> \"$d/MEMORY.md\"\nls \"$d\""
+              "code": "d=\"/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-a-9njjv7-project/memory\"\ncat > \"$d/config-loader-layered-design.md\" <<'EOF'\n---\nname: config-loader-layered-design\ndescription: Decided design for the config loader: option C, three-layer loader with one schema (cfg-schema-v4)\nmetadata:\n  type: project\n---\n\nConfig loader design chosen: option C, a layered loader.\n\n- Layers, in order: built-in defaults, then project file, then user file. The merged result is validated against one schema.\n- Unknown keys produce a warning naming the key and the layer, never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Schema version for the merged result is `cfg-schema-v4`. The loader must refuse any file declaring a newer schema version.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (single JSON file, hard-fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over file, no schema) silently ignored typo'd variable names and cost an afternoon in the last release.\n**How to apply:** Implement the loader as layered with provenance tracking; warn on unknown keys, reject newer schema versions than cfg-schema-v4.\nEOF\necho \"- [Config loader design](config-loader-layered-design.md) — option C layered loader, cfg-schema-v4, warn on unknown keys\" >> \"$d/MEMORY.md\"\nls \"$d\""
             }
           },
           {
@@ -545,7 +545,7 @@
             "id": "toolu_0158uJjbW4HvGFinVjNY7Dqt",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-kXVoG3-project/memory/journal-writer-queue.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-kXVoG3-project/memory/journal-writer-queue.md",
               "content": "---\nname: journal-writer-queue\ndescription: Decision on how two processes write the journal - one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes write the journal through one shared writer queue. A lock file was considered and rejected.\n\n**Why:** The user chose this on 2026-10-19 from two options: (1) a lock file, (2) one shared writer queue. They gave no rationale.\n\n**How to apply:** Route all journal writes through the single queue. Don't add lock-file-based coordination for the journal.\n"
             }
           },
@@ -554,7 +554,7 @@
             "id": "toolu_017muBhQMQbPtYMXwpWbEWEj",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-kXVoG3-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-kXVoG3-project/memory/MEMORY.md",
               "content": "- [Journal writer queue](journal-writer-queue.md) — two processes write the journal via one shared writer queue, not a lock file\n"
             }
           },
@@ -704,7 +704,7 @@
             "name": "mcp__plugin_context-mode_context-mode__ctx_execute",
             "input": {
               "language": "shell",
-              "code": "d=/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-DccPyZ-project/memory\ncat > $d/journal-writer-queue.md <<'EOF'\n---\nname: journal-writer-queue\ndescription: Decision on how two processes write the journal - one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes writing the journal will go through one shared writer queue, not a lock file (decided 2026-10-19).\n\n**Why:** user chose the queue over the lock-file option; the rationale wasn't stated.\n**How to apply:** design journal writes as enqueue to a single writer. Don't add lock-file code for journal writes.\nEOF\necho \"- [Journal writer queue](journal-writer-queue.md) — journal writes use one shared writer queue, not a lock file\" >> $d/MEMORY.md"
+              "code": "d=/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-DccPyZ-project/memory\ncat > $d/journal-writer-queue.md <<'EOF'\n---\nname: journal-writer-queue\ndescription: Decision on how two processes write the journal - one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes writing the journal will go through one shared writer queue, not a lock file (decided 2026-10-19).\n\n**Why:** user chose the queue over the lock-file option; the rationale wasn't stated.\n**How to apply:** design journal writes as enqueue to a single writer. Don't add lock-file code for journal writes.\nEOF\necho \"- [Journal writer queue](journal-writer-queue.md) — journal writes use one shared writer queue, not a lock file\" >> $d/MEMORY.md"
             }
           },
           {
@@ -851,7 +851,7 @@
             "id": "toolu_01Hh8H5sdBNrVc7NQVnbktUt",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-lmPkbO-project/memory/config-loader-layered-design.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-lmPkbO-project/memory/config-loader-layered-design.md",
               "content": "---\nname: config-loader-layered-design\ndescription: Decided design for the config loader (option C, layered, schema cfg-schema-v4)\nmetadata:\n  type: project\n---\n\nConfig loader design chosen: option C, a layered loader.\n\n- Layers load in order: built-in defaults, then project file, then user file. The merged result is validated against one schema.\n- Schema version for the merged result is `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (one JSON file, hard-fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) let a typo in a variable name silently do nothing, which cost an afternoon in the last release.\n\n**How to apply:** Implement the loader and the doctor provenance output to this spec. Don't reintroduce hard-fail on unknown keys or schema-less env merging.\n"
             }
           },
@@ -860,7 +860,7 @@
             "id": "toolu_01VphUrpW5gzNQK2kg1upFHK",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-lmPkbO-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s1-cm-t-cmp-ELVllK-arm-b-lmPkbO-project/memory/MEMORY.md",
               "content": "- [Config loader design](config-loader-layered-design.md) — option C layered loader, cfg-schema-v4, warn on unknown keys\n"
             }
           },

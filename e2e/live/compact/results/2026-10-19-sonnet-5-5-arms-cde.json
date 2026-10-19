@@ -120,7 +120,7 @@
             "id": "toolu_01Br7f9Wd4iEKk46PKEdVUSh",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-sIzkU1-project/memory/journal-write-shared-queue.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-sIzkU1-project/memory/journal-write-shared-queue.md",
               "content": "---\nname: journal-write-shared-queue\ndescription: Decision on how two processes write the journal: one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes writing the journal will go through one shared writer queue. A lock file was considered and rejected.\n\n**Why:** User decision on 2026-10-19. They gave no rationale beyond choosing the queue over the lock file.\n**How to apply:** When designing or implementing journal writes, route them through the single shared writer queue. Don't add lock-file coordination.\n"
             }
           },
@@ -129,7 +129,7 @@
             "id": "toolu_012cxxohWysr8sRuy5n6nzPY",
             "name": "Read",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-sIzkU1-project/memory/MEMORY.md"
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-sIzkU1-project/memory/MEMORY.md"
             }
           },
           {
@@ -175,7 +175,7 @@
             "id": "toolu_012uGq8GNGAHb94yXPjM3RFL",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-tbcHHx-project/memory/config-loader-layered-design.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-tbcHHx-project/memory/config-loader-layered-design.md",
               "content": "---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as option C, a three-layer loader checked against schema cfg-schema-v4\nmetadata:\n  type: project\n---\n\nConfig loader design: **option C, a layered loader**.\n\n- Layers, in order: built-in defaults, then project file, then user file. The merged result is validated against one schema, `cfg-schema-v4`.\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the `doctor` command can print where a value came from.\n- The loader must refuse any file that declares a schema version newer than `cfg-schema-v4`.\n- Cost: one extra file read at start, measured at under 2 ms.\n\n**Why:** Option A (one JSON file, hard fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) silently ignored typos in variable names, which cost an afternoon in the last release.\n\n**How to apply:** Implement the loader with these layers and rules. Don't reintroduce hard failures on unknown keys or schema-less env merging. See [[config-loader-layered-design]] for later changes to the schema version.\n"
             }
           },
@@ -184,7 +184,7 @@
             "id": "toolu_01ELP3svTiyKgAZK5Mv1z97p",
             "name": "Read",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-tbcHHx-project/memory/MEMORY.md"
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-tbcHHx-project/memory/MEMORY.md"
             }
           },
           {
@@ -287,7 +287,7 @@
             "id": "toolu_018wzmgk15HvyqUWUqzzZuiZ",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-h9SXCW-project/memory/journal-writer-queue-decision.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-h9SXCW-project/memory/journal-writer-queue-decision.md",
               "content": "---\nname: journal-writer-queue-decision\ndescription: Decision on how two processes write the journal: one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes writing the journal will go through one shared writer queue, not a lock file (decided 2026-10-19).\n\n**Why:** User chose it over the lock-file option; no further rationale was given.\n**How to apply:** Design or implement journal writes as submissions to the single queue. Don't add lock-file code for journal access.\n"
             }
           },
@@ -296,7 +296,7 @@
             "id": "toolu_01GejPArBjeyXvSZqDDYRwME",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-h9SXCW-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-h9SXCW-project/memory/MEMORY.md",
               "content": "- [Journal writer decision](journal-writer-queue-decision.md) — two processes write the journal via one shared writer queue, not a lock file\n"
             }
           },
@@ -349,7 +349,7 @@
             "id": "toolu_01CyHsWpGsLTSUmmFmycLqT4",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-djBHb0-project/memory/config-loader-layered-design.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-djBHb0-project/memory/config-loader-layered-design.md",
               "content": "---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as option C, a three-layer loader with schema cfg-schema-v4 and warn-only unknown keys\nmetadata:\n  type: project\n---\n\nConfig loader design: option C, a layered loader (decided 2026-10-19).\n\n- Layers, in order: built-in defaults, then the project file, then the user file. The merged result is validated against one schema.\n- Schema version for the merged result is `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Cost: one extra file read at start, measured at under 2 ms.\n\n**Why:** Option A (one JSON file, hard fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) let a typo in a variable name silently do nothing, which cost a full afternoon in the last release.\n\n**How to apply:** Do not propose a single-file loader or schemaless env merging. Keep unknown keys warn-only, keep per-value layer provenance, and enforce the `cfg-schema-v4` ceiling.\n"
             }
           },
@@ -358,7 +358,7 @@
             "id": "toolu_01PRqyj4ZntKg44WLuwVLo13",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-djBHb0-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-djBHb0-project/memory/MEMORY.md",
               "content": "- [Config loader design](config-loader-layered-design.md) — option C: layered loader, cfg-schema-v4, warn-only unknown keys, per-value provenance\n"
             }
           },
@@ -461,7 +461,7 @@
             "id": "toolu_01SS4DCDWXJMf9vUK4TKhUpT",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-j0h9bF-project/memory/journal-writer-queue.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-j0h9bF-project/memory/journal-writer-queue.md",
               "content": "---\nname: journal-writer-queue\ndescription: Decision on how two processes write the journal: one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nDecision (2026-10-19): the two processes that write the journal will go through one shared writer queue instead of a lock file.\n\n**Why:** the user chose it over a lock file; no rationale was given beyond the choice.\n**How to apply:** when designing or implementing journal writes, route them through a single queue-backed writer. Don't add lock-file coordination.\n"
             }
           },
@@ -470,7 +470,7 @@
             "id": "toolu_01LmHmT8mUjBkvtsqo7Ubndf",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-j0h9bF-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-j0h9bF-project/memory/MEMORY.md",
               "content": "- [Journal writer queue](journal-writer-queue.md) — journal writes use one shared writer queue, not a lock file\n"
             }
           },
@@ -515,7 +515,7 @@
             "name": "mcp__plugin_context-mode_context-mode__ctx_execute",
             "input": {
               "language": "shell",
-              "code": "d=/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-jB0SXd-project/memory\ncat > $d/config-loader-layered-design.md <<'EOF'\n---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as a three-layer loader (option C) with schema cfg-schema-v4\nmetadata:\n  type: project\n---\n\nConfig loader design chosen: option C, a layered loader.\n- Layers, in order: built-in defaults, then project file, then user file. The merged result is checked against one schema.\n- Unknown keys give a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Schema version for the merged result is `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (single JSON file, hard fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) let a typo in a variable name silently do nothing, which cost an afternoon in the last release.\n**How to apply:** Implement the loader and the doctor \"where a value came from\" output against this design. Don't reintroduce hard failure on unknown keys or schemaless env merging.\nEOF\necho \"- [Config loader design](config-loader-layered-design.md) — layered loader (option C), cfg-schema-v4, unknown keys warn\" >> $d/MEMORY.md"
+              "code": "d=/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-jB0SXd-project/memory\ncat > $d/config-loader-layered-design.md <<'EOF'\n---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as a three-layer loader (option C) with schema cfg-schema-v4\nmetadata:\n  type: project\n---\n\nConfig loader design chosen: option C, a layered loader.\n- Layers, in order: built-in defaults, then project file, then user file. The merged result is checked against one schema.\n- Unknown keys give a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Schema version for the merged result is `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (single JSON file, hard fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) let a typo in a variable name silently do nothing, which cost an afternoon in the last release.\n**How to apply:** Implement the loader and the doctor \"where a value came from\" output against this design. Don't reintroduce hard failure on unknown keys or schemaless env merging.\nEOF\necho \"- [Config loader design](config-loader-layered-design.md) — layered loader (option C), cfg-schema-v4, unknown keys warn\" >> $d/MEMORY.md"
             }
           },
           {
@@ -613,7 +613,7 @@
             "id": "toolu_011GVN9jG5TqCXdfZh4nmb9f",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-pN3J1a-project/memory/journal-writer-queue-decision.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-pN3J1a-project/memory/journal-writer-queue-decision.md",
               "content": "---\nname: journal-writer-queue-decision\ndescription: Decision on how two processes write the journal: one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes writing the journal will go through one shared writer queue, not a lock file (decided 2026-10-19).\n\n**Why:** User chose it over the lock-file option; the rationale wasn't given.\n**How to apply:** Design and implement journal writes as enqueue-to-single-writer. Don't introduce lock-file based coordination.\n"
             }
           },
@@ -622,7 +622,7 @@
             "id": "toolu_01BUnFMg4dTUdnepBmeDccn2",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-pN3J1a-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-c-pN3J1a-project/memory/MEMORY.md",
               "content": "- [Journal writer queue decision](journal-writer-queue-decision.md) — two processes write the journal via one shared writer queue, not a lock file\n"
             }
           },
@@ -697,7 +697,7 @@
             "id": "toolu_01SUD5oCAaXw3Xn7Ketw98Sj",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-PFi62m-project/memory/config-loader-layered-design.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-PFi62m-project/memory/config-loader-layered-design.md",
               "content": "---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as a three-layer loader (option C) with schema cfg-schema-v4\nmetadata:\n  type: project\n---\n\nConfig loader design chosen: option C, a layered loader.\n\n- Layers, in order: built-in defaults, then the project file, then the user file. The merged result is validated against one schema.\n- Schema version for the merged result: `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Cost: one extra file read at start, measured at under 2 ms.\n\n**Why:** Option A (one JSON file, hard fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) let a typo in a variable name silently do nothing, which cost an afternoon in the last release.\n\n**How to apply:** Implement the loader as layered, with per-value provenance and warn-only handling of unknown keys. Reject files declaring a schema newer than cfg-schema-v4. Don't reintroduce schema-less env merging or hard failure on unknown keys. See [[doctor-command]] for provenance output.\n"
             }
           },
@@ -706,7 +706,7 @@
             "id": "toolu_018dQVcJ2UPx6EimvLiHM6rx",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-PFi62m-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-PFi62m-project/memory/MEMORY.md",
               "content": "- [Config loader design](config-loader-layered-design.md) — layered loader (defaults, project, user), cfg-schema-v4, warn on unknown keys, per-value provenance\n"
             }
           }
@@ -829,7 +829,7 @@
             "id": "toolu_01J4LMcf756EhFYhprcFUG8f",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-Gj3tOn-project/memory/config-loader-layered-design.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-Gj3tOn-project/memory/config-loader-layered-design.md",
               "content": "---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as a three-layer loader (option C) validated against schema cfg-schema-v4\nmetadata:\n  type: project\n---\n\nConfig loader design chosen: option C, a layered loader.\n\n- Layers, in order: built-in defaults, then project file, then user file. The merged result is checked against one schema.\n- Schema version for the merged result: `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Unknown keys produce a warning naming the key and the layer, never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (one JSON file, hard-fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) let a typo in a variable name silently do nothing, which cost a full afternoon in the last release.\n\n**How to apply:** Implement the loader with these layers and the v4 version gate. Do not reintroduce hard failure on unknown keys or schema-less env merging.\n"
             }
           },
@@ -838,7 +838,7 @@
             "id": "toolu_01C5JW4NQasbkZjq5HCX9d6Z",
             "name": "Read",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-Gj3tOn-project/memory/MEMORY.md"
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-Gj3tOn-project/memory/MEMORY.md"
             }
           },
           {
@@ -947,7 +947,7 @@
             "id": "toolu_01JRoRWdARV1H8zLDtBNCqv6",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-gCJAHM-project/memory/journal-writer-queue.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-gCJAHM-project/memory/journal-writer-queue.md",
               "content": "---\nname: journal-writer-queue\ndescription: Decision on how two processes write the journal: one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes write the journal through one shared writer queue. A lock file was considered and rejected. Decided 2026-10-19.\n\n**Why:** The user chose the queue over the lock file. They gave no further rationale.\n**How to apply:** Route all journal writes through the queue. Don't add lock-file-based coordination.\n"
             }
           },
@@ -956,7 +956,7 @@
             "id": "toolu_01Va2arJ9y8q6gSBu47v2LZr",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-gCJAHM-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-gCJAHM-project/memory/MEMORY.md",
               "content": "- [Journal writer queue](journal-writer-queue.md) — two processes write the journal via one shared writer queue, not a lock file\n"
             }
           },
@@ -994,7 +994,7 @@
             "id": "toolu_01KWF55gJrcuUvN4TAt9Ke7i",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-hsJI0Q-project/memory/config-loader-layered-design.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-hsJI0Q-project/memory/config-loader-layered-design.md",
               "content": "---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as option C, a layered loader validated against schema cfg-schema-v4\nmetadata:\n  type: project\n---\n\nConfig loader design chosen: option C, a layered loader.\n\n- Layers, in order: built-in defaults, then project file, then user file. The merged result is checked against one schema.\n- Schema version for the merged result: `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (one JSON file, hard fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) let a typo in a variable name silently do nothing, which cost an afternoon in the last release.\n\n**How to apply:** Implement the loader with these layers, the version refusal, warn-only unknown keys and per-value provenance. Don't propose A or B again.\n"
             }
           },
@@ -1003,7 +1003,7 @@
             "id": "toolu_016zZuv7LTzNvC8F6MR6H6tQ",
             "name": "Read",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-hsJI0Q-project/memory/MEMORY.md"
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-d-hsJI0Q-project/memory/MEMORY.md"
             }
           },
           {
@@ -1251,7 +1251,7 @@
             "id": "toolu_01V4pB8Tcqfhd4cBgoVUQ9LK",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-2cs86B-project/memory/journal-writer-queue-decision.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-2cs86B-project/memory/journal-writer-queue-decision.md",
               "content": "---\nname: journal-writer-queue-decision\ndescription: Decision on how two processes write the journal: one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes write the journal through one shared writer queue. A lock file was considered and rejected.\n\n**Why:** The user made this decision on 2026-10-19 and gave no further rationale.\n**How to apply:** Design and implement journal writes as producers enqueuing to a single writer. Don't add lock-file code for journal access.\n"
             }
           },
@@ -1260,7 +1260,7 @@
             "id": "toolu_01WHbdYBSaJS6wovuG74gmAR",
             "name": "Read",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-2cs86B-project/memory/MEMORY.md"
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-2cs86B-project/memory/MEMORY.md"
             }
           },
           {
@@ -1297,7 +1297,7 @@
             "id": "toolu_01GtpWvurpfCKtfYPFYq6HJB",
             "name": "Read",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-giuoVR-project/memory/MEMORY.md"
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-giuoVR-project/memory/MEMORY.md"
             }
           },
           {
@@ -1380,7 +1380,7 @@
             "id": "toolu_01Fe35KSQHhWpLADLcX8He4S",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-Rsyf7g-project/memory/journal-writer-queue-decision.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-Rsyf7g-project/memory/journal-writer-queue-decision.md",
               "content": "---\nname: journal-writer-queue-decision\ndescription: Decision on how the two processes write the journal: one shared writer queue, not a lock file\nmetadata:\n  type: project\n---\n\nTwo processes write the journal through one shared writer queue. A lock file was considered and rejected.\n\n**Why:** The user chose this on 2026-10-19 between (1) a lock file and (2) a shared writer queue. They gave no rationale.\n\n**How to apply:** Design and implement journal writes as enqueue operations to the single writer. Don't add lock-file code for the journal.\n"
             }
           },
@@ -1389,7 +1389,7 @@
             "id": "toolu_01BASHPRuJqc1Mt9gq7v3JhQ",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-Rsyf7g-project/memory/MEMORY.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-Rsyf7g-project/memory/MEMORY.md",
               "content": "- [Journal writer queue decision](journal-writer-queue-decision.md) — two processes write the journal via one shared writer queue, not a lock file\n"
             }
           },
@@ -1428,7 +1428,7 @@
             "id": "toolu_018W6PyY92Zbyi6v3drvVfBX",
             "name": "Write",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-7oEvIL-project/memory/config-loader-layered-design.md",
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-7oEvIL-project/memory/config-loader-layered-design.md",
               "content": "---\nname: config-loader-layered-design\ndescription: Decision to build the config loader as option C, a three-layer loader validated against schema cfg-schema-v4\nmetadata:\n  type: project\n---\n\nConfig loader design: option C, a layered loader.\n\n- Layers, in order: built-in defaults, then project file, then user file. The merged result is checked against one schema.\n- Schema version for the merged result is `cfg-schema-v4`. The loader must refuse any file that declares a newer schema version.\n- Unknown keys produce a warning naming the key and the layer. They are never an error, so old configs keep working.\n- Each value records which layer set it, so the doctor command can print where a value came from.\n- Cost: one extra file read at start, measured under 2 ms.\n\n**Why:** Option A (one JSON file, hard fail on unknown keys) broke users with leftover old keys. Option B (env vars merged over the file, no schema) let a typo in a variable name silently do nothing, which cost an afternoon in the last release.\n\n**How to apply:** Implement or review config loader work against this design. Don't reintroduce hard failure on unknown keys or schemaless env merging.\n"
             }
           },
@@ -1437,7 +1437,7 @@
             "id": "toolu_01L2ac8LgfGu41zCpoKH19pf",
             "name": "Read",
             "input": {
-              "file_path": "/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-7oEvIL-project/memory/MEMORY.md"
+              "file_path": "/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-7oEvIL-project/memory/MEMORY.md"
             }
           },
           {
@@ -1521,7 +1521,7 @@
             "name": "mcp__plugin_context-mode_context-mode__ctx_execute",
             "input": {
               "language": "shell",
-              "code": "cat \"/Users/mksglu/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-mz8oI9-project/memory/MEMORY.md\" 2>&1 | head -50"
+              "code": "cat \"/Users/USER/.claude/projects/-private-tmp-cm-v2-fu-tcmp-out-scratch-s2-cm-t-cmp-HSILsC-arm-e-mz8oI9-project/memory/MEMORY.md\" 2>&1 | head -50"
             }
           },
           {
