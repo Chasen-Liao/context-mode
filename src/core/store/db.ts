@@ -1,7 +1,6 @@
 // impl/02 §6 (openDb, withWrite, closeDb), impl/00 §4 signatures (DEVIATIONS D-M1-1),
 // metaGet/metaSet/metaTake (DEVIATIONS D-M1-7), ADR-0002 decisions 2-3, impl/02 A-S3,
 // DEVIATIONS D-M1-T5-1.
-import { randomUUID } from "node:crypto";
 import { existsSync, linkSync, mkdirSync, rmSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import {
@@ -66,6 +65,8 @@ function readUserVersion(raw: DatabaseSync): number {
 // won. `PRAGMA journal_mode = WAL` needs an exclusive lock that SQLite takes without calling the
 // busy handler, so N servers switching one fresh file at once got "database is locked" (GP8).
 function createAtomically(sqlite: SqliteModule, path: string): void {
+  // GS6 (D-M7-HP-1): node:crypto loads only when a DB is created, not on every open.
+  const { randomUUID } = process.getBuiltinModule("node:crypto") as typeof import("node:crypto");
   const tmp = path + "." + randomUUID() + DB_TMP_SUFFIX;
   try {
     const raw = new sqlite.DatabaseSync(tmp, { timeout: DB_TIMEOUT_MS });

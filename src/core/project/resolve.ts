@@ -1,7 +1,6 @@
 // impl/02 §2, impl/00 §3.1 ProjectContext + §4, PRD-v2 §5, ADR-0007 decision 4,
 // DEVIATIONS D-M1-1, D-M1-5, D-M1-T3-2, D-M1-T3-3, D-M1-T3-5.
 // One project source per host, no fallback chain; a missing source is never guessed.
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -119,6 +118,8 @@ function firstLine(file: string): string | null {
 }
 
 function git(dir: string, args: string[]): string[] {
+  // GS6 (D-M7-HP-1): child_process loads only on this lazy path (containmentRoot), not on every hook call.
+  const { spawnSync } = process.getBuiltinModule("node:child_process") as typeof import("node:child_process");
   const r = spawnSync("git", args, { cwd: dir, shell: false, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (r.error !== undefined || r.status !== 0) throw new CtxError("NO_GIT_DIR", { path: dir });
   return r.stdout.split("\n").filter((l) => l !== "");
