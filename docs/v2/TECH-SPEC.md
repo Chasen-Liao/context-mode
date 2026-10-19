@@ -43,6 +43,26 @@ v2.0.0 is released only when **all** of these hold. Each one is checked by a mac
 | GS11 | Every implementation step has a green E2E case (ADR-0017) | CI + harness report |
 | GS8 | Every item in `tickets/v2-not-closed.md` has an outcome: decided, closed as covered, or closed as won't-fix | review |
 
+### 1.1 M7 sign-off status (2026-10-19, M7-S1)
+
+Measured on `origin/v2-design` 28784ef8 plus every `impl/M7-M7-*` branch merged (macOS, Node 24). `gate.mjs --milestone M7`: keep-pass, v2-unit, ci-checks, gp-cases, prompt-lint PASS; check-removed FAIL; live SKIP (after check-removed). `e2e/live/run.mjs --all` (Sonnet 5, effort low, $0.25 cap per call): 18/19 PASS.
+
+| ID | Status | Evidence |
+|---|---|---|
+| GS1 | PASS (macOS); Linux, Windows: CI | gp-cases layer, `e2e/cases/run.mjs --milestone M7` exit 0 |
+| GS2 | PENDING release | RC job, not part of M7 gate |
+| GS3 | PENDING release | live `g25-mcp-hooks` prints SKIPPED |
+| GS4 | PASS | keep-pass 131/131; `ci-gs4-lint.mjs` exit 0 |
+| GS5 | FAIL | prompt-lint PASS; `check-removed.mjs` lists 22 paths (v1 configs, `.pi/`, `start.mjs`, `package.json#openclaw`, retired names in `constants.ts`, `resolve.ts` comments) |
+| GS6 | PASS | GP3 bench in gp-cases |
+| GS7 | PASS | GP1 in gp-cases |
+| GS9 | PASS | GP1/GP2 in gp-cases; prompt-lint GS9 OK |
+| GS10 | R1, R2: PENDING owner (D-M7-arch-5); R3–R8: FAIL until check-removed is clean | gate check-removed layer |
+| GS11 | FAIL | live T-CMP FAIL twice: case expects first line `exit`, model replies in prose |
+| GS8 | not measured in this run | review |
+
+M7 is not done: GS5, GS10 (non-owner rows) and GS11 fail.
+
 ## 2. Scope
 
 - **[D] Agents (10):** Claude Code, Codex CLI, Gemini CLI, Qwen Code, Copilot CLI, VS Code Copilot, Kiro, ZCode, Pi, OpenCode 2.
@@ -558,3 +578,4 @@ R1–R8 of ADR-0017; the v1-migration live case set; final doc sign-off.
 - r9 (2026-10-16, `docs/v2/review/DECISIONS-r9.md`, role S7): §3.8 Codex row fixed to one name `mcp__context_mode__ctx_execute` (underscore, R1); §3.8 rule 4 added (matcher = native tool names + own prefix, Codex `Bash` example, R4); `covers` paths corrected to the real tree — `build/` (M0 step 1), `src/core/store/`+`src/core/journal/`+`src/core/project/` (M1), `src/core/compaction/` (M4), `src/core/ops/` (M5) (F3); GP9 and the S-TIMEOUT row drop the Windows Job Object text for `taskkill /F /T /PID` of own children, no native addon shipped (F6); GS6 (§1) marked decided, not open, with its constant names and T-GS6 cite (V14); §9 gains the LV-READ-EDIT row and one row listing every outstanding T-spec id, each pointing at its `14-tests.md` §6 case.
 - r7 (2026-10-16, `docs/v2/review/DECISIONS-r7.md`): §6.2 GP5 row adds golden recall@5 cases per query type (decision, errorfix, timeline); §9 adds open spikes O1 (earlier-error lookup) and O2 (file-by-topic lookup), both M2; §11 states the measured recall@5/MRR/p95 numbers for BM25+RRF versus v1 and drops MMR, which gave no gain.
 - r9 intern-question close (2026-10-16, role S1): §9 states which spikes gate M0 step 6 (`S-NODE`, `S-TIMEOUT`, `S-CODEX` only; `S-COPILOT`/`S-ZCODE`/`S-NAMES`/`S-SKILLS`/`G25` are M2/M3 and print `SKIPPED`, not `FAIL`, before then).
+- M7-S1 (2026-10-19): §1.1 added: GS1–GS11 status from `gate.mjs --milestone M7` and `e2e/live/run.mjs --all`. GS5/GS10 fail on `check-removed.mjs` (22 paths), GS11 fails on live T-CMP; R1, R2 PENDING owner (D-M7-arch-5). M7 not marked done.
