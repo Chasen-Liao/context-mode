@@ -1,0 +1,189 @@
+# impl/13 §9, A10, ADR-0013. One run: ci -> plan -> build -> publish-stage -> smoke -> publish-promote.
+# Started by the /release skill with `gh workflow run`. mode=rollback runs only ci -> rollback.
+# Every ${{ }} value a shell reads goes through env, never into the run text.
+# DEVIATIONS D-M6-arch-3, D-M6-arch-5, D-M6-Y1-1..5.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "release: commit to release (empty = branch tip); rollback: prior release commit"
+        required: false
+        type: string
+      mode:
+        description: "release or rollback"
+        required: false
+        type: choice
+        options: [release, rollback]
+        default: release
+concurrency:
+  group: release
+  cancel-in-progress: false
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+env:
+  CLAUDE_CODE_NPM: "@anthropic-ai/claude-code@2.1.283"
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+  plan:
+    needs: ci
+    if: ${{ inputs.mode != 'rollback' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+      notes: ${{ steps.plan.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - name: local release branch for plan.mjs (D-M6-Y1-2)
+        run: |
+          heads="$(git ls-remote --heads origin refs/heads/release)"
+          if [ -n "$heads" ]; then
+            git fetch --no-tags origin +refs/heads/release:refs/heads/release
+          fi
+      - id: sha
+        name: full commit sha (D-M6-Y1-3)
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - id: plan
+        run: node scripts/release/plan.mjs >> "$GITHUB_OUTPUT"
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - run: npm install
+        name: dev tooling (npm is dev-only, never shipped)
+      - name: build, manifests, 3 skills, SHA256SUMS (D-M6-arch-3)
+        env:
+          SHA: ${{ needs.plan.outputs.sha }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: node build/build.mjs --out release-out --sha "$SHA" --version "$VERSION"
+      - run: node docs/v2/prompt/lint.mjs --out release-out
+      - run: npm install -g "$CLAUDE_CODE_NPM"
+      - run: claude plugin validate release-out
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "release-out/**"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-out
+          path: release-out
+          include-hidden-files: true
+          if-no-files-found: error
+  publish-stage:
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-out
+          path: release-out
+      - name: git identity for the release commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: commit release-out onto release-staging, draft tag (local only)
+        env:
+          SHA: ${{ needs.plan.outputs.sha }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: node scripts/release/publish.mjs --stage --version "$VERSION" --source-commit "$SHA"
+  smoke:
+    needs: [plan, publish-stage]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - run: npm install
+        name: dev tooling (npm is dev-only, never shipped)
+      - run: npm install -g "$CLAUDE_CODE_NPM" @openai/codex
+      - run: node scripts/release/smoke.mjs --ref release-staging --agent claude-code
+      - run: node scripts/release/smoke.mjs --ref release-staging --agent codex
+      - run: npm install -g @google/gemini-cli
+        continue-on-error: true   # tier-2 per GS2
+      - run: node scripts/release/smoke.mjs --ref release-staging --agent gemini
+        continue-on-error: true   # tier-2 per GS2; failure here does not fail the job
+  publish-promote:
+    needs: [plan, smoke]
+    if: ${{ inputs.mode != 'rollback' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-out
+          path: release-out
+      - name: git identity for the release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: fast-forward release to release-staging, push tag, GitHub Release with SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          NOTES: ${{ needs.plan.outputs.notes }}
+        run: node scripts/release/publish.mjs --promote --version "$VERSION" --notes "$NOTES"
+  rollback:
+    needs: ci
+    if: ${{ inputs.mode == 'rollback' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.15.0"
+      - name: hard reset release to a prior release commit (no smoke, no tag)
+        env:
+          SHA: ${{ inputs.sha }}
+        run: node scripts/release/rollback.mjs --sha "$SHA"
