@@ -422,6 +422,40 @@ export const DOCTOR_PASS_DETAIL = "ok"; // detail of a PASS row with nothing mor
 // doctor-config.ts: D3 host config, D4 v1 leftovers, D7 project (impl/07 §5).
 export const D3_PART_JOIN = ", ";
 export function D3_DETAIL(parts: readonly string[]): string { return `wrong: ${parts.join(D3_PART_JOIN)}`; }
+// doctor-config.ts D3 hook entries (DEVIATIONS D-M5-D2-1..3): where each agent's own hook entries live and their
+// shape (impl/10 §1.5 table, build/manifests.ts HOOK_SHAPES). root: "plugin" = resolvePluginRoot, "home" = $HOME,
+// "project" = the repo worktree. null = in-process agent, no hook file.
+export const HOOK_HOST_FILE: Readonly<Record<AgentId, {
+  root: "plugin" | "home" | "project"; file: readonly string[]; key: readonly string[];
+  shape: "nested" | "flat" | "kiro" | "zcode"; timeoutKey: string; matcher: boolean;
+} | null>> = Object.freeze({
+  "claude-code": { root: "plugin", file: ["hooks", "claude-code.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
+  codex: { root: "home", file: [".codex", "hooks.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
+  gemini: { root: "home", file: [".gemini", "settings.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: false },
+  qwen: { root: "home", file: [".qwen", "settings.json"], key: ["hooks"], shape: "nested", timeoutKey: "timeout", matcher: true },
+  "copilot-cli": { root: "home", file: [".copilot", "hooks", "context-mode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeoutSec", matcher: false },
+  vscode: { root: "project", file: [".github", "hooks", "context-mode.json"], key: ["hooks"], shape: "flat", timeoutKey: "timeout", matcher: false },
+  kiro: { root: "home", file: [".kiro", "hooks", "context-mode.json"], key: ["hooks"], shape: "kiro", timeoutKey: "timeout", matcher: false },
+  zcode: { root: "home", file: [".zcode", "cli", "config.json"], key: ["hooks", "events"], shape: "zcode", timeoutKey: "timeoutMs", matcher: true },
+  pi: null,
+  opencode: null,
+});
+export const TOOL_HOOK_EVENTS: readonly string[] = Object.freeze(["PreToolUse", "PostToolUse"]); // canonical events that carry the matcher
+export const HOOK_MATCHER_FIELD = "matcher";
+export const KIRO_TRIGGER_FIELD = "trigger";
+export const KIRO_ACTION_FIELD = "action";
+export const HOOK_COMMAND_FIELD = "command";
+export const HOOK_GROUP_HOOKS_FIELD = "hooks"; // nested shape: {matcher, hooks:[{command, timeout}]}
+export const HOOK_COMMAND_SEP = " "; // hook command: node <dir>/hook.mjs --agent <id>
+export const SHELL_QUOTE = '"'; // claude-code quotes "${CLAUDE_PLUGIN_ROOT}/hook.mjs"
+// Matcher composed from the row as text, same rule as build/manifests.ts buildMatcher (D-M5-arch-3); src/ never runs it.
+export const MATCHER_OPEN = "^(";
+export const MATCHER_CLOSE = ")$";
+export const MATCHER_ALT = "|";
+export const MATCHER_ANY = ".*"; // OWN_TOOL_PREFIX + MATCHER_ANY = "ctx_.*"
+export const REGEX_SPECIAL_CHARS = ".*+?^${}()|[]\\";
+export const REGEX_ESCAPE = "\\";
+export const CODEX_FEATURES_HOOKS_KEY = Object.freeze(["features", "hooks"] as const); // no key = Codex default hooks=true (#1152)
 // doctor-hook.ts: D5 round trip, D5b double-fire (impl/07 §5).
 export const D5_SHAPE_DETAIL = "hook output is not the agent's native shape";
 export function D5_SLOW_DETAIL(ms: number): string { return `hook round trip took ${ms} ms, over ${HOOK_P95_MS} ms`; }
@@ -546,4 +580,13 @@ export const OWN_MCP_ENTRY: Readonly<Partial<Record<AgentId, { file: readonly st
   vscode: { file: [".vscode", "mcp.json"], key: ["servers", SERVER_KEY] },
   kiro: { file: [".kiro", "settings", "mcp.json"], key: ["mcpServers", SERVER_KEY] },
   zcode: { file: [".zcode", "cli", "config.json"], key: ["mcpServers", SERVER_KEY] },
+});
+
+// ctx_doctor report env lines (impl/07 §4, ADR-0014 §3; DEVIATIONS D-M5-O3-1). Header, rule, FAIL string and
+// truncation line are REPORT_HEADER, REPORT_HEADER_RULE, DOCTOR_FAIL_LINE, REPORT_TRUNCATED_LINE above.
+export const REPORT_INVALID = "<invalid>"; // ADR-0014 §3: a value that fails the typed scanner is dropped whole
+export const REPORT_ENV_PREFIX = "env."; // one `env.<KEY>: <value>` line per env key, after the table
+// ADR-0014 §3: an env value passes only as a member of its key's closed enum; every other value is REPORT_INVALID.
+export const REPORT_ENV_ENUMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  NODE_ENV: Object.freeze(["development", "production", "test"]),
 });
