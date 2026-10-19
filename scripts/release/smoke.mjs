@@ -10,7 +10,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import {
-  AGENT_ARG, AGENT_HOME_DIR, CONFIG_TOML_FILE, GIT_BIN, GIT_CLONE_ARGS, HOST_CONFIG_DIR_NAME, HOST_NODE_COMMAND,
+  AGENT_ARG, AGENT_HOME_DIR, CONFIG_TOML_FILE, GIT_BIN, GIT_CLONE_ARGS, HOST_NODE_COMMAND,
   OWN_MCP_ENTRY, PLUGIN_KEY_SEPARATOR, PLUGIN_MARKETPLACE_NAME, PLUGIN_NAME, RELEASE_BRANCH, RELEASE_REPO_URL,
   SERVER_ENTRY_FILE, SERVER_KEY, UPGRADE_GIT_TIMEOUT_MS,
 } from "../../src/core/contracts/constants.ts";
@@ -98,7 +98,7 @@ async function main(a) {
     process.exit(1);
   }
   const home = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), `${SERVER_KEY}-smoke-${a.agent}-`)));
-  const env = { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, TMPDIR: os.tmpdir(), XDG_CONFIG_HOME: path.join(home, HOST_CONFIG_DIR_NAME, "..", ".config") };
+  const env = { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, TMPDIR: os.tmpdir() };
   try {
     const res = step(env, home, a);
     if (typeof res === "object") process.stdout.write(`${a.agent}: SKIPPED: ${res.skipped}\n`);
