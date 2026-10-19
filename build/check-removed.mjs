@@ -12,7 +12,7 @@ import path from "node:path";
 // One entry per removed path. kind "file": exact path. kind "dir": every tracked path under it.
 // kind "glob": prefix + anything + suffix (impl/15 §2.3 "configs/**/*.json", ".mcp.json*.example").
 const REMOVED_PATHS = [
-  // impl/15 §2.3 (ADR-0015 "Largest items deleted"); real tracked paths per D-M7-C1-1.
+  // impl/15 §2.3 (ADR-0015 "Largest items deleted"), at their tracked paths (D-M7-C1-1).
   { kind: "dir", path: "web/" },
   { kind: "file", path: "start.mjs" },
   { kind: "file", path: "bin/statusline.mjs" },
@@ -93,7 +93,87 @@ const SELF = "build/check-removed.mjs";
 
 // D-M7-arch-3: path (file, or dir ending "/") -> the KEEP-PASS file that needs it. Both checks
 // skip these until the TECH-SPEC §6.8 owner commit removes tests/ and empties this list.
-const KEPT_FOR_KEEP_PASS = {};
+// Measured: every other listed path was deleted in a scratch tree and all 131 KEEP-PASS files
+// still passed; each path below makes its named file fail when deleted (import or run-time read).
+// vitest.config.ts is read by tests/vitest.config.ts, the KEEP-PASS runner.
+const KEPT_FOR_KEEP_PASS = {
+  "bin/statusline.mjs": "tests/statusline-sqlite.test.ts",
+  "cli.bundle.mjs": "tests/adapters/claude-code.test.ts",
+  "configs/antigravity-cli/hooks.json": "tests/adapters/antigravity.test.ts",
+  "configs/antigravity-cli/hooks/hooks.json": "tests/adapters/antigravity.test.ts",
+  "configs/antigravity-cli/mcp_config.json": "tests/adapters/antigravity.test.ts",
+  "configs/antigravity-cli/plugin.json": "tests/adapters/antigravity.test.ts",
+  "configs/antigravity-cli/rules/context-mode.md": "tests/adapters/antigravity.test.ts",
+  "configs/antigravity-cli/skills/context-mode/SKILL.md": "tests/adapters/antigravity.test.ts",
+  "configs/antigravity/mcp_config.json": "tests/adapters/antigravity.test.ts",
+  "configs/codex/config.toml": "tests/adapters/codex.test.ts",
+  "configs/codex/hooks.json": "tests/adapters/codex.test.ts",
+  "configs/copilot-cli/.github/plugin/plugin.json": "tests/adapters/copilot-cli.test.ts",
+  "configs/copilot-cli/.mcp.json": "tests/adapters/copilot-cli.test.ts",
+  "configs/copilot-cli/hooks.json": "tests/adapters/copilot-cli.test.ts",
+  "configs/copilot-cli/skills/context-mode/SKILL.md": "tests/adapters/copilot-cli.test.ts",
+  "hooks/antigravity-cli/payload.mjs": "tests/hooks/antigravity-cli-hooks.test.ts",
+  "hooks/antigravity-cli/posttooluse.mjs": "tests/adapters/antigravity.test.ts",
+  "hooks/antigravity-cli/pretooluse.mjs": "tests/adapters/antigravity.test.ts",
+  "hooks/antigravity-cli/stop.mjs": "tests/adapters/antigravity.test.ts",
+  "hooks/cursor/afteragentresponse.mjs": "tests/adapters/cursor.test.ts",
+  "hooks/cursor/hooks.json": "tests/adapters/cursor.test.ts",
+  "hooks/cursor/posttooluse.mjs": "tests/adapters/cursor.test.ts",
+  "hooks/cursor/pretooluse.mjs": "tests/adapters/cursor.test.ts",
+  "hooks/cursor/sessionstart.mjs": "tests/adapters/cursor.test.ts",
+  "hooks/cursor/stop.mjs": "tests/hooks/cursor-hooks.test.ts",
+  "hooks/formatters/cursor.mjs": "tests/hooks/formatters.test.ts",
+  "hooks/jetbrains-copilot/posttooluse.mjs": "tests/hooks/jetbrains-hooks.test.ts",
+  "hooks/jetbrains-copilot/precompact.mjs": "tests/hooks/jetbrains-hooks.test.ts",
+  "hooks/jetbrains-copilot/pretooluse.mjs": "tests/hooks/jetbrains-hooks.test.ts",
+  "hooks/jetbrains-copilot/sessionstart.mjs": "tests/hooks/jetbrains-hooks.test.ts",
+  "hooks/kimi/platform.mjs": "tests/hooks/kimi-hooks.test.ts",
+  "hooks/kimi/posttooluse.mjs": "tests/hooks/kimi-hooks.test.ts",
+  "hooks/kimi/pretooluse.mjs": "tests/adapters/kimi.test.ts",
+  "hooks/kimi/sessionend.mjs": "tests/hooks/kimi-hooks.test.ts",
+  "hooks/kimi/sessionstart.mjs": "tests/hooks/kimi-hooks.test.ts",
+  "hooks/kimi/stop.mjs": "tests/hooks/kimi-hooks.test.ts",
+  "hooks/kimi/userpromptsubmit.mjs": "tests/hooks/kimi-hooks.test.ts",
+  "server.bundle.mjs": "tests/adapters/claude-code.test.ts",
+  "src/adapters/antigravity-cli/index.ts": "tests/adapters/antigravity.test.ts",
+  "src/adapters/antigravity/index.ts": "tests/adapters/antigravity.test.ts",
+  "src/adapters/claude-code/hooks.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/codex/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/cursor/hooks.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/cursor/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/jetbrains-copilot/hooks.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/jetbrains-copilot/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/kimi/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/kimi/paths.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/kimi/usage.ts": "tests/adapters/codex-usage.test.ts",
+  "src/adapters/kiro/hooks.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/omp/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/omp/usage.ts": "tests/adapters/omp-usage.test.ts",
+  "src/adapters/openclaw/hooks.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/openclaw/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/openclaw/usage.ts": "tests/adapters/openclaw-usage-handler.test.ts",
+  "src/adapters/pi/extension.ts": "tests/adapters/pi-extension-workspace-resolve.test.ts",
+  "src/adapters/pi/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/qwen-code/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/adapters/zed/index.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/cli.ts": "tests/cli/open-browser.test.ts",
+  "src/db-base.ts": "tests/adapters/antigravity.test.ts",
+  "src/fetch-cache.ts": "tests/cli/open-browser.test.ts",
+  "src/lifecycle.ts": "tests/cli/open-browser.test.ts",
+  "src/runPool.ts": "tests/cli/open-browser.test.ts",
+  "src/search/ctx-search-schema.ts": "tests/cli/open-browser.test.ts",
+  "src/search/flood-guard.ts": "tests/cli/open-browser.test.ts",
+  "src/server.ts": "tests/cli/open-browser.test.ts",
+  "src/session/analytics.ts": "tests/analytics/format-report.test.ts",
+  "src/session/event-emit.ts": "tests/cli/open-browser.test.ts",
+  "src/session/extract.ts": "tests/adapters/codex-usage.test.ts",
+  "src/session/model-prices.json": "tests/adapters/codex-usage.test.ts",
+  "src/session/pricing.ts": "tests/adapters/codex-usage.test.ts",
+  "src/session/retrieval-marker.ts": "tests/cli/open-browser.test.ts",
+  "src/util/plugin-cache-integrity.ts": "tests/adapters/claude-code-memory.test.ts",
+  "src/util/sibling-mcp.ts": "tests/cli/open-browser.test.ts",
+  "vitest.config.ts": "tests/vitest.config.ts",
+};
 
 function kept(p) {
   for (const k of Object.keys(KEPT_FOR_KEEP_PASS)) {
