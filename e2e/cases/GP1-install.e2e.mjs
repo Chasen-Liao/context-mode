@@ -245,7 +245,7 @@ test("[M0] GP1/adapter-bundle-static-imports", async () => {
   assert.deepStrictEqual(normalize({ errorModuleNotFound }), loadGolden("adapter-bundle-static-imports"));
 });
 
-// GP9/windows-ci-no-hang (#995) is proven by .github/workflows/ci.yml timeout-minutes: 10
+// GP9/windows-ci-no-hang (#995) is proven by .github/workflows/ci.yml timeout-minutes: 20 (D-M7-CI-2)
 // (checked by e2e/checks/ci-config.mjs), not by a case here.
 void RUN_BUNDLE;
 
