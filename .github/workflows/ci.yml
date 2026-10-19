@@ -6,7 +6,7 @@ name: ci
 
 on:
   push:
-    branches: [main, v2, v2-design]
+    branches: [main, v2, v2-design, "impl/**"]
   workflow_call:
 
 permissions:
@@ -99,3 +99,7 @@ jobs:
       - run: node build/check-removed.mjs
         name: GS5 check-removed (from gate milestone M7, D-M6-arch-2)
         if: env.GATE_MILESTONE == 'M7'
+      # T-F5 (DECISIONS-r9 F5, impl/03 section 4): grandchild kill, Windows only. Prints SKIPPED elsewhere.
+      - run: node e2e/checks/windows-grandchild-kill.mjs
+        name: T-F5 Windows grandchild kill (0 alive after KILL_GRACE_MS)
+        if: runner.os == 'Windows'
