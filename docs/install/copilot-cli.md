@@ -19,7 +19,7 @@ All facts below were checked on **2026-10-17** against GitHub's own docs and the
   ```
   Source: [CLI command reference](https://docs.github.com/en/copilot/reference/cli-command-reference) — checked 2026-10-17.
 
-## Install v2
+## Install
 
 context-mode v2 is a plugin manifest (`plugin.json`) plus hooks and an MCP server. Install it straight from the git repo, no npm step:
 
@@ -118,6 +118,8 @@ Source: [Using hooks with Copilot CLI](https://docs.github.com/en/copilot/how-to
 - **Plugin stuck on an old commit**: plugins from `awesome-copilot` self-update at session start; other git plugins (like context-mode) do not auto-update — run `copilot plugin update context-mode` by hand.
 - **No built-in health-check command**: Copilot CLI has no `copilot doctor`. Use `ctx_doctor` (context-mode's own MCP tool) for context-mode's own checks, and `/diagnose` inside a session for Copilot CLI's own session-log diagnostics.
 - **After `npm uninstall -g` on v1**: the old hook still points at the removed `context-mode` binary and will fail until `ctx_doctor` + `ctx_upgrade` have run (see Upgrade from v1 above).
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 

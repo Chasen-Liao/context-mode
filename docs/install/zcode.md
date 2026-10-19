@@ -3,7 +3,7 @@
 ZCode is Z.ai's coding agent. It has a desktop app and a CLI. This guide covers both.
 All facts below carry a source link and the date checked.
 
-## 1. Install context-mode v2
+## Install
 
 ### Desktop app (official)
 1. Open a workspace.
@@ -24,33 +24,33 @@ All facts below carry a source link and the date checked.
 2. Check it loaded: `/mcp list`, then `/mcp status`.
    Source: same README (checked 2026-10-17)
 
-## 2. Verify with /ctx-doctor
+## Verify with /ctx-doctor
 
 Run `ctx_doctor` from inside ZCode (desktop or CLI chat). It reports v1 leftovers under `~/.zcode/cli/config.json` and `~/.zcode/cli/hooks.json`, per ADR-0011's v1-cleanup table.
 
-## 3. Update
+## Update
 
 - Desktop: **Settings → Plugins**, update the plugin from its marketplace entry.
 - CLI (unofficial `zcode-app-cli` package): `npm install -g zcode-app-cli@latest` (always add `@latest`; version strings are not simple semver, so a plain install may not fetch the newest build).
   Source: npm page for `zcode-app-cli` (checked 2026-10-17)
 - context-mode plugin itself: `zcode plugins enable context-mode` after a marketplace refresh, same as other marketplace-based agents.
 
-## 4. Upgrade from v1
+## Upgrade from v1
 
 Same order as every other agent (ADR-0017 R3): install v2 first, run `ctx_doctor` then `ctx_upgrade`, and only then run `npm uninstall -g context-mode` if it was ever installed that way for ZCode. ZCode's v1 footprint is a real one, not zero (ADR-0011 fixed this claim): `~/.zcode/cli/config.json` and `~/.zcode/cli/hooks.json`, scanned for any context-mode-tagged entry.
 
-## 5. Rollback to v1
+## Rollback to v1
 
 ZCode has no built-in rollback command for a marketplace plugin. Remove the v2 marketplace entry and MCP server block by hand, then re-add the v1 entry the same way v1 was installed. There is no automated path; this is the same limitation ADR-0011 records for Gemini and Qwen.
 
-## 6. Uninstall
+## Uninstall
 
 - Plugin: `zcode plugins uninstall context-mode --force`.
   Source: npm page for `zcode-app-cli` describing plugin commands (checked 2026-10-17)
 - CLI itself (only if the unofficial `zcode-app-cli` package was used to run ZCode at all): `npm uninstall -g zcode-app-cli`, then delete `~/.zcode/cli/` for a full clean-up. Do **not** delete `~/.zcode/v2/` — ZCode Desktop keeps its own provider settings there.
   Source: npm page for `zcode-app-cli` (checked 2026-10-17)
 
-## 7. Troubleshooting
+## Troubleshooting
 
 - **Tools don't show up.** ZCode names MCP tools `mcp__<server>__<tool>`, so context-mode's tools appear as `mcp__context-mode__ctx_*`. Run `/mcp status` to confirm the server connected.
   Source: GitHub `zai-org/ZCode` README (checked 2026-10-17)
@@ -58,6 +58,8 @@ ZCode has no built-in rollback command for a marketplace plugin. Remove the v2 m
   Source: GitHub `zai-org/ZCode`, `apps/zcode-cli` README (checked 2026-10-17)
 - **Plugin install from a git ref fails.** Set `ref` and `path` inside the marketplace's `marketplace.json` entry (`{"source":"github","repo":"owner/repo","ref":"...","path":"..."}`), not in the Add-marketplace dialog. The docs confirm a branch name works; they do not say whether a tag or a commit hash also works, so test with the exact ref before relying on one.
   Source: ZCode plugin docs, https://www.zcode.network/en/docs/plugin/ (checked 2026-10-17)
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 

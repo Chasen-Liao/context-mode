@@ -4,7 +4,7 @@ This guide is for Qwen Code users. It covers install, update, rollback to v1, an
 
 All commands below were checked on 2026-10-17 against the official Qwen Code docs and source (`QwenLM/qwen-code`, `main` branch).
 
-## 1. Install Qwen Code (if you do not have it yet)
+## Before you start: get Qwen Code
 
 Pick one method.
 
@@ -33,7 +33,7 @@ qwen
 ```
 Inside the session, run `/auth` to set your model provider and key.
 
-## 2. Install context-mode v2
+## Install
 
 context-mode ships for Qwen Code as an **extension** (not an npm package; ADR-0011, PRD §3). Install it from the git repo:
 
@@ -52,7 +52,7 @@ Restart Qwen Code so it picks up the new extension:
 qwen
 ```
 
-## 3. Verify the install
+## Verify
 
 Inside a Qwen Code session, run:
 ```
@@ -62,7 +62,7 @@ This lists any leftover v1 files (old hooks, old MCP entry, old data folder) and
 
 You can also list the extension's MCP tools in-session with `/mcp`.
 
-## 4. Where things live
+## Where things live
 
 | Item | Path |
 |---|---|
@@ -75,7 +75,7 @@ Qwen Code does **not** use `%AppData%` on Windows; it uses `%USERPROFILE%\.qwen`
 
 Source: [settings docs + `storage.ts` source](https://github.com/QwenLM/qwen-code) — checked 2026-10-17.
 
-## 5. Update context-mode
+## Update context-mode
 
 If you installed with `--auto-update`, no action is needed — Qwen Code updates it for you.
 
@@ -89,9 +89,9 @@ qwen extensions update --all
 ```
 Source: [extension docs](https://github.com/QwenLM/qwen-code/blob/main/docs/users/extension/introduction.md) — checked 2026-10-17.
 
-## 6. Upgrade from v1
+## Upgrade from v1
 
-1. Install v2 with the command in step 2 above.
+1. Install v2 with the command under Install above.
 2. Run `/ctx-doctor` then `/ctx-upgrade` in the same session, right away. v1's hooks called the global `context-mode` npm binary; once you remove that binary (next step), those hooks fail until `/ctx-upgrade` cleans them up.
 3. Remove the old global package:
    ```bash
@@ -100,7 +100,7 @@ Source: [extension docs](https://github.com/QwenLM/qwen-code/blob/main/docs/user
 
 Order matters: install v2 → `/ctx-upgrade` → `npm uninstall -g` last (ADR-0017 R3).
 
-## 7. Roll back to v1
+## Roll back to v1
 
 Qwen Code has no single command that reverses an extension install back into a v1 setup. Do it by hand:
 
@@ -121,7 +121,7 @@ Qwen Code has no single command that reverses an extension install back into a v
 
 This is a documented manual path, not an automated one (ADR-0011).
 
-## 8. Uninstall
+## Uninstall
 
 Remove the extension:
 ```bash
@@ -140,13 +140,15 @@ This keeps your `~/.qwen` config folder; delete it by hand if you want a clean s
 
 Source: [Uninstall doc](https://github.com/QwenLM/qwen-code/blob/main/docs/users/support/Uninstall.md) — checked 2026-10-17.
 
-## 9. Troubleshooting
+## Troubleshooting
 
 - **Hooks stop firing after an update.** Open `/hooks` in a session — it is read-only but reloads your hook definitions without a restart. If you changed `disableAllHooks`, you do need a restart.
 - **A tool call is silently denied.** Qwen Code's `PreToolUse` hook needs both `permissionDecision` and `permissionDecisionReason` in the hook output; context-mode always sends both. If a tool is still denied with no reason text, run `/ctx-doctor` first.
 - **"--ref" errors.** `--ref` only works with a git source. If you see "not applicable", check that the install command used the full git URL, not an npm or marketplace name.
-- **Old binary errors after upgrade.** This means step 6.2 (`npm uninstall -g context-mode`) ran before `/ctx-upgrade`. Reinstall v1 temporarily (`npm install -g context-mode`), run `/ctx-upgrade`, then uninstall v1 again.
+- **Old binary errors after upgrade.** This means the `npm uninstall -g context-mode` step of Upgrade from v1 ran before `/ctx-upgrade`. Reinstall v1 temporarily (`npm install -g context-mode`), run `/ctx-upgrade`, then uninstall v1 again.
 - **Nothing shows under `/mcp`.** Restart Qwen Code after any extension install or update — it only loads MCP servers at startup.
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 
