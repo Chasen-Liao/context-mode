@@ -3,6 +3,7 @@
 // waits for each turn's `result` event, sends `/compact` as a later user turn, then the next request.
 // Returns the tool calls, the final text, the list-price cost and whether a compact boundary event came.
 import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
 
 const MODEL = "claude-sonnet-5";
 const EFFORT = "low";
@@ -13,6 +14,8 @@ const TURN_TIMEOUT_MS = 300000;
 function childEnv() {
   const env = {};
   for (const k of ENV_KEYS) if (process.env[k] !== undefined) env[k] = process.env[k];
+  // DEVIATIONS D-M7-CI-1: Linux and Windows runners do not set TMPDIR; the child always gets one.
+  if (env.TMPDIR === undefined) env.TMPDIR = tmpdir();
   return env;
 }
 

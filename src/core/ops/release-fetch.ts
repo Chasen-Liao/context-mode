@@ -46,7 +46,8 @@ export async function fetchRelease(agent: AgentId, url: string, env: NodeJS.Proc
   // so Windows spawns git.exe directly instead of handing a bare "git" to sh as a script (exit 126).
   const gitBin = findRuntime(GIT_BIN, env);
   if (gitBin === null) throw new CtxError("FETCH_FAILED", { code: GIT_NOT_STARTED });
-  const childEnv = buildChildEnv(env, GIT_NO_PROMPT_ENV);
+  // DEVIATIONS D-M7-CI-1: no CRLF rewrite on Windows (set by env, argv stays as the spec), so the cloned bytes match SHA256SUMS.
+  const childEnv = buildChildEnv(env, { ...GIT_NO_PROMPT_ENV, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.autocrlf", GIT_CONFIG_VALUE_0: "false" });
   try {
     await git(gitBin, [...GIT_CLONE_ARGS, RELEASE_BRANCH, url, fetchDir], agentDir, childEnv, signal);
     const sha = await git(gitBin, GIT_HEAD_SHA_ARGS, fetchDir, childEnv, signal);
