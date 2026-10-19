@@ -48,15 +48,14 @@ for (const [name, mod] of [["ctx_resume", ctxResume], ["ctx_stats", ctxStats], [
   });
 }
 
-test("only ctx_doctor and ctx_upgrade still reply the not-built line (milestone M5)", async () => {
-  const stubbed = [];
-  for (const t of TOOLS) {
-    if (t.name === "ctx_doctor" || t.name === "ctx_upgrade") {
-      const r = await t.handler({}, { sessionId: "s", project: {} });
-      assert.equal(r.text, t.name + " is not built yet; milestone M5 builds it. Fix: use your normal tools until then.");
-      assert.equal(r.isError, true);
-      stubbed.push(t.name);
-    }
-  }
-  assert.deepEqual(stubbed, ["ctx_doctor", "ctx_upgrade"]);
-});
+// D-M5-arch-6: from M5 ctx_doctor and ctx_upgrade are the real modules; no tool is a stub.
+import { ctxDoctor } from "../../../src/core/tools/doctor.ts";
+import { ctxUpgrade } from "../../../src/core/tools/upgrade.ts";
+
+for (const [name, mod] of [["ctx_doctor", ctxDoctor], ["ctx_upgrade", ctxUpgrade]]) {
+  test(name + " uses the real module's handler and schema (M5 stub dropped)", () => {
+    const t = TOOLS.find((x) => x.name === name);
+    assert.equal(t.handler, mod.handler);
+    assert.equal(t.schema, mod.schema);
+  });
+}
