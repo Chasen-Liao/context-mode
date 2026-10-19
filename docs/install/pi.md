@@ -7,7 +7,7 @@ extension**, not as a spawned MCP server (ADR-0007 Pi row, `docs/v2/impl/10-adap
 All commands below were checked 2026-10-17 against the live npm package (version `1.3.0`, published
 2026-10-15) and the docs under `packages/coding-agent/docs/` in the `earendil-works/pi` repo.
 
-## 1. Install context-mode
+## Install
 
 ```bash
 pi install git:github.com/mksglu/context-mode@release
@@ -18,15 +18,15 @@ to install into the project file `.pi/settings.json` instead.
 
 This matches ADR-0011's release-step table row for Pi exactly: `pi install git:github.com/mksglu/context-mode@release`.
 
-## 2. Verify
+## Verify
 
 Run `/ctx-doctor` (the context-mode doctor command) inside Pi. It checks:
 - the extension loaded (Pi event hooks `session_start`, `input`, `tool_call`, `tool_result`,
   `session_compact` all fired for your current session — `packages/coding-agent/src/core/extensions/types.ts`,
   checked 2026-10-17),
-- no leftover v1 npm package entry (see §5).
+- no leftover v1 npm package entry (see Upgrade from v1).
 
-## 3. How hooks and the MCP tools show up on Pi
+## How hooks and the MCP tools show up on Pi
 
 Pi does not read a hooks config file and does not spawn context-mode as an MCP server for this agent.
 The extension calls `pi.on(event, handler)` directly from its entry file, once, at load time
@@ -43,24 +43,24 @@ The extension calls `pi.on(event, handler)` directly from its entry file, once, 
 `ctx.cwd`, read once when the extension loads, is the project path context-mode uses
 (`ExtensionContext.cwd: string`, `core/extensions/types.ts`, checked 2026-10-17).
 
-## 4. Update
+## Update
 
 ```bash
 pi update --extensions
 ```
 Source: `packages/coding-agent/docs/packages.md` (checked 2026-10-17). This brings installed packages,
 including context-mode, in line with the `packages[]` entries in your settings file. To move the pin
-itself to a newer release ref, re-run the install command from §1 with the new ref.
+itself to a newer release ref, re-run the install command from Install with the new ref.
 
 Updating Pi itself (not context-mode): `pi update` (installer or npm reinstall), or `nix profile upgrade pi`
 on Nix — `packages/coding-agent/docs/quickstart.md` (checked 2026-10-17).
 
-## 5. Upgrade from v1
+## Upgrade from v1
 
 v1's footprint on Pi is one entry, `"npm:context-mode"`, inside `~/.pi/agent/settings.json` → `packages[]`,
 plus data under `~/.pi/context-mode/` (ADR-0011 v1-cleanup table).
 
-1. Install v2 (§1).
+1. Install v2 (see Install).
 2. Run `/ctx-doctor`. It flags the old `"npm:context-mode"` entry even after the new git entry is present —
    the two can coexist, so the doctor checks for the old one on its own, it does not just trust that the
    new one is there.
@@ -68,7 +68,7 @@ plus data under `~/.pi/context-mode/` (ADR-0011 v1-cleanup table).
 4. Run `npm uninstall -g context-mode` only after the two steps above — ADR-0011's upgrade order is
    install v2 → doctor/upgrade → `npm uninstall -g` last.
 
-## 6. Roll back to v1
+## Roll back to v1
 
 ```bash
 pi remove git:github.com/mksglu/context-mode@release
@@ -77,7 +77,7 @@ npm install -g context-mode
 Then follow v1's own setup steps again. Pi's `packages.md` (checked 2026-10-17) confirms `pi remove <source>`
 takes the same source string you installed with.
 
-## 7. Uninstall context-mode fully
+## Uninstall context-mode fully
 
 ```bash
 pi remove git:github.com/mksglu/context-mode@release
@@ -86,17 +86,19 @@ rm -rf ~/.pi/context-mode/
 `pi remove` only drops the `packages[]` entry; it does not delete the extension's own data directory, so
 the second command is needed too.
 
-## 8. Troubleshooting
+## Troubleshooting
 
 - **`/ctx-doctor` is not found.** The extension did not load. Check `~/.pi/agent/settings.json` for the
   `packages[]` entry, then restart Pi.
 - **Old `/ctx-*` commands still point at v1 behaviour after installing v2.** Run `/ctx-doctor` then
-  `/ctx-upgrade` — see §5. Do not run `npm uninstall -g` first; v1's hook-based agents break between the
+  `/ctx-upgrade` — see Upgrade from v1. Do not run `npm uninstall -g` first; v1's hook-based agents break between the
   uninstall and the cleanup, but this does not apply to Pi, since Pi never called a global `context-mode`
   bin (it always ran in-process).
 - **Extension events never fire.** Confirm the package is in `~/.pi/agent/settings.json`, not only in
   `.pi/settings.json` of a project you have not yet trusted — Pi loads project packages only after you
   trust that project (`packages/coding-agent/docs/settings.md`, checked 2026-10-17).
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 
@@ -116,7 +118,7 @@ nothing disagrees. Specifically confirmed, not changed in `impl/10-adapters.md`:
   deduplicated and written in the current Pi source.
 
 One point worth a note, not a disagreement: Pi's own package manager command is `pi update --extensions`
-(§4 above), which the v2 docs do not name — they only say "git-checkout agents … fetch latest `release`
+(Update, above), which the v2 docs do not name — they only say "git-checkout agents … fetch latest `release`
 commit" (PRD-v2.md). Both are compatible: `/ctx-upgrade`'s own fetch-and-verify step (PRD-v2.md) covers the
 content swap, and `pi update --extensions` is the separate, Pi-native command a user can also run. This
 does not require a change to `impl/10-adapters.md`.
@@ -132,4 +134,4 @@ No v2 src build exists on `v2-design` yet; `pi install git:github.com/mksglu/con
 | `pi install git:github.com/mksglu/context-mode@v2-design -l` (substitute ref, to isolate the cause above) | worked: clone, checkout, `npm install`, settings entry written | 1.3.0 | 2026-10-17 |
 | `pi list` / `/ctx-doctor` in a live session | needs owner login | 1.3.0 | 2026-10-17 |
 
-Note: `pi list` (no flag) reports "No packages installed" even right after a `-l` (project-local) install; only `~/project/.pi/settings.json` has the entry. This guide's §1 should say clearly that a project-local install needs the project's own settings file read, not the global one, to show up in `pi list`. Recorded in `docs/v2/impl/DEVIATIONS.md`.
+Note: `pi list` (no flag) reports "No packages installed" even right after a `-l` (project-local) install; only `~/project/.pi/settings.json` has the entry. This guide's Install section should say clearly that a project-local install needs the project's own settings file read, not the global one, to show up in `pi list`. Recorded in `docs/v2/impl/DEVIATIONS.md`.

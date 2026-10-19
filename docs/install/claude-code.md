@@ -2,7 +2,7 @@
 
 This guide is for the Claude Code CLI (checked against v2.1.283, local binary `/opt/homebrew/Caskroom/claude-code@latest/2.1.283/claude --version`, checked 2026-10-17). It follows the v2 adapter row in `docs/v2/impl/10-adapters.md` §1 and ADR-0011.
 
-## Install v2
+## Install
 
 context-mode ships as a Claude Code **plugin** (`installMode: "marketplace"`, `impl/10-adapters.md:53`). There is no npm install step for v2.
 
@@ -80,7 +80,7 @@ This removes the plugin's hooks, MCP entry and skills. Plugin data on disk (`<co
 
 These paths are the same on macOS, Linux and Windows (Claude Code keeps its config under the user's home directory; no OS-specific split in this adapter).
 
-## Installing a plugin from a git ref
+## Plugin source from a git ref
 
 `claude plugin marketplace add` takes `owner/repo` (defaults to the repo's default branch) or a full marketplace source object with a `ref`:
 
@@ -103,6 +103,8 @@ claude plugin install context-mode@context-mode
 - **MCP server not reachable**: check `~/.claude.json` for a stale `mcpServers["context-mode"]` entry left over from v1; `ctx_doctor` reports this, `ctx_upgrade` removes it.
 - **Hooks not firing**: the matcher in `hooks/hooks.json` must match either Claude Code's native tool names (`Bash`, `Read`, `Grep`, `Write`, `Edit`, `NotebookEdit`, …) or the plugin's own `mcp__plugin_context-mode_context-mode__ctx_.*` tools (`impl/10-adapters.md` §1.5). Run `/ctx-doctor` to see the matcher Claude Code actually loaded.
 - **Still see v1 hooks after installing v2**: you uninstalled npm before running `/ctx-upgrade`. Reinstall v1 (`npm install -g context-mode`) just long enough for `/ctx-upgrade` to clean it up, then remove it again.
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 

@@ -5,7 +5,7 @@ MCP server setup, hooks, verify, update, upgrade from v1, rollback, uninstall an
 
 Checked 2026-10-17 against VS Code 1.142.0.
 
-## 1. Requirements
+## Requirements
 
 - VS Code 1.142 or later. Check your version:
   ```bash
@@ -24,7 +24,9 @@ Checked 2026-10-17 against VS Code 1.142.0.
 - On macOS/Windows/Linux the installer puts `code` on your PATH. If `code` is missing on macOS, run
   **Shell Command: Install 'code' command in PATH** from the Command Palette.
 
-## 2. Install context-mode (MCP server)
+## Install
+
+### MCP server
 
 v2 adds context-mode as an MCP server entry. There is no marketplace plugin for VS Code; you add one
 config entry.
@@ -48,7 +50,7 @@ config entry.
 
 (Source: [code.visualstudio.com/docs/agent-customization/mcp-servers](https://code.visualstudio.com/docs/agent-customization/mcp-servers), checked 2026-10-17.)
 
-## 3. Add hooks
+### Hooks
 
 VS Code's Local harness reads hook files from:
 
@@ -75,7 +77,7 @@ Two settings must be on (both are on by default):
 
 (Source: [code.visualstudio.com/docs/agent-customization/hooks](https://code.visualstudio.com/docs/agent-customization/hooks), checked 2026-10-17.)
 
-## 4. Verify the install
+## Verify
 
 Run the doctor check:
 ```
@@ -84,24 +86,24 @@ Run the doctor check:
 in VS Code chat. It prints one row per check (MCP entry found, hooks found, DB reachable). Fix any
 row marked failed before you continue.
 
-## 5. Update context-mode
+## Update context-mode
 
 There is no one-command update for a git-sourced MCP server in VS Code (test-first row, ADR-0011).
 Today's step:
 1. Pull the latest context-mode build.
-2. Re-run `code --add-mcp` (step 2.3) with the new path, or edit `.vscode/mcp.json` by hand.
+2. Re-run `code --add-mcp` (option 3 under Install) with the new path, or edit `.vscode/mcp.json` by hand.
 3. Reload VS Code (Command Palette: **Developer: Reload Window**).
 4. Run `/ctx-doctor` again to confirm the new version.
 
-## 6. Upgrade from v1
+## Upgrade from v1
 
 Order matters (ADR-0011, ADR-0017 R3): install v2 first, then run `/ctx-upgrade`, and only then
 remove v1.
 
-1. Add the v2 MCP entry and hooks (steps 2–3 above). Keep the old v1 entry for now.
+1. Add the v2 MCP entry and hooks (Install, above). Keep the old v1 entry for now.
 2. Run `/ctx-upgrade` in VS Code chat. It:
-   - deletes the v1 hook file `.github/hooks/context-mode.json` (the old one; step 3 above writes the
-     new one under the same path, so do step 3 after this if both exist),
+   - deletes the v1 hook file `.github/hooks/context-mode.json` (the old one; the Hooks step above writes the
+     new one under the same path, so do the Hooks step after this if both exist),
    - deletes v1 session data under `.github/context-mode/sessions/` (project scope) or
      `~/.vscode/context-mode/sessions/`,
    - flags a leftover context-mode entry inside `.vscode/mcp.json` if one is left pointing at the v1
@@ -114,12 +116,12 @@ remove v1.
    the v2 entry, so nothing breaks.
 4. Run `/ctx-doctor` once more. It should show a clean table (no v1 leftovers).
 
-## 7. Roll back to v1
+## Roll back to v1
 
 1. Remove the v2 MCP entry: open `.vscode/mcp.json` (or run **MCP: List Servers**, select
    `context-mode`, then remove it) and delete the `context-mode` entry.
 2. Remove the v2 hook file: `.github/hooks/context-mode.json`.
-3. Re-add the v1 entry you removed in step 6.1, or reinstall v1:
+3. Re-add the v1 entry you kept in step 1 of Upgrade from v1, or reinstall v1:
    ```bash
    npm install -g context-mode
    ```
@@ -128,7 +130,7 @@ remove v1.
 There is no automated rollback command for VS Code (same limitation as Gemini/Qwen, ADR-0011). Treat
 this as a manual, documented path.
 
-## 8. Uninstall
+## Uninstall
 
 1. Remove the MCP entry from `.vscode/mcp.json` (or **MCP: List Servers** → select → remove).
 2. Delete the hook file: `.github/hooks/context-mode.json`.
@@ -142,7 +144,7 @@ this as a manual, documented path.
 `/ctx-upgrade` with `mode: uninstall` and `confirmDelete: true` does steps 1–3 for you; without
 `confirmDelete: true` it stops the server and removes config entries but keeps your session data.
 
-## 9. Troubleshooting
+## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
@@ -151,6 +153,8 @@ this as a manual, documented path.
 | Hook fires but context-mode sees no tool name match | VS Code's Local harness ignores a Claude-style `matcher` field — every command for the event runs, and context-mode filters inside the hook body instead. This is expected, not a bug. |
 | `code --add-mcp` writes to the wrong profile | The CLI always writes to your **user** profile. For a workspace-only entry, edit `.vscode/mcp.json` directly instead. |
 | Session data left after uninstall | Check both possible paths — project scope (`.github/context-mode/sessions/`) and user scope (`~/.vscode/context-mode/sessions/`) — `ctx_doctor` reports both. |
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 
@@ -173,5 +177,5 @@ is not edited here; record the disagreement only.
    change shape between VS Code releases without a major-version bump.
 4. **`.vscode/mcp.json` cleanup is a flag, not a delete.** ADR-0011's VS Code row says `ctx_doctor`
    "flags" a leftover context-mode entry inside `.vscode/mcp.json`, the same as a user-added Claude Code
-   MCP entry — it does not say `ctx_upgrade` removes it automatically. This guide's step 6.2 states this
+   MCP entry — it does not say `ctx_upgrade` removes it automatically. This guide's step 2 of Upgrade from v1 states this
    plainly so a reader does not expect an automatic removal there.

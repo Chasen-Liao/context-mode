@@ -2,7 +2,7 @@
 
 All commands checked on 2026-10-17 against the latest Codex CLI (`0.163.0`, npm `@openai/codex`).
 
-## Install v2
+## Install
 
 1. Install Codex itself if you do not have it yet.
    ```
@@ -79,6 +79,8 @@ Source: [developers.openai.com/codex/hooks](https://developers.openai.com/codex/
 
 **Tool name looks different from what you typed**
 Codex turns the server name into a tool-name-safe string: anything that is not a letter, digit or underscore becomes an underscore. So a server named `context-mode` shows up to the model as `mcp__context_mode__ctx_execute`, not `mcp__context-mode__...`. This is normal.
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 

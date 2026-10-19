@@ -2,7 +2,7 @@
 
 All commands checked on 2026-10-17 against the current OpenCode build (`1.19.3`, npm `opencode-ai`, repo `github.com/anomalyco/opencode`). This repo's docs and ADR-0011 call this agent "OpenCode 2" (the `opencode` command, current major line). OpenCode 1 and OpenCode 2 share the same `opencode` command and cannot be installed side by side — see [opencode.ai/docs](https://opencode.ai/docs/) — checked 2026-10-17.
 
-## Install v2
+## Install
 
 1. Install OpenCode itself if you do not have it yet.
    ```
@@ -85,6 +85,8 @@ Source: [opencode.ai/docs/plugins](https://opencode.ai/docs/plugins/), [opencode
 
 **Two context-mode entries fighting each other**
 If both the v1 bare npm spec and the v2 git spec are present in `plugin`, OpenCode loads both; remove the v1 entry (`ctx_doctor` flags it).
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 

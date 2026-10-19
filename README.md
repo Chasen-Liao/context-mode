@@ -28,16 +28,16 @@ No agent has passed that test yet, so each row says "see guide" for now. [docs/i
 
 | Agent | Command | Guide |
 |---|---|---|
-| Claude Code | see guide | [docs/install/claude-code.md](docs/install/claude-code.md) |
-| Codex | see guide | [docs/install/codex.md](docs/install/codex.md) |
-| Copilot CLI | see guide | [docs/install/copilot-cli.md](docs/install/copilot-cli.md) |
-| Gemini CLI | see guide | [docs/install/gemini.md](docs/install/gemini.md) |
-| Kiro | see guide | [docs/install/kiro.md](docs/install/kiro.md) |
-| OpenCode | see guide | [docs/install/opencode.md](docs/install/opencode.md) |
-| Pi | see guide | [docs/install/pi.md](docs/install/pi.md) |
-| Qwen Code | see guide | [docs/install/qwen.md](docs/install/qwen.md) |
-| VS Code (Copilot) | see guide | [docs/install/vscode.md](docs/install/vscode.md) |
-| ZCode | see guide | [docs/install/zcode.md](docs/install/zcode.md) |
+| Claude Code | see guide | [docs/install/claude-code.md](docs/install/claude-code.md#install) |
+| Codex | see guide | [docs/install/codex.md](docs/install/codex.md#install) |
+| Copilot CLI | see guide | [docs/install/copilot-cli.md](docs/install/copilot-cli.md#install) |
+| Gemini CLI | see guide | [docs/install/gemini.md](docs/install/gemini.md#install) |
+| Kiro | see guide | [docs/install/kiro.md](docs/install/kiro.md#install) |
+| OpenCode | see guide | [docs/install/opencode.md](docs/install/opencode.md#install) |
+| Pi | see guide | [docs/install/pi.md](docs/install/pi.md#install) |
+| Qwen Code | see guide | [docs/install/qwen.md](docs/install/qwen.md#install) |
+| VS Code (Copilot) | see guide | [docs/install/vscode.md](docs/install/vscode.md#install) |
+| ZCode | see guide | [docs/install/zcode.md](docs/install/zcode.md#install) |
 
 You need Node 24.15.0 or later; v2 uses the built-in `node:sqlite`.
 You do not need npm. Each agent installs Context Mode from the `release` branch of this repo.
@@ -61,7 +61,7 @@ Do not uninstall the npm package first. The v1 hooks for Copilot CLI, VS Code, C
 |---|---|---|
 | `context-mode` CLI and `statusline` | Removed | No npm in v2. Use `/ctx-stats`, `/ctx-doctor`, `/ctx-upgrade` in the agent |
 | `ctx_insight` | Removed | Its numbers are in `ctx_stats` |
-| `ctx_fetch_and_index`, `ctx_batch_execute` | Renamed | `ctx_index` takes a `url`; `ctx_batch` runs the commands |
+| v1 fetch and batch tools | Renamed | `ctx_index` takes a `url`; `ctx_batch` runs many commands |
 | `ctx_purge` scopes | Changed | Scopes are now `session`, `worktree`, `project` |
 | Search call-rate limit | Removed | It blocked many subagents that searched at the same time (#769) |
 | Large resume snapshot | 2 KB state block | Run `ctx_resume(seq:N)` on a pointer line to read the full row |
@@ -150,7 +150,7 @@ Read more: [docs/how-it-works.md](docs/how-it-works.md), [docs/algorithms.md](do
 
 ## Issues and license
 
-Open an [issue](https://github.com/mksglu/context-mode/issues/new/choose) with the full `/ctx-doctor` report.
+Open an [issue](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with the full `/ctx-doctor` report.
 Only v2 gets fixes. This repo does not take pull requests.
 
 License: [Elastic License 2.0](LICENSE).

@@ -21,7 +21,7 @@ All commands below were checked against the Gemini CLI docs and source on
   ```
   Source: [README](https://github.com/google-gemini/gemini-cli) — checked 2026-10-17.
 
-## Install context-mode v2
+## Install
 
 context-mode v2 ships to Gemini CLI as an **extension**, not an MCP entry you
 hand-edit and not an npm package (`00-architecture.md`, `impl/10-adapters.md`
@@ -145,6 +145,8 @@ by hand once you confirm Antigravity CLI is not using the same path.
   tuned for the newest Gemini models. context-mode's Gemini adapter targets
   Gemini CLI; Antigravity is not covered by this guide.
   Source: [README](https://github.com/google-gemini/gemini-cli) — checked 2026-10-17.
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 

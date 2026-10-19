@@ -2,7 +2,7 @@
 
 This guide is for Kiro CLI V3 users. Checked 2026-10-17 against the live kiro.dev docs.
 
-## Install context-mode v2
+## Install
 
 Kiro has no git-ref power install command yet (see "Differences" below). Use the local-folder path.
 
@@ -66,6 +66,8 @@ For context-mode, pull the latest `v2`/`release` commit in your clone and rebuil
 - **Hooks do not fire.** Confirm `~/.kiro/hooks/context-mode.json` has `"version": "v1"` and each hook has a `trigger` and an `action`. Run `kiro-cli doctor -a` first to rule out a Kiro-side problem.
 - **Old camelCase hooks still present.** If you see `agentSpawn`/`preToolUse`/`postToolUse` keys from an old setup, run Kiro's own `/upgrade-agent` command first, then redo this guide's hook step.
 - **Compaction loses context.** Kiro has no PreCompact hook today. This is a known, documented gap, not a bug (DECISIONS-r3 Q24 item 6) — context-mode's compaction block does not fire for Kiro yet.
+
+Still broken? Run `/ctx-doctor` and open a [bug report](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with its full report.
 
 ## Differences from the v2 spec
 
