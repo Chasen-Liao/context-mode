@@ -1,14 +1,15 @@
 // impl/07 §3, ADR-0011 "v1 cleanup", impl/15. DEVIATIONS D-M5-O2-1..5.
 // detectV1: one scan per agent from the ADR-0011 table plus the All row; one V1Finding per match.
 // Pure report: reads files, never writes, never deletes, never throws.
-import { existsSync, opendirSync, readFileSync } from "node:fs";
+import { existsSync, opendirSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentId } from "../contracts/agents.ts";
 import type { V1Finding } from "../contracts/types.ts";
 import {
   AGENT_HOME_DIR, CLAUDE_USER_CONFIG_FILE, CONFIG_JSON_FILE, CONFIG_TOML_FILE, DATA_ROOT, GITHUB_DIR_NAME,
-  HOOKS_JSON_FILE, HOOKS_KEY, KIRO_AGENT_FILE, MCP_SERVERS_KEY, OPENCODE_CONFIG_FILES, OPENCODE_PLUGIN_KEY,
+  HOOKS_JSON_FILE, HOOKS_KEY, KIRO_AGENT_FILE, KIRO_AGENT_FILE_EXT, KIRO_AGENT_NAME_KEY, KIRO_AGENTS_DIR,
+  KIRO_STEERING_FILE, MCP_SERVERS_KEY, OPENCODE_CONFIG_FILES, OPENCODE_PLUGIN_KEY,
   OWN_HOOK_FILE, PI_AGENT_DIR, PI_PACKAGE_SOURCE_KEY, PI_PACKAGES_KEY, SERVER_KEY, SETTINGS_FILE, STATUS_LINE_KEY,
   V1_BIN_COMMAND, V1_CACHE_HEAL_EXTS, V1_CACHE_HEAL_NAME, V1_CODEX_HOOK_COMMAND, V1_CODEX_HOOKS_DIR,
   V1_DATA_DIR_NAME, V1_DATA_ROOT_ENTRIES, V1_HOOK_COMMAND, V1_HOOKS_DIR_NAME, V1_OPENCODE_PLUGIN_SPEC,
@@ -196,11 +197,33 @@ function scanVscode(agentHome: string, project: string | undefined, out: V1Findi
   dataDir(join(agentHome, V1_DATA_DIR_NAME, V1_SESSIONS_DIR_NAME), V1_REASON.dataDir, out);
 }
 
-function scanKiro(agentHome: string, out: V1Finding[]): void {
-  const file = join(agentHome, ...KIRO_AGENT_FILE);
-  const doc = readJson(file);
-  for (const c of isObj(doc) ? flatCommands(doc[HOOKS_KEY], [HOOKS_KEY]) : []) {
-    if (isV1Hook(c.command)) out.push(finding(file, c.path, V1_REASON.kiroHook));
+/** Sorted *.json names in dir; a missing or unreadable dir has none. */
+function jsonFiles(dir: string): string[] {
+  try {
+    return readdirSync(dir).filter((name) => name.endsWith(KIRO_AGENT_FILE_EXT)).sort();
+  } catch {
+    return [];
+  }
+}
+
+/** A37: every agents/*.json whose top-level name is context-mode is a v1 file (removed whole, shown in the change
+ *  table); default.json keeps the flat hook-entry scan; KIRO.md steering docs are flagged report only. */
+function scanKiro(agentHome: string, project: string | undefined, out: V1Finding[]): void {
+  const agentsDir = join(agentHome, KIRO_AGENTS_DIR);
+  const defaultFile = join(agentHome, ...KIRO_AGENT_FILE);
+  for (const name of jsonFiles(agentsDir)) {
+    const file = join(agentsDir, name);
+    const doc = readJson(file);
+    if (isObj(doc) && doc[KIRO_AGENT_NAME_KEY] === SERVER_KEY) { out.push(finding(file, "", V1_REASON.kiroAgentFile)); continue; }
+    if (file !== defaultFile) continue;
+    for (const c of isObj(doc) ? flatCommands(doc[HOOKS_KEY], [HOOKS_KEY]) : []) {
+      if (isV1Hook(c.command)) out.push(finding(file, c.path, V1_REASON.kiroHook));
+    }
+  }
+  const steeringDocs = [join(agentHome, ...KIRO_STEERING_FILE)];
+  if (project !== undefined) steeringDocs.push(join(project, ...AGENT_HOME_DIR.kiro, ...KIRO_STEERING_FILE));
+  for (const file of steeringDocs) {
+    if (existsSync(file)) out.push(finding(file, "", V1_REASON.kiroSteering));
   }
   dataDir(join(agentHome, V1_DATA_DIR_NAME), V1_REASON.dataDir, out);
 }
@@ -269,7 +292,7 @@ function scanAll(home: string, tmp: string, out: V1Finding[]): void {
 
 /** Optional roots the caller resolves from its env (D-M5-O2-1); each has the default named beside it. */
 export interface V1Scope {
-  project?: string; // VS Code project-scope rows; none → only ~/.vscode is read
+  project?: string; // VS Code project-scope rows, Kiro <project>/.kiro/steering/KIRO.md; none → home only
   piAgentDir?: string; // env PI_CODING_AGENT_DIR (#1035); none → <home>/.pi/agent
   tmp?: string; // none → os.tmpdir()
 }
@@ -292,7 +315,7 @@ export function detectV1(agent: AgentId, home: string, scope: V1Scope = {}): V1F
       dataDir(join(agentHome, V1_DATA_DIR_NAME), V1_REASON.dataDir, out);
       break;
     case "vscode": scanVscode(agentHome, project, out); break;
-    case "kiro": scanKiro(agentHome, out); break;
+    case "kiro": scanKiro(agentHome, project, out); break;
     case "pi": scanPi(scope.piAgentDir ?? join(agentHome, PI_AGENT_DIR), agentHome, out); break;
     case "opencode": scanOpencode(agentHome, out); break;
     case "zcode": scanZcode(agentHome, out); break;
