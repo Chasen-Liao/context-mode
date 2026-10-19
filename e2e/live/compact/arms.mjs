@@ -8,6 +8,7 @@
 // ctx_resume() reply, read through e2e/harness/mcp-client.mjs. No import of src/ (GS4).
 // No-summary arms (d, e) reset with "/clear" instead of "/compact": the host then keeps no history and
 // writes no summary, so only the injected text carries the earlier work (commit body DEVIATION row).
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -134,6 +135,9 @@ export function setupArm(id, o) {
   const dir = mkdtempSync(path.join(o.root, `arm-${id}-`));
   const cwd = path.join(dir, "project");
   mkdirSync(cwd);
+  // context-mode resolves the project from a git repository (PRD §5); the temp project is one.
+  const g = spawnSync("git", ["init", "-q", cwd], { encoding: "utf8" });
+  if (g.status !== 0) throw new Error(`arms: git init failed: ${g.stderr}`);
   const pluginDir = id === "a" ? releaseOut : writeArmPlugin(a, releaseOut, dir);
   return { arm: a, dir, cwd, pluginDir, args: argsFor(pluginDir), reset: a.reset, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
