@@ -4,7 +4,7 @@
 // Every 14a GP11 row runs here except npm-audit-zero-high-critical (release build, M6).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -138,4 +138,19 @@ test("[M5] GP11/codex-no-features-hooks-key-reports-hooks-true (#1152 #1014)", a
   const reply = await call(c, "ctx_doctor", {});
   await c.close();
   assert.ok(typeof text(reply) === "string");
+});
+
+test("[M5] GP11/uninstall-stops-server: ctx_upgrade mode uninstall replies, then the server exits and leaves no owner file (D-M5-R1-1)", async (t) => {
+  const { home, spawn } = fixture(t);
+  const c = await spawn();
+  await call(c, "ctx_execute", { language: "javascript", code: "1" }); // open the project DB, write the owner file
+  const reply = await call(c, "ctx_upgrade", { mode: "uninstall" });
+  assert.ok(text(reply).includes("| server | running | stopped after this reply |"));
+  await new Promise((r) => setTimeout(r, 1000)); // well past the stop delay
+  await c.close(); // resolves at once when the process has already exited
+  const projects = path.join(home, ".context-mode", "projects");
+  for (const key of readdirSync(projects)) {
+    const owners = path.join(projects, key, "owners");
+    assert.deepEqual(existsSync(owners) ? readdirSync(owners) : [], []);
+  }
 });
