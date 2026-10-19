@@ -112,6 +112,11 @@ async function sessionStart(ev: CanonicalHookEvent, row: AdapterRow, project: Pr
     return { kind: "hint", text: compactText(db, ev, row), onceKey: COMPACT_STATE_KEY };
   }
   const db = await openDb(project);
+  // impl/12 §4.6 step 2, D-M5-P2-4: the OpenCode plugin's one `context` call per session reads and clears
+  // the pending-compact marker here (handleHook is the one DB path); its stdout is the cache-stable payload.
+  if (row.compactDelivery === "opencode-cache" && metaTake(db, PENDING_COMPACT_META_PREFIX + ev.sessionId) !== null) {
+    return { kind: "hint", text: compactText(db, ev, row), onceKey: PENDING_COMPACT_KEY };
+  }
   if (!shouldHint(db, ev.sessionId, RESUME_HINT_KEY)) return ALLOW;
   return { kind: "hint", text: withPrefix(RESUME_HINT, row), onceKey: RESUME_HINT_KEY }; // D-M3-H2-2
 }
