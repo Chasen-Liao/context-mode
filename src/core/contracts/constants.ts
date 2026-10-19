@@ -471,7 +471,8 @@ export const HEAL_TS_SEP = "."; // context.db.<ts>.bak
 export const SUMS_LINE_END = "\n";
 export const HASH_ENCODING = "hex";
 // plugin-swap.ts: atomic `current` swap (impl/07 §6 step 4c-4d).
-export const PLUGIN_LINK_TMP_SUFFIX = ".swap"; // symlink current.swap -> <sha>, then rename over current
+export const PLUGIN_LINK_TMP_SUFFIX = ".swap"; // symlink current.swap -> <sha>, then rename it to current
+export const PLUGIN_LINK_OLD_SUFFIX = ".old"; // current is renamed to current.old first (Windows: no rename over a dir link)
 export const PLUGIN_LINK_TYPE = "dir"; // fs.symlink type ("junction" is not used: one path)
 // uninstall.ts: stop marker read by the owning server (impl/07 uninstall step 1, impl/02 §7).
 export const OWNER_STOP_EXT = ".stop"; // <projectDir>/owners/<serverId>.stop next to <serverId>.pid
