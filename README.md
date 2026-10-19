@@ -1,3 +1,11 @@
+> **Unofficial Pi fix fork / 非官方 Pi 修复版** — based on [mksglu/context-mode](https://github.com/mksglu/context-mode) v1.0.169 (official repo; LICENSE unchanged, ELv2).
+>
+> 中文：这是非官方修复版，修复了 Pi adapter 监听不存在的 `before_provider_response` 事件导致 `provider_response` 从未写入数据库的死代码，改为在 `message_end` 上采集；官方仓库见 https://github.com/mksglu/context-mode。
+>
+> English: This unofficial fork fixes the Pi adapter's dead `before_provider_response` listener (an event Pi never emits, so `provider_response` was never recorded) by capturing it on `message_end` instead; the official project is https://github.com/mksglu/context-mode.
+>
+> Install / 安装：`pi install git:github.com/Chasen-Liao/context-mode@v1.0.169-pifix.1`
+
 # Context Mode
 
 **The other half of the context problem.**
