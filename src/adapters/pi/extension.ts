@@ -8,7 +8,8 @@
  * Entry point: `export default function(pi: ExtensionAPI) { ... }`
  *
  * Lifecycle: session_start, tool_call, tool_result, before_agent_start,
- * message_end, turn_end, session_before_compact, session_compact, session_shutdown.
+ * context, message_end, turn_end, session_before_compact, session_compact,
+ * session_shutdown.
  */
 
 import { createHash } from "node:crypto";
@@ -769,33 +770,43 @@ export default function piExtension(pi: any): void {
   // completes. `message_end` delivers that message once; `turn_end` also
   // carries it but is already used for structured agent_usage (4c).
   // Prefer message_end so provider_response stays a separate lifecycle
-  // write. Latency is not exposed on any of these events in 1.3.0 —
-  // latencyMs is omitted when unknown (same skip-if-empty contract).
+  // write. Latency comes from AssistantMessage.durationMs (monotonic ms
+  // from request start to response end; absent on legacy/deferred
+  // messages, in which case latencyMs is omitted).
+  //
+  // Failed requests (stopReason "error" / "aborted") are recorded with
+  // their stopReason and errorMessage so a zero-usage row is never
+  // mistaken for a successful empty response.
   //
   // Refs: @earendil-works/pi-coding-agent dist/core/extensions/types.d.ts
   //   AfterProviderResponseEvent / ProviderStreamEvent / MessageEndEvent;
-  //   @earendil-works/pi-ai AssistantMessage { provider, model, usage }.
+  //   @earendil-works/pi-ai AssistantMessage
+  //   { provider, model, usage, stopReason, errorMessage?, durationMs? }.
 
   pi.on("message_end", (event: any) => {
     try {
       if (!_sessionId) return;
-      const message = event?.message ?? event;
+      const message = event?.message;
       // Only assistant messages are provider responses.
-      if (!message || typeof message !== "object") return;
-      if (typeof message.role === "string" && message.role !== "assistant") {
-        return;
-      }
+      if (message?.role !== "assistant") return;
+      const failed =
+        message.stopReason === "error" || message.stopReason === "aborted";
       const meta: {
         model?: unknown;
         provider?: unknown;
         latencyMs?: unknown;
         tokens?: unknown;
+        stopReason?: unknown;
+        errorMessage?: unknown;
       } = {
-        model: message.model ?? message.providerModel,
+        model: message.model,
         provider: message.provider,
-        // Pi 1.3.0 does not surface latency on message_end / after_provider_response.
-        latencyMs: message.latencyMs ?? message.latency,
-        tokens: message.usage ?? message.tokens,
+        latencyMs: message.durationMs,
+        tokens: message.usage,
+        stopReason: message.stopReason,
+        ...(failed && message.errorMessage != null
+          ? { errorMessage: message.errorMessage }
+          : {}),
       };
       // Skip when Pi gives us nothing useful — avoids noise in the DB.
       if (

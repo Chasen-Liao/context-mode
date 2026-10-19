@@ -953,18 +953,38 @@ describe("Pi Extension", () => {
     it("registers a message_end handler (not the nonexistent before_provider_response)", async () => {
       await registerPiExtension(api);
       expect(api._handlers["message_end"]).toBeDefined();
-      expect(api._handlers["message_end"].length).toBeGreaterThan(0);
+      expect(api._handlers["message_end"]).toHaveLength(1);
       expect(api._handlers["before_provider_response"]).toBeUndefined();
     });
 
-    it("persists provider_response from an assistant message_end payload", async () => {
+    async function startSession(name: string): Promise<string> {
       await registerPiExtension(api);
-      const sessionFile = join(tempDir, "provider-msg-end.jsonl");
+      const sessionFile = join(tempDir, name);
       await api._trigger(
         "session_start",
         { type: "session_start", reason: "startup" },
         { sessionManager: { getSessionFile: () => sessionFile } },
       );
+      return createHash("sha256").update(sessionFile).digest("hex").slice(0, 16);
+    }
+
+    async function providerRows(sessionId: string) {
+      const { resolveSessionDbPath } = await import("../src/session/db.js");
+      const sessionsDir = join(process.env.HOME!, ".pi", "context-mode", "sessions");
+      const dbPath = resolveSessionDbPath({
+        projectDir: process.env.PI_PROJECT_DIR!,
+        sessionsDir,
+      });
+      const db = new SessionDB({ dbPath });
+      try {
+        return db.getEvents(sessionId).filter((e) => e.type === "provider_response");
+      } finally {
+        db.close();
+      }
+    }
+
+    it("persists provider_response from an assistant message_end payload", async () => {
+      const sessionId = await startSession("provider-msg-end.jsonl");
 
       await expect(
         api._trigger("message_end", {
@@ -974,55 +994,53 @@ describe("Pi Extension", () => {
             provider: "openrouter",
             model: "nvidia/nemotron-3-super-120b-a12b:free",
             usage: { input: 10, output: 20, cacheRead: 0, cacheWrite: 0 },
+            stopReason: "stop",
+            durationMs: 1234,
           },
         }),
       ).resolves.not.toThrow();
 
-      const { resolveSessionDbPath } = await import("../src/session/db.js");
-      const sessionsDir = join(
-        process.env.HOME!,
-        ".pi",
-        "context-mode",
-        "sessions",
-      );
-      const dbPath = resolveSessionDbPath({
-        projectDir: process.env.PI_PROJECT_DIR!,
-        sessionsDir,
+      const rows = await providerRows(sessionId);
+      expect(rows).toHaveLength(1);
+      const parsed = JSON.parse(rows[0]!.data);
+      expect(parsed.provider).toBe("openrouter");
+      expect(parsed.model).toBe("nvidia/nemotron-3-super-120b-a12b:free");
+      expect(parsed.latencyMs).toBe(1234);
+      expect(parsed.stopReason).toBe("stop");
+      expect(parsed.errorMessage).toBeUndefined();
+      expect(parsed.tokens).toEqual({
+        input: 10,
+        output: 20,
+        cacheRead: 0,
+        cacheWrite: 0,
       });
-      const sessionId = createHash("sha256")
-        .update(sessionFile)
-        .digest("hex")
-        .slice(0, 16);
-      const db = new SessionDB({ dbPath });
-      try {
-        const events = db.getEvents(sessionId);
-        const providerEvents = events.filter((e) => e.type === "provider_response");
-        expect(providerEvents.length).toBeGreaterThan(0);
-        const parsed = JSON.parse(providerEvents[0]!.data);
-        expect(parsed.provider).toBe("openrouter");
-        expect(parsed.model).toBe("nvidia/nemotron-3-super-120b-a12b:free");
-        expect(parsed.tokens).toEqual({
-          input: 10,
-          output: 20,
-          cacheRead: 0,
-          cacheWrite: 0,
-        });
-      } finally {
-        db.close();
-      }
     });
 
-    it("skips non-assistant message_end and empty payloads without throwing", async () => {
-      await registerPiExtension(api);
-      await api._trigger(
-        "session_start",
-        { type: "session_start", reason: "startup" },
-        {
-          sessionManager: {
-            getSessionFile: () => join(tempDir, "provider-empty.jsonl"),
-          },
+    it("records stopReason + errorMessage for an errored assistant message with zero usage", async () => {
+      const sessionId = await startSession("provider-error.jsonl");
+
+      await api._trigger("message_end", {
+        type: "message_end",
+        message: {
+          role: "assistant",
+          provider: "openrouter",
+          model: "nvidia/nemotron-3-super-120b-a12b:free",
+          usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          stopReason: "error",
+          errorMessage: "upstream timeout",
         },
-      );
+      });
+
+      const rows = await providerRows(sessionId);
+      expect(rows).toHaveLength(1);
+      const parsed = JSON.parse(rows[0]!.data);
+      expect(parsed.stopReason).toBe("error");
+      expect(parsed.errorMessage).toBe("upstream timeout");
+      expect(parsed.latencyMs).toBeUndefined();
+    });
+
+    it("writes zero rows for empty, user and toolResult message_end payloads", async () => {
+      const sessionId = await startSession("provider-empty.jsonl");
 
       await expect(api._trigger("message_end", {})).resolves.not.toThrow();
       await expect(
@@ -1031,6 +1049,29 @@ describe("Pi Extension", () => {
           message: { role: "user", content: "hi" },
         }),
       ).resolves.not.toThrow();
+      await expect(
+        api._trigger("message_end", {
+          type: "message_end",
+          message: {
+            role: "toolResult",
+            toolCallId: "call_1",
+            toolName: "bash",
+            content: [{ type: "text", text: "ok" }],
+            isError: false,
+          },
+        }),
+      ).resolves.not.toThrow();
+      // A bare assistant-shaped object without the { message } envelope
+      // must not be accepted (no event ?? message fallback).
+      await expect(
+        api._trigger("message_end", {
+          role: "assistant",
+          provider: "openrouter",
+          model: "x",
+        }),
+      ).resolves.not.toThrow();
+
+      expect(await providerRows(sessionId)).toHaveLength(0);
     });
   });
 
