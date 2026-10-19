@@ -15,7 +15,7 @@
 // with their own files (build/hash.mjs) in later steps.
 //
 // Failure: one stderr line `build failed: <reason>` and exit 1 (impl/13 §1).
-import { readFileSync, writeFileSync, rmSync, mkdirSync, readdirSync, copyFileSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync, mkdirSync, readdirSync, copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild"; // devDependency only, pinned 0.24.0 (A14); never shipped (ADR-0002 GS7)
@@ -47,6 +47,7 @@ const BUNDLES = Object.freeze([
   { name: "run", entry: "src/entries/run.ts", out: "run.mjs" },
   { name: "search", entry: "src/entries/run.ts", out: "search.mjs" },
   { name: "pi", entry: "src/entries/pi.ts", out: "pi/index.js" }, // impl/13 §2.2 step 2 (D-M5-arch-1)
+  { name: "opencode", entry: "src/entries/opencode.ts", out: "opencode/plugin.js" }, // impl/13 §2.2 step 2 (D-M5-P2-1)
 ]);
 
 // Same options for every row (impl/13 §2.2 step 2, "same").
@@ -176,11 +177,14 @@ async function main(outDir, sha) {
   mkdirSync(outDir, { recursive: true });
   // D-M5-arch-5: the one define; a dev/test build sets none, so BUNDLE_SHA stays undefined.
   const define = sha === undefined ? {} : { [BUNDLE_SHA_DEFINE]: JSON.stringify(sha) };
+  // D-M5-P2-5: a full build deletes only the _generated.ts it wrote; one that --generated-only
+  // wrote before it (gate v2-unit, parallel test files) stays.
+  const keep = existsSync(GENERATED);
   try {
     writeGeneratedPrompt();
     for (const bundle of BUNDLES) await buildBundle(bundle, outDir, define);
   } finally {
-    rmSync(GENERATED, { force: true });
+    if (!keep) rmSync(GENERATED, { force: true });
   }
   generateManifests(outDir); // §2.2 step 4: manifests + hook configs from adapters/table.ts (impl/13 §3)
   copyFixture(outDir); // §2.2 step 5
