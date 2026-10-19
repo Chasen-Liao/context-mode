@@ -30,6 +30,8 @@ import { appendDetached } from "./detached.ts";
 import { answerDecisions, askOptionLabels, optionEchoDecision, type DecisionPart } from "./decision.ts";
 import { shouldHint } from "./throttle.ts";
 
+export { readStdin, writeOut } from "./io.ts"; // D-M7-HP-1: entry I/O without process.stdin/stdout streams
+
 const ALLOW: Decision = { kind: "allow" };
 const EMPTY: HookOutput = { stdout: "", exitCode: 0 };
 const DIGIT_0 = 48;

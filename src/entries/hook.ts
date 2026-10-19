@@ -1,43 +1,15 @@
 // impl/09 §5.2, impl/00 §5.3: read stdin, parse, handleHook, write the native output, exit.
 // Every failure fails open: empty stdout, exit 0, one line on stderr. Never block the host.
 // Agent-specific output rules (Kiro prompt stdout) live in the adapter's encode (A28), not here.
-import { readFileSync, writeSync } from "node:fs";
 import type { HookOutput } from "../core/contracts/types.ts";
 import { AGENT_IDS, type AgentId } from "../core/contracts/agents.ts";
 import { AGENT_ARG } from "../core/contracts/constants.ts";
-import { handleHook } from "../core/hooks/dispatch.ts";
+import { handleHook, readStdin, writeOut } from "../core/hooks/dispatch.ts";
 
 const EMPTY: HookOutput = { stdout: "", exitCode: 0 };
 
 function isAgentId(s: string): s is AgentId {
   return (AGENT_IDS as readonly string[]).includes(s);
-}
-
-// GS6 (DEVIATIONS D-M7-HP-1): fd 0 is read with one readFileSync, so the hook never builds the
-// process.stdin stream (net, stream and tty modules; about 3 ms CPU per call, every call). A
-// non-blocking stdin (EAGAIN) falls back to the stream; any other error propagates (fail open below).
-async function readStdin(): Promise<string> {
-  try {
-    return readFileSync(0, "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "EAGAIN") throw err;
-  }
-  const parts: Buffer[] = [];
-  for await (const c of process.stdin) parts.push(c as Buffer);
-  return Buffer.concat(parts).toString("utf8");
-}
-
-// Same reason for stdout: writeSync to fd 1, loop until every byte is out. EAGAIN (non-blocking pipe)
-// falls back to process.stdout, which queues the rest and flushes before the process ends.
-function writeOut(text: string): void {
-  const buf = Buffer.from(text, "utf8");
-  let off = 0;
-  try {
-    while (off < buf.length) off += writeSync(1, buf, off, buf.length - off);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "EAGAIN") throw err;
-    process.stdout.write(buf.subarray(off));
-  }
 }
 
 // D-M3-H2-8: no process.exit. The answer goes out first; the process then ends when the event loop is
