@@ -3,7 +3,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,5 +49,53 @@ test("[M5] build/bundle-sha-invalid: --sha that is not 40 lowercase hex chars fa
     const { status, stderr } = build(t, ["--sha", bad]);
     assert.equal(status, 1, bad);
     assert.equal(stderr, `build failed: --sha ${bad} is not a 40-char lowercase hex commit sha\n`);
+  }
+});
+
+// impl/13 §2.2 steps 4, 6, 8 (DEVIATIONS D-M6-arch-3, D-M6-B2-1).
+const MANIFESTS = [".claude-plugin/plugin.json", "gemini-extension.json", "qwen-extension.json", "copilot/plugin.json"];
+const SKILLS = ["ctx-stats", "ctx-doctor", "ctx-upgrade"];
+
+test("[M6] build/version-flag: --version lands in every manifest; no flag keeps 0.0.0-dev", (t) => {
+  const dev = build(t);
+  const rel = build(t, ["--version", "2.0.0"]);
+  assert.equal(dev.status, 0, dev.stderr);
+  assert.equal(rel.status, 0, rel.stderr);
+  for (const m of MANIFESTS) {
+    assert.equal(JSON.parse(readFileSync(path.join(dev.out, m), "utf8")).version, "0.0.0-dev", m);
+    assert.equal(JSON.parse(readFileSync(path.join(rel.out, m), "utf8")).version, "2.0.0", m);
+  }
+});
+
+test("[M6] build/version-invalid: --version that is not x.y.z fails with one build failed line", (t) => {
+  for (const bad of ["2.0", "v2.0.0", "2.0.0-rc.1", "2..0", "2.0.x"]) {
+    const { status, stderr } = build(t, ["--version", bad]);
+    assert.equal(status, 1, bad);
+    assert.equal(stderr, `build failed: --version ${bad} is not an x.y.z release version\n`);
+  }
+});
+
+test("[M6] build/command-skills: the 3 command skills are copied verbatim, no other skill ships", (t) => {
+  const { out, status, stderr } = build(t);
+  assert.equal(status, 0, stderr);
+  assert.deepEqual(readdirSync(path.join(out, "skills")).sort(), [...SKILLS].sort());
+  for (const s of SKILLS) {
+    assert.deepEqual(readFileSync(path.join(out, "skills", s, "SKILL.md")), readFileSync(path.join(REPO, "skills", s, "SKILL.md")), s);
+  }
+});
+
+test("[M6] build/hashes-last: SHA256SUMS lists every other file in the tree with its sha256", (t) => {
+  const { out, status, stderr } = build(t);
+  assert.equal(status, 0, stderr);
+  const walk = (dir, pre) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const rel = pre ? pre + "/" + e.name : e.name;
+    return e.isDirectory() ? walk(path.join(dir, e.name), rel) : [rel];
+  });
+  const files = walk(out, "").filter((f) => f !== "SHA256SUMS").sort();
+  const lines = readFileSync(path.join(out, "SHA256SUMS"), "utf8").split("\n").filter((l) => l !== "");
+  assert.deepEqual(lines.map((l) => l.slice(66)), files);
+  for (const l of lines) {
+    const hex = createHash("sha256").update(readFileSync(path.join(out, l.slice(66)))).digest("hex");
+    assert.equal(l.slice(0, 66), hex + "  ", l);
   }
 });
