@@ -405,6 +405,43 @@ export const TABLE_PIPE = "|";
 export const TABLE_PIPE_ESCAPED = "\\|";
 export const TOML_TABLE_OPEN = "[";
 export const TOML_TABLE_CLOSE = "]";
+// Wave-2 split files under src/core/ops/ (size rule; DEVIATIONS D-M5-U1-6). tools/doctor.ts and tools/upgrade.ts
+// stay thin handlers that call these.
+export const OPS_SPLIT_FILES = Object.freeze([
+  "doctor-env.ts", "doctor-config.ts", "doctor-hook.ts", "doctor-db.ts", "doctor-heal.ts",
+  "release-fetch.ts", "verify-sums.ts", "plugin-swap.ts", "host-write.ts", "v1-remove.ts", "uninstall.ts",
+] as const);
+// doctor-env.ts: D1 version, D2 Node and node:sqlite, D6 MCP (impl/07 §5).
+export const SQLITE_MODULE = "node:sqlite"; // D2: await import(SQLITE_MODULE)
+export const NODE_VERSION_PREFIX = "v"; // process.version "v24.15.0" -> compare "24.15.0" with NODE_MIN
+export const NODE_VERSION_SEP = "."; // major.minor.patch, compared as numbers
+export const LS_REMOTE_FIELD_SEP = "\t"; // git ls-remote line: "<sha>\t<ref>"
+export const GIT_SHA_HEX_LEN = 40; // a full commit sha
+export const DOCTOR_GIT_TIMEOUT_MS = 10000; // D1 git ls-remote; a timeout is "no network" (UNKNOWN)
+export const DOCTOR_PASS_DETAIL = "ok"; // detail of a PASS row with nothing more to say
+// doctor-config.ts: D3 host config, D4 v1 leftovers, D7 project (impl/07 §5).
+export const D3_PART_JOIN = ", ";
+export function D3_DETAIL(parts: readonly string[]): string { return `wrong: ${parts.join(D3_PART_JOIN)}`; }
+// doctor-hook.ts: D5 round trip, D5b double-fire (impl/07 §5).
+export const D5_SHAPE_DETAIL = "hook output is not the agent's native shape";
+export function D5_SLOW_DETAIL(ms: number): string { return `hook round trip took ${ms} ms, over ${HOOK_P95_MS} ms`; }
+export const D5_FIX = "run ctx_upgrade"; // a broken hook entry is a broken install
+// doctor-db.ts: D8 checks, D9 counts, D10 mode (impl/07 §5).
+export const PRAGMA_INTEGRITY_CHECK = "PRAGMA integrity_check";
+export function D10_DETAIL(mode: string): string { return `enforcement mode: ${mode}`; }
+// doctor-heal.ts: D8 heal (impl/07 §5 step 7). Order: main file, then WAL, then SHM.
+export const DB_SIBLING_SUFFIXES = Object.freeze(["", DB_WAL_SUFFIX, DB_SHM_SUFFIX] as const);
+export const HEAL_TMP_SUFFIX = ".heal"; // VACUUM INTO <context.db>.heal, then rename over context.db
+export const HEAL_TS_SEP = "."; // context.db.<ts>.bak
+// verify-sums.ts: SHA256SUMS (impl/07 §6 step 4b, impl/13 §4).
+export const SUMS_LINE_END = "\n";
+export const HASH_ENCODING = "hex";
+// plugin-swap.ts: atomic `current` swap (impl/07 §6 step 4c-4d).
+export const PLUGIN_LINK_TMP_SUFFIX = ".swap"; // symlink current.swap -> <sha>, then rename over current
+export const PLUGIN_LINK_TYPE = "dir"; // fs.symlink type ("junction" is not used: one path)
+// uninstall.ts: stop marker read by the owning server (impl/07 uninstall step 1, impl/02 §7).
+export const OWNER_STOP_EXT = ".stop"; // <projectDir>/owners/<serverId>.stop next to <serverId>.pid
+export const UPGRADE_DATA_DELETED = "user data deleted"; // uninstall step 4 with confirmDelete
 // ADR-0011 "Release steps" c): host update commands for host-managed agents. Copilot CLI: "test first" (no command yet).
 export const UPGRADE_HOST_COMMAND: Readonly<Partial<Record<AgentId, string>>> = Object.freeze({
   "claude-code": "claude plugin marketplace update context-mode && claude plugin update context-mode@context-mode",
