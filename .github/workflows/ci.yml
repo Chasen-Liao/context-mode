@@ -93,14 +93,19 @@ jobs:
         name: src/prompt/_generated.ts for v2 unit tests (D-M2-arch-6)
       - run: node --test "tests/v2/**/*.test.mjs"
         name: v2 unit tests (TECH-SPEC 6.2a, DEVIATIONS D-M1-13, same as gate layer v2-unit)
+      # The repo checks below do not depend on the test steps above. `!cancelled()` runs them after a
+      # red test step too, so a test fail never hides their result on any OS (the job stays red).
       - run: node scripts/gen-keep-pass.mjs --check
         name: KEEP-PASS list is current
+        if: ${{ !cancelled() }}
       - run: node scripts/ci-gs4-lint.mjs
         name: GS4 lint (no e2e import of src, ledger verdicts)
+        if: ${{ !cancelled() }}
       - run: node build/check-readme.mjs
         name: README line cap (ADR-0015, README_MAX_LINES)
+        if: ${{ !cancelled() }}
       # GS5 repo-cleanup gate (impl/15 §2, DEVIATIONS D-M7-arch-3/4). The check-removed layer starts
       # at M7 (D-M6-arch-2), the same rule as scripts/gate.mjs LAYER_START.
       - run: node build/check-removed.mjs
         name: GS5 check-removed (from gate milestone M7, D-M6-arch-2)
-        if: env.GATE_MILESTONE == 'M7'
+        if: ${{ !cancelled() && env.GATE_MILESTONE == 'M7' }}
