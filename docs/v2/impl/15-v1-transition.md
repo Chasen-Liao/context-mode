@@ -246,3 +246,4 @@ None.
 
 - 2026-10-16 (DECISIONS-r9, S8): added §6 naming each v1 env var's v2 fate (E2 `CONTEXT_MODE_REQUIRE_SECURITY` kept as `REQUIRE_SECURITY_ENV`, E3 `CONTEXT_MODE_BASH_NUDGE_MIN_COMMAND_BYTES` ignored); renumbered old §6 Assumptions to §7 and fixed its one cross-reference.
 - 2026-10-19 (M7-S1): sign-off run recorded in TECH-SPEC §1.1. `check-removed.mjs` FAIL (22 paths), live T-CMP FAIL, R1/R2 PENDING owner. M7 stays open in `.impl/progress.json`.
+- 2026-10-19 (M7-S2): second-pass DEVIATION blocks copied into DEVIATIONS.md (T9-1/2, F5-1, CA-1, W3-1, CX-1/2, W4-1). `check-removed.mjs` exit 0 and the 6 `v1-migration-*` live cases PASS, so R3–R8 PASS; R1, R2 PENDING owner (D-M7-arch-5). TECH-SPEC §1.1 lists GS6 and GS11 FAIL; M7 stays open in `.impl/progress.json`.

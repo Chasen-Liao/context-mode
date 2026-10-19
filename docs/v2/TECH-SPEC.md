@@ -43,25 +43,25 @@ v2.0.0 is released only when **all** of these hold. Each one is checked by a mac
 | GS11 | Every implementation step has a green E2E case (ADR-0017) | CI + harness report |
 | GS8 | Every item in `tickets/v2-not-closed.md` has an outcome: decided, closed as covered, or closed as won't-fix | review |
 
-### 1.1 M7 sign-off status (2026-10-19, M7-S1)
+### 1.1 M7 sign-off status (2026-10-19, M7-S2)
 
-Measured on `origin/v2-design` 28784ef8 plus every `impl/M7-M7-*` branch merged (macOS, Node 24). `gate.mjs --milestone M7`: keep-pass, v2-unit, ci-checks, gp-cases, prompt-lint PASS; check-removed FAIL; live SKIP (after check-removed). `e2e/live/run.mjs --all` (Sonnet 5, effort low, $0.25 cap per call): 18/19 PASS.
+Measured on `origin/v2-design` d1accdd4 merged into `impl/M7-M7-S2` (macOS, Node 24). `gate.mjs --milestone M7`: every layer PASS (keep-pass 131/131, v2-unit 1059/1061 with 2 skips and 0 fail, ci-checks, gp-cases, prompt-lint, check-removed, live step mode 1/31). `e2e/live/run.mjs --all` (keyless, Sonnet 5, effort low, `--max-budget-usd 0.25` per call): 27/31 PASS, 4 FAIL (T-F1, ci-config, T-GS6, T-CMP). CI on `v2-design` d1accdd4 (run 39254594458): 6/6 jobs green.
 
 | ID | Status | Evidence |
 |---|---|---|
-| GS1 | PASS (macOS); Linux, Windows: CI | gp-cases layer, `e2e/cases/run.mjs --milestone M7` exit 0 |
-| GS2 | PENDING release | RC job, not part of M7 gate |
-| GS3 | PENDING release | live `g25-mcp-hooks` prints SKIPPED |
-| GS4 | PASS | keep-pass 131/131; `ci-gs4-lint.mjs` exit 0 |
-| GS5 | FAIL | prompt-lint PASS; `check-removed.mjs` lists 22 paths (v1 configs, `.pi/`, `start.mjs`, `package.json#openclaw`, retired names in `constants.ts`, `resolve.ts` comments) |
-| GS6 | PASS | GP3 bench in gp-cases |
-| GS7 | PASS | GP1 in gp-cases |
+| GS1 | PASS | gp-cases layer, `e2e/cases/run.mjs --milestone M7` exit 0 (macOS); CI run 39254594458 6/6 green (macOS, Linux, Windows; Node 24.15.0 and 26) |
+| GS2 | PENDING release | RC job, not part of the M7 gate |
+| GS3 | PENDING release | live `g25-mcp-hooks` PASS, prints SKIPPED (release job) |
+| GS4 | PASS | keep-pass 131/131; `ci-gs4-lint.mjs` exit 0; live `keep-pass-131` PASS |
+| GS5 | PASS | prompt-lint PASS (PR1-12, GS5, GS9); `check-removed.mjs` exit 0; live `repo-cleanup-gate`, `repo-github-files` PASS |
+| GS6 | FAIL | live `T-GS6`: Claude Code p95 46 ms > `HOOK_P95_MS` 40; command hooks (codex) wall p95 51 ms ≤ 60, CPU over Node 20 ms ≤ 20 PASS. Live `T-F1`: Case B 16384 B PostToolUse wall p95 291 ms > `HOOK_COMBINED_P95_MS` 60. GP3 bench in gp-cases PASS |
+| GS7 | PASS | GP1 in gp-cases; live `release-staging-smoke` PASS |
 | GS9 | PASS | GP1/GP2 in gp-cases; prompt-lint GS9 OK |
-| GS10 | R1, R2: PENDING owner (D-M7-arch-5); R3–R8: FAIL until check-removed is clean | gate check-removed layer |
-| GS11 | FAIL | live T-CMP FAIL twice: case expects first line `exit`, model replies in prose |
+| GS10 | R1, R2: PENDING owner (D-M7-arch-5); R3–R8: PASS | `check-removed.mjs` exit 0; live `v1-migration-{claude-code,codex,copilot-cli,gemini,kiro,vscode}` 6/6 PASS; R7 rollback rehearsal runs in `/release` (D-M7-arch-5) |
+| GS11 | FAIL | live `ci-config` FAIL: `e2e/checks/ci-config.mjs` asks `timeout-minutes: 10`, `ci.yml` has 20 (D-M7-CI-2). T-CMP: this run FAIL (exit 1, 50 sessions, about 55 min; `run.mjs` keeps only the first stderr line, so per-arm numbers of this run are not kept). Last recorded per-arm numbers (D-M7-CL-1: arm a correct 0.70 < 0.80, call rate 0/10 < 0.70; arm d 0.50 < 0.70) |
 | GS8 | not measured in this run | review |
 
-M7 is not done: GS5, GS10 (non-owner rows) and GS11 fail.
+M7 is not done: GS6 (T-GS6, T-F1) and GS11 (ci-config, T-CMP) fail; their owners are the hook (`src/hooks/`), `e2e/checks/ci-config.mjs` and compaction (`src/core/compaction/`) modules, not this task. R1, R2 stay PENDING owner.
 
 ## 2. Scope
 
@@ -579,3 +579,4 @@ R1–R8 of ADR-0017; the v1-migration live case set; final doc sign-off.
 - r7 (2026-10-16, `docs/v2/review/DECISIONS-r7.md`): §6.2 GP5 row adds golden recall@5 cases per query type (decision, errorfix, timeline); §9 adds open spikes O1 (earlier-error lookup) and O2 (file-by-topic lookup), both M2; §11 states the measured recall@5/MRR/p95 numbers for BM25+RRF versus v1 and drops MMR, which gave no gain.
 - r9 intern-question close (2026-10-16, role S1): §9 states which spikes gate M0 step 6 (`S-NODE`, `S-TIMEOUT`, `S-CODEX` only; `S-COPILOT`/`S-ZCODE`/`S-NAMES`/`S-SKILLS`/`G25` are M2/M3 and print `SKIPPED`, not `FAIL`, before then).
 - M7-S1 (2026-10-19): §1.1 added: GS1–GS11 status from `gate.mjs --milestone M7` and `e2e/live/run.mjs --all`. GS5/GS10 fail on `check-removed.mjs` (22 paths), GS11 fails on live T-CMP; R1, R2 PENDING owner (D-M7-arch-5). M7 not marked done.
+- M7-S2 (2026-10-19): §1.1 re-measured on d1accdd4. GS5 and GS10 R3–R8 now PASS (`check-removed.mjs` exit 0, 6/6 v1-migration cases); gate --milestone M7 all layers PASS; live --all 27/31 (4 FAIL). GS6 fails (T-GS6 Claude Code p95 46 ms, T-F1 291 ms), GS11 fails (ci-config timeout 10 vs 20, T-CMP). R1, R2 PENDING owner. M7 not marked done.
