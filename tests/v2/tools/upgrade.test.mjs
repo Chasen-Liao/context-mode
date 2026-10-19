@@ -163,6 +163,7 @@ test("[M5] upgrade/git-checkout rollback: a failed config write points current b
   const one = releaseRepo(home, "export const v = 1;\n");
   await runUpgrade({}, deps(home, "pi", { releaseUrl: one.url }));
   const two = releaseRepo(home, "export const v = 2;\n");
+  writeFileSync(path.join(home, ".pi", "agent", "settings.json"), "{}", "utf8"); // the run must write its entry again
   const write = () => { throw new Error("forced write failure"); };
   await assert.rejects(() => runUpgrade({}, deps(home, "pi", { releaseUrl: two.url, write })));
   assert.equal(readlinkSync(path.join(agentDir, "current")), one.sha);
