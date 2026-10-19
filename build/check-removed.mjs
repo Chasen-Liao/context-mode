@@ -12,7 +12,7 @@ import path from "node:path";
 // One entry per removed path. kind "file": exact path. kind "dir": every tracked path under it.
 // kind "glob": prefix + anything + suffix (impl/15 §2.3 "configs/**/*.json", ".mcp.json*.example").
 const REMOVED_PATHS = [
-  // impl/15 §2.3 (ADR-0015 "Largest items deleted"), at their tracked paths (D-M7-C1-1).
+  // impl/15 §2.3 (ADR-0015 "Largest items deleted"), at their tracked paths in the repo.
   { kind: "dir", path: "web/" },
   { kind: "file", path: "start.mjs" },
   { kind: "file", path: "bin/statusline.mjs" },

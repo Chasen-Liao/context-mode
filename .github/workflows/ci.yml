@@ -94,3 +94,8 @@ jobs:
         name: GS4 lint (no e2e import of src, ledger verdicts)
       - run: node build/check-readme.mjs
         name: README line cap (ADR-0015, README_MAX_LINES)
+      # GS5 repo-cleanup gate (impl/15 §2, DEVIATIONS D-M7-arch-3/4). The check-removed layer starts
+      # at M7 (D-M6-arch-2), the same rule as scripts/gate.mjs LAYER_START.
+      - run: node build/check-removed.mjs
+        name: GS5 check-removed (from gate milestone M7, D-M6-arch-2)
+        if: env.GATE_MILESTONE == 'M7'
