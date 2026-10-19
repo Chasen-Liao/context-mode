@@ -145,12 +145,16 @@ function hookParts(row: AdapterRow, home: string, env: NodeJS.ProcessEnv, worktr
   return [...(hooksBad ? [PART_HOOKS] : []), ...(timeoutBad ? [PART_TIMEOUT] : [])];
 }
 
-/** D3 — host config. FAIL names which of the 3 parts is wrong; fix "run ctx_upgrade". */
+/** D3 — host config. FAIL names which of the 3 parts is wrong; fix "run ctx_upgrade". Pi also names the
+ *  settings file it read (PI_CODING_AGENT_DIR, else ~/.pi/agent), never a legacy path (#1168 #1266, D-M7-G2-1). */
 export function checkHostConfig(row: AdapterRow, env: NodeJS.ProcessEnv, worktree: string): DoctorRow {
   const home = homeDirOf(env);
   if (home === null) return fail("D3", D3_DETAIL(D3_PARTS), DOCTOR_FIX_UPGRADE);
   const parts: D3Part[] = [...(mcpWrong(row, home, env) ? [PART_MCP] : []), ...hookParts(row, home, env, worktree)];
-  return parts.length === 0 ? pass("D3") : fail("D3", D3_DETAIL(parts), DOCTOR_FIX_UPGRADE);
+  const read = row.id === "pi" ? mcpFile(row, home, env) : null;
+  if (parts.length === 0) return read === null ? pass("D3") : { ...pass("D3"), detail: read };
+  const detail = D3_DETAIL(parts);
+  return fail("D3", read === null ? detail : detail + D4_REASON_JOIN + read, DOCTOR_FIX_UPGRADE);
 }
 
 /** D4 — v1 leftovers: every finding's reason in one row, joined "; ". */
