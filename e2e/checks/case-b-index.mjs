@@ -142,7 +142,9 @@ function fixture() {
   writeAgent(repo, "read-case-c", "Read"); // Case C: no Bash, no ctx tool
   const home = path.join(root, "home");
   mkdirSync(home, { recursive: true });
-  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  // claude-code's project source is CLAUDE_PROJECT_DIR (resolve.ts sourceOf), not argv cwd
+  // (resolveProject's catch-all fail-open is silent on a missing source, D-M1-T3-2).
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: repo };
   return { root, repo, env };
 }
 
