@@ -60,7 +60,7 @@ async function rescore(file) {
   });
   const main = rows.filter((r) => r.size !== "t4");
   const o = tally(main.map((r) => ({ ...r, underRouted: r.old.underRouted, overRouted: r.old.overRouted }))), n = tally(main);
-  for (const m of Object.keys(n)) console.log(m, "| old under", o[m].under, "over", o[m].over, "| new under", n[m].under, "over", n[m].over, "| correct", n[m].correct, "| undecidable", rows.filter((r) => r.model === m && r.undecidable).length);
+  for (const m of Object.keys(n)) console.log(m, "| old under", o[m].under, "over", o[m].over, "| new under", n[m].under, "over", n[m].over, "| correct", n[m].correct, "| undecidable", main.filter((r) => r.model === m && r.undecidable).length);
 }
 if (arg("--rescore", "")) { await rescore(arg("--rescore", "")); process.exit(0); }
 const tasks = buildTasks().filter((t) => !ONLY || ONLY.split(",").includes(t.id));
