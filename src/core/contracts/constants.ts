@@ -366,6 +366,82 @@ export const UPGRADE_HOST_AREA = "host update"; // impl/07 §6 step 4
 export const UPGRADE_REMOVED = "removed"; // impl/07 §6 step 6
 export const UPGRADE_DATA_KEPT = "user data kept (confirmDelete not set)"; // impl/07 uninstall step 4
 export const UPGRADE_DEFAULT_MODE = "upgrade"; // A-T4
+// ctx_upgrade change table and areas (impl/07 §6; DEVIATIONS D-M5-U1-1..4).
+export const UPGRADE_MODES = Object.freeze(["upgrade", "uninstall"] as const); // A-T4 zod enum
+export const UPGRADE_TABLE_HEADER = "| Area | Before | After |";
+export const UPGRADE_TABLE_RULE = "|---|---|---|";
+export const UPGRADE_PLUGIN_ROOT_AREA = "plugin root"; // step 0: resolvePluginRoot vs the running bundle dir
+export const UPGRADE_CHECKOUT_AREA = "plugin checkout"; // step 4 git checkout (pi, opencode)
+export const UPGRADE_SERVER_AREA = "server"; // uninstall step 1
+export const UPGRADE_SERVER_RUNNING = "running";
+export const UPGRADE_SERVER_STOPPED = "stopped after this reply";
+export const UPGRADE_CACHE_AREA = "cache"; // uninstall step 2
+export const UPGRADE_NOT_FOUND = "not found";
+export const UPGRADE_DATA_AREA = "user data"; // uninstall step 4
+export const UPGRADE_REPORT_ONLY = "report only: remove it by hand if you no longer use it"; // ADR-0011 report-not-remove rows
+export const UPGRADE_STOP_DELAY_MS = 200; // uninstall: SIGTERM to self (server entry only) after the reply is written
+export const UPGRADE_AREA_KEY_SEP = ": "; // area cell: <file>: <key path>
+export const V1_KEY_PATH_SEP = "."; // V1Finding.path / HostConfigEdit.path segment separator
+export const UPGRADE_GIT_TIMEOUT_MS = 120000; // git clone of the release branch
+export const GIT_CLONE_ARGS = Object.freeze(["clone", "--depth", "1", "--branch"] as const); // + RELEASE_BRANCH, url, dir
+export const GIT_HEAD_SHA_ARGS = Object.freeze(["rev-parse", "HEAD"] as const);
+export const UPGRADE_FETCH_DIR_PREFIX = ".fetch-"; // <DATA_ROOT>/plugins/<agent>/.fetch-<pid> before rename to <sha>
+export const SUMS_LINE_SEP = "  "; // SHA256SUMS line: "<hex>  <relative/path>" (impl/13 §4)
+export const SUMS_HASH_ALGORITHM = "sha256";
+export const UPGRADE_GIT_CHECKOUT_AGENTS: readonly AgentId[] = Object.freeze<AgentId[]>(["pi", "opencode"]); // impl/07 §6 step 4 "plugin" (git checkout)
+export const UPGRADE_HOST_MANUAL = "update with the host's own install command, then restart"; // no UPGRADE_HOST_COMMAND row (D-M5-U1-2)
+export const UPGRADE_CONFIG_AREA = "host config"; // uninstall step 3 when no own entry exists
+export const UPGRADE_OWN_ENTRY = "context-mode entry"; // uninstall step 3 "before" cell
+export const UPGRADE_CACHE_BY_HAND = "remove the release dir by hand: its place is your choice"; // config-entry installs (D-M5-U1-3)
+export const GIT_NO_PROMPT_ENV: Readonly<Record<string, string>> = Object.freeze({ GIT_TERMINAL_PROMPT: "0" }); // never wait on a credential prompt
+export const GIT_NOT_STARTED = "git did not start"; // FETCH_FAILED <code> when git is not on PATH
+export const GIT_BIN = "git";
+export const GIT_EXIT_LABEL = "git exit "; // FETCH_FAILED <code>: git exit <n>: <stderr>
+export const UPGRADE_TRASH_SUFFIX = ".ctx-upgrade-removing"; // a removed path is renamed here first, deleted on commit (rollback)
+export const TABLE_ROW_START = "| ";
+export const TABLE_CELL_SEP = " | ";
+export const TABLE_ROW_END = " |";
+export const TABLE_PIPE = "|";
+export const TABLE_PIPE_ESCAPED = "\\|";
+export const TOML_TABLE_OPEN = "[";
+export const TOML_TABLE_CLOSE = "]";
+// Wave-2 split files under src/core/ops/ (size rule; DEVIATIONS D-M5-U1-6). tools/doctor.ts and tools/upgrade.ts
+// stay thin handlers that call these.
+export const OPS_SPLIT_FILES = Object.freeze([
+  "doctor-env.ts", "doctor-config.ts", "doctor-hook.ts", "doctor-db.ts", "doctor-heal.ts",
+  "release-fetch.ts", "verify-sums.ts", "plugin-swap.ts", "host-write.ts", "v1-remove.ts", "uninstall.ts",
+] as const);
+// doctor-env.ts: D1 version, D2 Node and node:sqlite, D6 MCP (impl/07 §5).
+export const SQLITE_MODULE = "node:sqlite"; // D2: await import(SQLITE_MODULE)
+export const NODE_VERSION_PREFIX = "v"; // process.version "v24.15.0" -> compare "24.15.0" with NODE_MIN
+export const NODE_VERSION_SEP = "."; // major.minor.patch, compared as numbers
+export const LS_REMOTE_FIELD_SEP = "\t"; // git ls-remote line: "<sha>\t<ref>"
+export const GIT_SHA_HEX_LEN = 40; // a full commit sha
+export const DOCTOR_GIT_TIMEOUT_MS = 10000; // D1 git ls-remote; a timeout is "no network" (UNKNOWN)
+export const DOCTOR_PASS_DETAIL = "ok"; // detail of a PASS row with nothing more to say
+// doctor-config.ts: D3 host config, D4 v1 leftovers, D7 project (impl/07 §5).
+export const D3_PART_JOIN = ", ";
+export function D3_DETAIL(parts: readonly string[]): string { return `wrong: ${parts.join(D3_PART_JOIN)}`; }
+// doctor-hook.ts: D5 round trip, D5b double-fire (impl/07 §5).
+export const D5_SHAPE_DETAIL = "hook output is not the agent's native shape";
+export function D5_SLOW_DETAIL(ms: number): string { return `hook round trip took ${ms} ms, over ${HOOK_P95_MS} ms`; }
+export const D5_FIX = "run ctx_upgrade"; // a broken hook entry is a broken install
+// doctor-db.ts: D8 checks, D9 counts, D10 mode (impl/07 §5).
+export const PRAGMA_INTEGRITY_CHECK = "PRAGMA integrity_check";
+export function D10_DETAIL(mode: string): string { return `enforcement mode: ${mode}`; }
+// doctor-heal.ts: D8 heal (impl/07 §5 step 7). Order: main file, then WAL, then SHM.
+export const DB_SIBLING_SUFFIXES = Object.freeze(["", DB_WAL_SUFFIX, DB_SHM_SUFFIX] as const);
+export const HEAL_TMP_SUFFIX = ".heal"; // VACUUM INTO <context.db>.heal, then rename over context.db
+export const HEAL_TS_SEP = "."; // context.db.<ts>.bak
+// verify-sums.ts: SHA256SUMS (impl/07 §6 step 4b, impl/13 §4).
+export const SUMS_LINE_END = "\n";
+export const HASH_ENCODING = "hex";
+// plugin-swap.ts: atomic `current` swap (impl/07 §6 step 4c-4d).
+export const PLUGIN_LINK_TMP_SUFFIX = ".swap"; // symlink current.swap -> <sha>, then rename over current
+export const PLUGIN_LINK_TYPE = "dir"; // fs.symlink type ("junction" is not used: one path)
+// uninstall.ts: stop marker read by the owning server (impl/07 uninstall step 1, impl/02 §7).
+export const OWNER_STOP_EXT = ".stop"; // <projectDir>/owners/<serverId>.stop next to <serverId>.pid
+export const UPGRADE_DATA_DELETED = "user data deleted"; // uninstall step 4 with confirmDelete
 // ADR-0011 "Release steps" c): host update commands for host-managed agents. Copilot CLI: "test first" (no command yet).
 export const UPGRADE_HOST_COMMAND: Readonly<Partial<Record<AgentId, string>>> = Object.freeze({
   "claude-code": "claude plugin marketplace update context-mode && claude plugin update context-mode@context-mode",
@@ -406,6 +482,7 @@ export const VSCODE_MCP_FILE = "mcp.json";
 export const KIRO_AGENT_FILE = Object.freeze(["agents", "default.json"] as const);
 export const PI_AGENT_DIR = "agent";
 export const OPENCODE_CONFIG_FILES = Object.freeze(["opencode.jsonc", "opencode.json"] as const); // .jsonc wins (#849)
+export const OPENCODE_BASE_CONFIG_FILE = "opencode.json"; // ctx_upgrade reads this; readHostConfig picks a sibling .jsonc (#849)
 export const JSONC_EXT = ".jsonc";
 export const TOML_EXT = ".toml";
 export const MCP_SERVERS_KEY = "mcpServers";
@@ -445,6 +522,9 @@ export const V1_REASON = Object.freeze({
   dataRoot: "v1 content under ~/.context-mode/",
   tmpFile: "v1 temp file context-mode-* under the OS temp dir",
 } as const);
+// ADR-0011 "reported with a fix, not removed" rows, Gemini data "only after a prompt" (a tool cannot prompt), and
+// tmp context-mode-* (a live v1 server may own them): report only (D-M5-U1-4, D-M5-U1-5).
+export const UPGRADE_REPORT_ONLY_REASONS: readonly string[] = Object.freeze<string[]>([V1_REASON.statusLine, V1_REASON.vscodeMcp, V1_REASON.dataDirShared, V1_REASON.tmpFile]);
 
 // Pi / OpenCode in-process entries (impl/12 §3.1 A21, §4.1 A28, §4.4 step 1).
 export const PLUGIN_ID = SERVER_KEY;

@@ -472,3 +472,22 @@ test("[M5] types.ts declares host-config and tool input types", () => {
     "export interface CtxDoctorInput {}",
   ]) assert.ok(src.includes(s), s);
 });
+
+// M5-U1 (impl/07 §5-§6; DEVIATIONS D-M5-U1-1..6): constants for the wave-2 ops split files.
+test("[M5] wave-2 doctor and upgrade split-file constants (D-M5-U1-6)", () => {
+  assert.equal(C.SQLITE_MODULE, "node:sqlite");
+  assert.equal(C.NODE_VERSION_PREFIX, "v");
+  assert.equal(C.LS_REMOTE_FIELD_SEP, "\t");
+  assert.equal(C.GIT_SHA_HEX_LEN, 40);
+  assert.equal(C.D3_DETAIL(["MCP entry", "hook timeout"]), "wrong: MCP entry, hook timeout");
+  assert.equal(C.D5_SLOW_DETAIL(55), `hook round trip took 55 ms, over ${C.HOOK_P95_MS} ms`);
+  assert.equal(C.D10_DETAIL("deny-reason"), "enforcement mode: deny-reason");
+  assert.equal(C.PRAGMA_INTEGRITY_CHECK, "PRAGMA integrity_check");
+  assert.deepEqual(C.DB_SIBLING_SUFFIXES, ["", "-wal", "-shm"]);
+  assert.equal(C.D8_HEALED_RECREATE_DETAIL("1"), `healed by recreate — old data kept at context.db.1${C.HEAL_BACKUP_SUFFIX}`);
+  assert.equal(C.SUMS_LINE_END, "\n");
+  assert.equal(C.HASH_ENCODING, "hex");
+  assert.equal(C.OWNER_STOP_EXT, ".stop");
+  assert.equal(C.UPGRADE_DATA_DELETED, "user data deleted");
+  assert.deepEqual([...C.OPS_SPLIT_FILES].sort(), ["doctor-config.ts", "doctor-db.ts", "doctor-env.ts", "doctor-heal.ts", "doctor-hook.ts", "host-write.ts", "plugin-swap.ts", "release-fetch.ts", "uninstall.ts", "v1-remove.ts", "verify-sums.ts"]);
+});
