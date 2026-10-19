@@ -154,3 +154,21 @@ test("[M5] GP11/uninstall-stops-server: ctx_upgrade mode uninstall replies, then
     assert.deepEqual(existsSync(owners) ? readdirSync(owners) : [], []);
   }
 });
+
+// ADR-0014 §2, impl/13 §6 E2E proof, DEVIATIONS D-M6-arch-6 / D-M6-I2-1: the intake check's ALLOWED_KEYS
+// equal the keys of a real ctx_doctor report (check rows + env lines), and that report passes the check.
+test("[M6] GP11/issue-intake-allowed-keys: issue-intake.mjs ALLOWED_KEYS equal the ctx_doctor report keys", async (t) => {
+  const intake = await import(path.join(path.resolve(__dirname, "..", ".."), ".github", "scripts", "issue-intake.mjs"));
+  const { home, repo } = fixture(t);
+  const c = spawnBundle(SERVER_BUNDLE, { ...process.env, NODE_ENV: "test", HOME: home, USERPROFILE: home, TMPDIR: home, CLAUDE_PROJECT_DIR: repo });
+  t.after(() => c.kill());
+  await c.request("initialize", INIT);
+  const report = text(await call(c, "ctx_doctor", {}));
+  await c.close();
+  const { keys, bad } = intake.reportKeys(report.split("\n"));
+  assert.deepEqual(bad, []);
+  assert.deepEqual([...new Set(keys)].sort(), [...intake.ALLOWED_KEYS].sort());
+  const body = ["### Summary", "x", "", "### ctx-report", "```text", report, "```", "", "### What happened", "x", "",
+    "### Expected", "x", "", "### Steps", "1. x", "", "### Environment", "node: x"].join("\n");
+  assert.deepEqual(intake.check(body).findings, []);
+});

@@ -1,42 +1,38 @@
 // .github/scripts/issue-intake.mjs
-// Parses an issue body by heading, not by regex. Checks the required
-// headings, the ctx-report keys, and recomputes the digest. Prints a
-// structured JSON result for issue-intake-act.mjs to act on.
-import { createHash } from "node:crypto";
+// Parses an issue body by heading and by line prefix, not by regex (owner rule). Checks the
+// required headings, the ctx_doctor report keys, and scans free text for secret prefixes.
+// Prints a structured JSON result for issue-intake-act.mjs to act on.
+// ADR-0014 §2/§3/§5, docs/v2/review/agent-issue-intake/VALIDATION.md, DEVIATIONS D-M6-arch-6, D-M6-I2-1.
+import { pathToFileURL } from "node:url";
 
-const REQUIRED_HEADINGS = [
-  "Summary",
-  "ctx-report",
-  "What happened",
-  "Expected",
-  "Steps",
-  "Environment",
-];
+export const REQUIRED_HEADINGS = ["Summary", "ctx-report", "What happened", "Expected", "Steps", "Environment"];
 
-const ALLOWED_KEYS = new Set([
-  "ctx-report", "version", "commit", "latest_release", "agent",
-  "install_mode", "os", "node", "node_sqlite", "fts5", "mcp_protocol",
-  "enforcement_mode", "config_diff_count", "v1_leftover_count",
-  "v1_leftover_1", "v1_leftover_2", "v1_leftover_3", "v1_leftover_4",
-  "v1_leftover_5", "v1_leftover_6", "v1_leftover_7", "v1_leftover_8",
-  "project_source", "has_space", "non_ascii", "max_len", "db_integrity",
-  "live_busy_probe", "index_count", "hook_rt_median_ms", "hook_rt_max_ms",
-  "hook_error_1", "hook_error_2", "hook_error_3", "hook_error_4",
-  "hook_error_5", "hook_error_rest", "deny_7d_total", "deny_7d_followed",
-  "deny_7d_alt_failed", "deny_7d_abandoned",
-  "check_d1", "check_d2", "check_d3", "check_d4", "check_d5", "check_d6",
-  "check_d7", "check_d8", "check_d9", "check_d10", "digest",
-]);
+// Mirror of the ctx_doctor report (src/core/ops/report.ts, src/core/contracts/constants.ts):
+// REPORT_HEADER, REPORT_HEADER_RULE, DOCTOR_CHECK_ORDER, REPORT_ENV_PREFIX + REPORT_ENV_ENUMS keys,
+// REPORT_TRUNCATED_LINE prefix. GP11/issue-intake-allowed-keys fails when the two sides differ.
+export const REPORT_HEADER = "| Check | Status | Detail | Fix |";
+export const REPORT_HEADER_RULE = "|---|---|---|---|";
+export const CHECK_KEYS = ["D1", "D2", "D3", "D4", "D5", "D5b", "D6", "D7", "D8", "D9", "D10"];
+export const ENV_KEYS = ["env.NODE_ENV"];
+export const ALLOWED_KEYS = new Set([...CHECK_KEYS, ...ENV_KEYS]);
+const TRUNCATED_PREFIX = "(report truncated at ";
+const ROW_PREFIX = "| ";
+const ENV_PREFIX = "env.";
+const FENCE = "```";
+
+// ADR-0014 §3: substring scan of free text; a match is flagged in the comment, never blocks.
+const SECRET_MARKERS = ["github_pat_", "sk-", "TOKEN="];
+const PATH_MARKERS = ["/Users/", "/home/", "C:\\"];
+const SCANNED = ["Summary", "What happened", "Steps"];
 
 function splitHeadings(body) {
-  const lines = body.replace(/\r\n/g, "\n").split("\n");
   const sections = {};
+  const order = [];
   let current = null;
-  let order = [];
-  for (const line of lines) {
-    const m = line.match(/^### (.+)$/);
-    if (m) {
-      current = m[1].trim();
+  for (const raw of body.split("\n")) {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    if (line.startsWith("### ")) {
+      current = line.slice(4).trim();
       order.push(current);
       sections[current] = [];
       continue;
@@ -46,60 +42,72 @@ function splitHeadings(body) {
   return { sections, order };
 }
 
-function extractReportBlock(lines) {
-  const start = lines.findIndex((l) => l.trim() === "ctx-report: 1");
-  if (start === -1) return null;
-  const rest = lines.slice(start);
-  const digestIdx = rest.findIndex((l) => l.trim().startsWith("digest:"));
-  if (digestIdx === -1) return null;
-  const body = rest.slice(0, digestIdx);
-  const digestLine = rest[digestIdx].trim();
-  const digest = digestLine.slice("digest:".length).trim();
-  return { bodyLines: body, digest };
+// One report line -> its key, or null when the line carries no key (header, rule, truncation).
+// A line that is none of these returns undefined: it was not written by ctx_doctor.
+export function lineKey(line) {
+  if (line === REPORT_HEADER || line === REPORT_HEADER_RULE || line.startsWith(TRUNCATED_PREFIX)) return null;
+  if (line.startsWith(ROW_PREFIX)) {
+    const cell = line.slice(ROW_PREFIX.length);
+    const end = cell.indexOf(" ");
+    return end === -1 ? cell : cell.slice(0, end);
+  }
+  if (line.startsWith(ENV_PREFIX)) {
+    const end = line.indexOf(": ");
+    return end === -1 ? line : line.slice(0, end);
+  }
+  return undefined;
 }
 
-function check(body) {
+// Keys of a pasted report, in order; `bad` holds lines that are not report lines.
+export function reportKeys(lines) {
+  const keys = [];
+  const bad = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith(FENCE)) continue;
+    const key = lineKey(line);
+    if (key === undefined) bad.push(line);
+    else if (key !== null) keys.push(key);
+  }
+  return { keys, bad };
+}
+
+export function check(body) {
   const findings = [];
+  const warnings = [];
   const { sections, order } = splitHeadings(body);
 
   const missing = REQUIRED_HEADINGS.filter((h) => !(h in sections));
   if (missing.length) findings.push({ code: "missing-heading", headings: missing });
-
   const presentRequired = order.filter((h) => REQUIRED_HEADINGS.includes(h));
   const inOrder = REQUIRED_HEADINGS.filter((h) => presentRequired.includes(h));
-  if (JSON.stringify(presentRequired) !== JSON.stringify(inOrder)) {
-    findings.push({ code: "heading-order" });
+  if (presentRequired.join("\n") !== inOrder.join("\n")) findings.push({ code: "heading-order" });
+
+  for (const name of SCANNED) {
+    const text = (sections[name] || []).join("\n");
+    for (const m of [...SECRET_MARKERS, ...PATH_MARKERS]) if (text.includes(m)) warnings.push({ section: name, marker: m });
   }
+
+  // VALIDATION.md item 5: a Steps line that names a denied tool also names the alternative (substring check).
+  const steps = (sections["Steps"] || []).filter((l) => l.includes("denied") && !l.includes("alternative"));
+  if (steps.length) findings.push({ code: "steps-deny-no-alt", count: steps.length });
 
   const reportLines = sections["ctx-report"] || [];
-  const report = extractReportBlock(reportLines);
-  if (!report) {
+  if (!reportLines.some((l) => l.trim() === REPORT_HEADER)) {
     findings.push({ code: "no-report" });
-    return { ok: false, findings, hasReport: false };
+    return { ok: false, findings, warnings, hasReport: false };
   }
+  const { keys, bad } = reportKeys(reportLines);
+  if (bad.length) findings.push({ code: "foreign-line", count: bad.length });
+  const unknown = keys.filter((k) => !ALLOWED_KEYS.has(k));
+  if (unknown.length) findings.push({ code: "unknown-key", keys: unknown });
+  const absent = CHECK_KEYS.filter((k) => !keys.includes(k));
+  const truncated = reportLines.some((l) => l.trim().startsWith(TRUNCATED_PREFIX));
+  if (absent.length && !truncated) findings.push({ code: "missing-key", keys: absent });
 
-  const badKeys = [];
-  for (const line of report.bodyLines) {
-    const t = line.trim();
-    if (!t || t.startsWith("```")) continue;
-    const idx = t.indexOf(":");
-    if (idx === -1) continue;
-    const key = t.slice(0, idx).trim();
-    if (!ALLOWED_KEYS.has(key)) badKeys.push(key);
-  }
-  if (badKeys.length) findings.push({ code: "unknown-key", keys: badKeys });
-
-  const digestInput = report.bodyLines
-    .filter((l) => l.trim() && !l.trim().startsWith("```"))
-    .join("\n");
-  const computed = createHash("sha256").update(digestInput, "utf8").digest("hex");
-  if (computed !== report.digest) {
-    findings.push({ code: "bad-digest", expected: computed, got: report.digest });
-  }
-
-  return { ok: findings.length === 0, findings, hasReport: true };
+  return { ok: findings.length === 0, findings, warnings, hasReport: true };
 }
 
-const body = process.env.BODY || "";
-const result = check(body);
-process.stdout.write(JSON.stringify(result));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.stdout.write(JSON.stringify(check(process.env.BODY || "")));
+}
