@@ -108,9 +108,10 @@ test("[M4] SessionStart(compact) on codex with an empty journal: the empty state
   assert.ok(text !== null && isStateBlock(text), String(text));
 });
 
-test("[M4] SessionStart(compact) on claude-code (host) stays the pointer line only", async () => {
+test("[M4] SessionStart(compact) on claude-code (none, D-M7-CL-1) delivers the state block, not the pointer", async () => {
   const text = context(await handleHook("claude-code", payload(sid(), { hook_event_name: "SessionStart", source: "compact" }), env));
-  assert.equal(text, COMPACT_POINTER_LINE);
+  assert.ok(text !== null && isStateBlock(text), String(text));
+  assert.notEqual(text, COMPACT_POINTER_LINE);
 });
 
 test("[M4] GP6/compact-summary-none: gemini PreCompress then BeforeAgent delivers the block once", async () => {

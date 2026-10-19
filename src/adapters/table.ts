@@ -29,7 +29,7 @@ export const ADAPTERS: readonly AdapterRow[] = Object.freeze([
   {
     id: "claude-code", installMode: "marketplace", projectSource: "env:CLAUDE_PROJECT_DIR", toolNamePrefix: claudeCode.TOOL_NAME_PREFIX,
     nativeTools: CLAUDE_TOOLS, execReadOnlyHint: false, eventMap: CLAUDE_EVENTS,
-    compactDelivery: "sessionstart", compactSummary: "host", hookTimeoutMs: HOOK_TIMEOUT_MS, denyChannel: "deny-reason",
+    compactDelivery: "sessionstart", compactSummary: "none", hookTimeoutMs: HOOK_TIMEOUT_MS, denyChannel: "deny-reason",
     decode: claudeCode.decode, encode: claudeCode.encode,
   },
   {

@@ -153,6 +153,35 @@ test("findRuntime on Windows tries PATHEXT entries for a name with no extension"
   }
 });
 
+test("[M7] GP4/windows-pathext-beats-shim (unit): a PATHEXT hit wins over an extensionless shim in the same PATH walk (D-M7-W2-1)", async () => {
+  if (process.platform === "win32") return;
+  // MSYS2 puts an extensionless `git` (a binary sh cannot run: exit 126) before Git's git.exe.
+  const shimDir = tmpBin({ git: SHIM });
+  const exeDir = tmpBin({ "git.EXE": "" });
+  try {
+    const found = await asWindows({ PATH: shimDir + ":" + exeDir, PATHEXT }, () => findRuntime("git"));
+    assert.equal(found, join(exeDir, "git.EXE"));
+    const onlyShim = await asWindows({ PATH: shimDir, PATHEXT }, () => findRuntime("git"));
+    assert.equal(onlyShim, join(shimDir, "git"));
+  } finally {
+    rmSync(shimDir, { recursive: true, force: true });
+    rmSync(exeDir, { recursive: true, force: true });
+  }
+});
+
+test("[M7] findRuntime reads PATH from the env it is given, not only process.env (D-M7-W2-1)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cm-w2-env-"));
+  const bin = join(dir, "only-here");
+  writeFileSync(bin, "#!/bin/sh\nexit 0\n");
+  chmodSync(bin, 0o755);
+  try {
+    assert.equal(findRuntime("only-here"), null);
+    assert.equal(findRuntime("only-here", { PATH: dir, PATHEXT: process.env.PATHEXT }), bin);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("[M2] GP4/windows-shim-interpreter (unit): runProcess runs a Windows shim through sh found on PATH", async () => {
   if (process.platform === "win32") return;
   const dir = tmpBin({ python: SHIM });

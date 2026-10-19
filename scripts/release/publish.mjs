@@ -109,6 +109,9 @@ function stage({ version, sourceCommit, remote }) {
     rmSync(hold, { recursive: true, force: true });
   }
 
+  // Empty the index first so `add -A` hashes every file: a same-size file copied in within the
+  // index's timestamp granularity (Windows) would otherwise keep the old blob (M7-W5).
+  git("read-tree", "--empty");
   git("add", "-A");
   git("commit", "--quiet", "--allow-empty", "-m", `release ${tag}`, "-m", `${SOURCE_COMMIT_TRAILER}: ${sourceCommit}`);
   git("tag", "-a", tag, "-m", tag, "--no-sign");

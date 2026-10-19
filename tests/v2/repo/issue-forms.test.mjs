@@ -3,11 +3,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { AGENT_IDS } from "../../../src/core/contracts/agents.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const { check } = await import(path.join(REPO, "e2e", "checks", "repo-github-files.mjs"));
+const { check } = await import(pathToFileURL(path.join(REPO, "e2e", "checks", "repo-github-files.mjs")).href);
 
 test("issue forms, removed files and no pull_request trigger match 13-build-release §6", () => {
   const r = check();

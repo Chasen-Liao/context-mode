@@ -6,7 +6,7 @@ name: ci
 
 on:
   push:
-    branches: [main, v2, v2-design]
+    branches: [main, v2, v2-design, "impl/**"]
   workflow_call:
 
 permissions:
@@ -16,7 +16,7 @@ jobs:
   ci:
     name: ci (${{ matrix.os }}, node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -70,6 +70,11 @@ jobs:
           JS
       - run: node build/build.mjs --out release-out
         name: build (esbuild, no package.json in output)
+      # T-F5 (DECISIONS-r9 F5, impl/03 section 4): grandchild kill, Windows only. Runs right after the build,
+      # so a red later step never hides the T-F5 result.
+      - run: node e2e/checks/windows-grandchild-kill.mjs
+        name: T-F5 Windows grandchild kill (0 alive after KILL_GRACE_MS)
+        if: runner.os == 'Windows'
       - run: node docs/v2/prompt/lint.mjs --out release-out
         name: prompt lint, bundle mode (impl/13 §7; gate layer prompt-lint from M2, D-M0-1)
       - run: node e2e/cases/run.mjs --milestone "$GATE_MILESTONE"
@@ -88,14 +93,19 @@ jobs:
         name: src/prompt/_generated.ts for v2 unit tests (D-M2-arch-6)
       - run: node --test "tests/v2/**/*.test.mjs"
         name: v2 unit tests (TECH-SPEC 6.2a, DEVIATIONS D-M1-13, same as gate layer v2-unit)
+      # The repo checks below do not depend on the test steps above. `!cancelled()` runs them after a
+      # red test step too, so a test fail never hides their result on any OS (the job stays red).
       - run: node scripts/gen-keep-pass.mjs --check
         name: KEEP-PASS list is current
+        if: ${{ !cancelled() }}
       - run: node scripts/ci-gs4-lint.mjs
         name: GS4 lint (no e2e import of src, ledger verdicts)
+        if: ${{ !cancelled() }}
       - run: node build/check-readme.mjs
         name: README line cap (ADR-0015, README_MAX_LINES)
+        if: ${{ !cancelled() }}
       # GS5 repo-cleanup gate (impl/15 §2, DEVIATIONS D-M7-arch-3/4). The check-removed layer starts
       # at M7 (D-M6-arch-2), the same rule as scripts/gate.mjs LAYER_START.
       - run: node build/check-removed.mjs
         name: GS5 check-removed (from gate milestone M7, D-M6-arch-2)
-        if: env.GATE_MILESTONE == 'M7'
+        if: ${{ !cancelled() && env.GATE_MILESTONE == 'M7' }}

@@ -20,9 +20,9 @@ const BR = 'v2-design'
 const CLAUDE = '/opt/homebrew/Caskroom/claude-code@latest/2.1.283/claude'
 const OPH = { model: 'claude-opus-5-5', effort: 'high' }
 const OPM = { model: 'claude-opus-5-5', effort: 'medium' }
-const SNM = { model: 'claude-sonnet-5', effort: 'medium' }
-const SNL = { model: 'claude-sonnet-5', effort: 'low' }
-const HK = { model: 'claude-haiku-4-5-20251001', effort: 'low' }
+const SNM = { model: 'claude-sonnet-5-5', effort: 'medium' }
+const SNL = { model: 'claude-sonnet-5-5', effort: 'low' }
+const HK = { model: 'claude-haiku-5-5', effort: 'low' }
 const MS = ['M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7']
 
 const BASE = `You work on the implementation of context-mode v2, an MCP server + hooks that keeps large tool output out of AI coding agents' context.

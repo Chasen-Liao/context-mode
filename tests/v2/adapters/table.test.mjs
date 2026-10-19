@@ -18,8 +18,9 @@ import * as pi from "../../../src/adapters/pi.ts";
 import * as opencode from "../../../src/adapters/opencode.ts";
 
 // impl/10 §1.3 main table: installMode, projectSource, toolNamePrefix, compactDelivery, compactSummary, hookTimeoutMs, denyChannel.
+// claude-code compactSummary "none": T-CMP arm (a) failed live (DECISIONS-r9 V9, impl/10 §1.3 note, D-M7-CL-1).
 const MAIN = {
-  "claude-code": ["marketplace", "env:CLAUDE_PROJECT_DIR", "mcp__plugin_context-mode_context-mode__", "sessionstart", "host", 5000, "deny-reason"],
+  "claude-code": ["marketplace", "env:CLAUDE_PROJECT_DIR", "mcp__plugin_context-mode_context-mode__", "sessionstart", "none", 5000, "deny-reason"],
   codex: ["config-mcp", "arg:--agent+cwd", "mcp__context_mode__", "sessionstart", "none", 5000, "deny-reason"],
   gemini: ["extension", "spawn-cwd", "mcp_context-mode_", "pending-flag", "none", 5000, "deny-reason"],
   qwen: ["extension", "spawn-cwd", "mcp__context-mode__", "sessionstart", "none", 5000, "deny-reason"],

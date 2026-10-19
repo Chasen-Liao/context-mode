@@ -30,7 +30,8 @@ function codexInstall(home, opts = {}) {
     hooks[native] = [group];
   }
   put(path.join(home, ".codex", "hooks.json"), { hooks });
-  const serverArgs = `["${path.join(path.dirname(process.argv[1] ?? ""), "server.mjs")}", "--agent", "codex"]`;
+  // JSON string escapes are TOML basic-string escapes: a Windows path keeps its backslashes (D-M3-F-9 rule).
+  const serverArgs = JSON.stringify([path.join(path.dirname(process.argv[1] ?? ""), "server.mjs"), "--agent", "codex"]);
   put(path.join(home, ".codex", "config.toml"), `model = "o1"\n${opts.features ?? ""}\n[mcp_servers.context-mode]\ncommand = "node"\nargs = ${serverArgs}\n`);
   return row;
 }

@@ -29,6 +29,11 @@ function main() {
     return fail("ci.yml push.branches must include v2-design");
   }
 
+  if (!pushText.includes("impl/**")) return fail("ci.yml push.branches must include impl/**");
+  if (!/runner\.os == 'Windows'[\s\S]{0,200}windows-grandchild-kill|windows-grandchild-kill[\s\S]{0,200}runner\.os == 'Windows'/.test(src)) {
+    return fail("ci.yml needs a windows-only T-F5 step");
+  }
+
   if (!/os:\s*\[[^\]]*macos-latest[^\]]*\]/.test(src) ||
       !/os:\s*\[[^\]]*ubuntu-latest[^\]]*\]/.test(src) ||
       !/os:\s*\[[^\]]*windows-latest[^\]]*\]/.test(src)) {

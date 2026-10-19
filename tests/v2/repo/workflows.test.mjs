@@ -49,3 +49,20 @@ test("weekly.yml: no secrets other than GITHUB_TOKEN, no npx, no publish", () =>
   assert.ok(!y.includes("npx "));
   assert.ok(!y.includes("npm publish"));
 });
+
+test("ci.yml: push branches include v2-design and impl/**, no pull_request (ADR-0014 5)", () => {
+  const y = read(".github/workflows/ci.yml");
+  const l = lines(y);
+  const b = l.find((x) => x.startsWith("branches: ["));
+  assert.ok(b && b.includes("v2-design") && b.includes('"impl/**"'), b);
+  assert.ok(!l.some((x) => x.startsWith("pull_request")));
+});
+
+test("ci.yml: windows-only T-F5 step runs the check (DECISIONS-r9 F5)", () => {
+  const l = lines(read(".github/workflows/ci.yml"));
+  const i = l.indexOf("- run: node e2e/checks/windows-grandchild-kill.mjs");
+  assert.ok(i > 0);
+  const step = l.slice(Math.max(0, i - 4), i + 4).join("\n");
+  assert.ok(step.includes("if: runner.os == 'Windows'"), step);
+  assert.ok(step.includes("T-F5"), step);
+});
