@@ -77,3 +77,85 @@ test("[M6] workflows/traffic: commit step commits a new or changed file and noth
   assert.equal(step(), "3", "changed file: committed and pushed");
   assert.equal(git(remote, "log", "-1", "--format=%s", "main"), "traffic: weekly update");
 });
+
+// ---- release.yml (impl/13 §9, A10, ADR-0013; DEVIATIONS D-M6-arch-3, D-M6-arch-5, D-M6-Y1-1..5) ----
+const RELEASE = readFileSync(path.join(REPO, ".github", "workflows", "release.yml"), "utf8");
+const rl = RELEASE.split("\n");
+
+// jobs: { name: string[] (its lines) }, from the 2-space keys under `jobs:`.
+function jobs() {
+  const out = {};
+  let cur = null;
+  for (const l of rl.slice(rl.indexOf("jobs:") + 1)) {
+    if (l.startsWith("  ") && !l.startsWith("   ") && l.trim().endsWith(":")) { cur = l.trim().slice(0, -1); out[cur] = []; }
+    else if (cur) out[cur].push(l);
+  }
+  return out;
+}
+const J = jobs();
+const has = (job, line) => J[job].includes(line);
+
+test("[M6] workflows/release: workflow_dispatch only, inputs sha and mode, concurrency release no cancel", () => {
+  for (const want of [
+    "name: release", "on:", "  workflow_dispatch:", "      sha:", "        type: string",
+    "      mode:", "        type: choice", "        options: [release, rollback]", "        default: release",
+    "concurrency:", "  group: release", "  cancel-in-progress: false",
+  ]) assert.ok(rl.includes(want), `release.yml lacks line ${JSON.stringify(want)}`);
+  const on = rl.slice(rl.indexOf("on:") + 1, rl.indexOf("concurrency:"));
+  assert.deepEqual(on.filter((l) => l.startsWith("  ") && !l.startsWith("   ")), ["  workflow_dispatch:"], "one trigger");
+});
+
+test("[M6] workflows/release: jobs and needs form ci -> plan -> build -> publish-stage -> smoke -> publish-promote, rollback after ci", () => {
+  assert.deepEqual(Object.keys(J), ["ci", "plan", "build", "publish-stage", "smoke", "publish-promote", "rollback"]);
+  assert.ok(has("ci", "    uses: ./.github/workflows/ci.yml"), "ci reuses ci.yml (A10)");
+  const needs = Object.fromEntries(Object.entries(J).map(([k, v]) => [k, (v.find((l) => l.startsWith("    needs: ")) ?? "").slice(11)]));
+  assert.deepEqual(needs, { ci: "", plan: "ci", build: "plan", "publish-stage": "[plan, build]", smoke: "[plan, publish-stage]",
+    "publish-promote": "[plan, smoke]", rollback: "ci" });
+  assert.ok(has("plan", "    if: ${{ inputs.mode != 'rollback' }}"));
+  assert.ok(has("publish-promote", "    if: ${{ inputs.mode != 'rollback' }}"));
+  assert.ok(has("rollback", "    if: ${{ inputs.mode == 'rollback' }}"));
+  const ci = readFileSync(path.join(REPO, ".github", "workflows", "ci.yml"), "utf8").split("\n");
+  assert.ok(ci.includes("  workflow_call:"), "ci.yml declares workflow_call (A10)");
+});
+
+test("[M6] workflows/release: build runs build.mjs --sha --version, prompt lint, claude plugin validate, attest, upload", () => {
+  const order = [
+    "        run: node build/build.mjs --out release-out --sha \"$SHA\" --version \"$VERSION\"",
+    "      - run: node docs/v2/prompt/lint.mjs --out release-out",
+    "      - run: claude plugin validate release-out",
+    "      - uses: actions/attest-build-provenance@v1",
+    "      - uses: actions/upload-artifact@v4",
+  ].map((l) => J.build.indexOf(l));
+  assert.ok(order.every((i) => i >= 0), `build job lacks a step: ${order}`);
+  assert.deepEqual([...order].sort((a, b) => a - b), order, "build step order");
+  for (const p of ["      id-token: write", "      attestations: write"]) assert.ok(has("build", p), p);
+  assert.ok(RELEASE.includes('CLAUDE_CODE_NPM: "@anthropic-ai/claude-code@'), "Claude Code from @anthropic-ai/claude-code, not npm `claude` (ADR-0013)");
+});
+
+test("[M6] workflows/release: stage writes only release-staging; promote is the only release writer; rollback uses rollback.mjs", () => {
+  assert.ok(has("publish-stage", '        run: node scripts/release/publish.mjs --stage --version "$VERSION" --source-commit "$SHA"'));
+  assert.ok(has("publish-promote", '        run: node scripts/release/publish.mjs --promote --version "$VERSION" --notes "$NOTES"'));
+  assert.ok(has("rollback", '        run: node scripts/release/rollback.mjs --sha "$SHA"'));
+  for (const [k, v] of Object.entries(J)) {
+    if (k !== "publish-promote") assert.ok(!v.join("\n").includes("--promote"), `${k} must not promote`);
+  }
+});
+
+test("[M6] workflows/release: smoke matrix 3 OS; claude-code and codex hard, gemini continue-on-error", () => {
+  assert.ok(has("smoke", "        os: [macos-latest, ubuntu-latest, windows-latest]"));
+  for (const a of ["claude-code", "codex", "gemini"]) {
+    const i = J.smoke.indexOf(`      - run: node scripts/release/smoke.mjs --ref release-staging --agent ${a}`);
+    assert.ok(i >= 0, `smoke step for ${a}`);
+    const coe = (J.smoke[i + 1] ?? "").trim().startsWith("continue-on-error: true");
+    assert.equal(coe, a === "gemini", `${a} continue-on-error`);
+  }
+});
+
+test("[M6] workflows/release: no input or output expression inside run text; no secrets; no npm publish", () => {
+  for (const l of rl) {
+    const t = l.trim();
+    if (t.startsWith("run:") || t.startsWith("- run:")) assert.ok(!t.includes("${{"), `expression in run: ${t}`);
+  }
+  assert.ok(!RELEASE.includes("secrets."), "no secrets (github.token only)");
+  assert.ok(!RELEASE.includes("npm publish") && !RELEASE.includes("npm deprecate"));
+});
