@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { detectV1 } from "../../../src/core/ops/detect-v1.ts";
+import { UPGRADE_REPORT_ONLY_REASONS } from "../../../src/core/contracts/constants.ts";
 
 function tmp(t) {
   const dir = mkdtempSync(path.join(tmpdir(), "cm-detect-v1-kiro-"));
@@ -37,7 +38,9 @@ test("[M7] detect-v1-kiro/flags-steering-doc-report-only-never-deleted (A37)", (
   const findings = detectV1("kiro", home, { tmp: tmp(t) });
   const flagged = findings.find((f) => f.file === steering);
   assert.ok(flagged, "must flag .kiro/steering/KIRO.md for manual review");
-  assert.equal(flagged.reportOnly, true, "the steering-doc finding must be report-only, never auto-deleted");
+  // impl/07 §3: V1Finding is {file, path, reason}; report-only is the reason being in UPGRADE_REPORT_ONLY_REASONS
+  // (removeV1 leaves those files untouched). DEVIATION in the M7-K1 commit body.
+  assert.ok(UPGRADE_REPORT_ONLY_REASONS.includes(flagged.reason), "the steering-doc finding must be report-only, never auto-deleted");
 });
 
 test("[M7] detect-v1-kiro/no-finding-when-name-does-not-match-context-mode (A37)", (t) => {

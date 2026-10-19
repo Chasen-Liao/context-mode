@@ -171,7 +171,7 @@ export const DENY_RUN_HERE_LINE = "Run it here instead; the full output is index
 export const DENY_TOOL_LABEL = "Tool: ";
 export const DENY_INTENT_DEFAULT = "state what you need";
 export const DENY_EXEC_TOOL = "ctx_execute"; // curl/http/build alternative
-// WebFetch alternative: index the URL, then search it. impl/08 B1: v2 names (ctx_index absorbs fetch), not ctx_fetch_and_index.
+// WebFetch alternative: index the URL, then search it. impl/08 B1: v2 names only (ctx_index absorbs the retired v1 fetch tool).
 export const DENY_WEBFETCH_TOOLS = Object.freeze(["ctx_index", "ctx_search"] as const);
 
 export const USER_DENY_REASON_PREFIX = "Blocked by security policy: matches deny pattern "; // impl/08 §6.1 step 3, v1 text verbatim; + pattern
@@ -514,6 +514,10 @@ export const GITHUB_DIR_NAME = ".github";
 export const VSCODE_DIR_NAME = ".vscode";
 export const VSCODE_MCP_FILE = "mcp.json";
 export const KIRO_AGENT_FILE = Object.freeze(["agents", "default.json"] as const);
+export const KIRO_AGENTS_DIR = "agents"; // A37: every ~/.kiro/agents/*.json is read for name == SERVER_KEY
+export const KIRO_AGENT_FILE_EXT = ".json";
+export const KIRO_AGENT_NAME_KEY = "name"; // v1 template-install agent file (configs/kiro/agent.json) top-level key
+export const KIRO_STEERING_FILE = Object.freeze(["steering", "KIRO.md"] as const); // A37: under ~/.kiro and <project>/.kiro
 export const PI_AGENT_DIR = "agent";
 export const OPENCODE_CONFIG_FILES = Object.freeze(["opencode.jsonc", "opencode.json"] as const); // .jsonc wins (#849)
 export const OPENCODE_BASE_CONFIG_FILE = "opencode.json"; // ctx_upgrade reads this; readHostConfig picks a sibling .jsonc (#849)
@@ -549,6 +553,8 @@ export const V1_REASON = Object.freeze({
   hookFile: "v1 hook file context-mode.json (runs context-mode hook)",
   vscodeMcp: "v1 MCP entry servers.context-mode in .vscode/mcp.json: report only, never removed",
   kiroHook: "v1 Kiro flat hook entry: command contains context-mode and a v1 script name or context-mode hook",
+  kiroAgentFile: "v1 Kiro agent file agents/*.json with name context-mode",
+  kiroSteering: "v1 Kiro steering doc .kiro/steering/KIRO.md: manual review, report only, never removed",
   piNpm: "v1 Pi package npm:context-mode",
   opencodePlugin: "v1 OpenCode plugin spec context-mode",
   zcodeHook: "v1 ZCode hook entry: command contains context-mode hook",
@@ -558,8 +564,9 @@ export const V1_REASON = Object.freeze({
   tmpFile: "v1 temp file context-mode-* under the OS temp dir",
 } as const);
 // ADR-0011 "reported with a fix, not removed" rows, Gemini data "only after a prompt" (a tool cannot prompt), and
-// tmp context-mode-* (a live v1 server may own them): report only (D-M5-U1-4, D-M5-U1-5).
-export const UPGRADE_REPORT_ONLY_REASONS: readonly string[] = Object.freeze<string[]>([V1_REASON.statusLine, V1_REASON.vscodeMcp, V1_REASON.dataDirShared, V1_REASON.tmpFile]);
+// tmp context-mode-* (a live v1 server may own them), and the Kiro steering doc (A37: manual review): report only
+// (D-M5-U1-4, D-M5-U1-5, D-M7-V2-2).
+export const UPGRADE_REPORT_ONLY_REASONS: readonly string[] = Object.freeze<string[]>([V1_REASON.statusLine, V1_REASON.vscodeMcp, V1_REASON.dataDirShared, V1_REASON.tmpFile, V1_REASON.kiroSteering]);
 
 // Pi / OpenCode in-process entries (impl/12 §3.1 A21, §4.1 A28, §4.4 step 1).
 export const PLUGIN_ID = SERVER_KEY;
