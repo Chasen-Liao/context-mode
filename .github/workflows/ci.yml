@@ -70,6 +70,11 @@ jobs:
           JS
       - run: node build/build.mjs --out release-out
         name: build (esbuild, no package.json in output)
+      # T-F5 (DECISIONS-r9 F5, impl/03 section 4): grandchild kill, Windows only. Runs right after the build,
+      # so a red later step never hides the T-F5 result.
+      - run: node e2e/checks/windows-grandchild-kill.mjs
+        name: T-F5 Windows grandchild kill (0 alive after KILL_GRACE_MS)
+        if: runner.os == 'Windows'
       - run: node docs/v2/prompt/lint.mjs --out release-out
         name: prompt lint, bundle mode (impl/13 §7; gate layer prompt-lint from M2, D-M0-1)
       - run: node e2e/cases/run.mjs --milestone "$GATE_MILESTONE"
@@ -99,7 +104,3 @@ jobs:
       - run: node build/check-removed.mjs
         name: GS5 check-removed (from gate milestone M7, D-M6-arch-2)
         if: env.GATE_MILESTONE == 'M7'
-      # T-F5 (DECISIONS-r9 F5, impl/03 section 4): grandchild kill, Windows only. Prints SKIPPED elsewhere.
-      - run: node e2e/checks/windows-grandchild-kill.mjs
-        name: T-F5 Windows grandchild kill (0 alive after KILL_GRACE_MS)
-        if: runner.os == 'Windows'
