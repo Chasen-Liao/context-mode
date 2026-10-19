@@ -57,20 +57,28 @@ function isRunnable(full: string): boolean {
   }
 }
 
-/** Absolute interpreter path for `lang`, or null when no PATH directory has one. Re-walks PATH every call. */
-export function findRuntime(lang: string): string | null {
-  const dirs = (process.env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
+/**
+ * Absolute interpreter path for `lang`, or null when no PATH directory has one. Re-walks PATH every call.
+ * `env` is the env the child will get (default: this process); its PATH and PATHEXT drive the walk.
+ * DEVIATIONS D-M7-W2-1: on Windows a startable PATHEXT hit (.exe/.com) anywhere in the walk wins over an
+ * extensionless shim; the first shim seen is returned only when the whole walk finds no such hit.
+ */
+export function findRuntime(lang: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  const dirs = (env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
   const pathExt = isWin()
-    ? (process.env.PATHEXT ?? PATHEXT_DEFAULT).split(PATHEXT_SEPARATOR).filter((e) => e !== "")
+    ? (env.PATHEXT ?? PATHEXT_DEFAULT).split(PATHEXT_SEPARATOR).filter((e) => e !== "")
     : [];
   const names = candidates(lang);
+  let shim: string | null = null;
   for (const dir of dirs) {
     for (const name of names) {
       for (const file of fileNames(name, pathExt)) {
         const full = path.join(dir, file);
-        if (isRunnable(full)) return full;
+        if (!isRunnable(full)) continue;
+        if (!isWin() || path.extname(full) !== "") return full;
+        if (shim === null) shim = full;
       }
     }
   }
-  return null;
+  return shim;
 }

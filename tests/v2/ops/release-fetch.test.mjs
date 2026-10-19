@@ -88,11 +88,11 @@ test("[M5] release-fetch/argv-form-and-no-prompt-env", async (t) => {
   mkdirSync(home);
   mkdirSync(bin);
   const log = path.join(root, "argv.log");
-  // A fake git: logs its argv and GIT_TERMINAL_PROMPT, then fails, so the clone never runs.
+  // A fake git: logs its argv (PATH = bin only, so on Windows the shim is the one hit; printf is an sh builtin) and GIT_TERMINAL_PROMPT, then fails, so the clone never runs.
   writeFileSync(path.join(bin, "git"), `#!/bin/sh\nprintf '%s\\n' "$GIT_TERMINAL_PROMPT" "$@" > '${log}'\nexit 3\n`);
   chmodSync(path.join(bin, "git"), 0o755);
   const url = "https://example.invalid/a b;$(x).git";
-  await assert.rejects(fetchRelease("pi", url, { HOME: home, PATH: bin + ":/usr/bin:/bin" }, new AbortController().signal), (e) => {
+  await assert.rejects(fetchRelease("pi", url, { HOME: home, PATH: bin }, new AbortController().signal), (e) => {
     assert.equal(e.code, "FETCH_FAILED");
     assert.equal(e.vars.code, "git exit 3: ");
     return true;
@@ -104,7 +104,7 @@ test("[M5] release-fetch/argv-form-and-no-prompt-env", async (t) => {
   assert.equal(existsSync(fetchDir), false);
 });
 
-test("[M5] release-fetch/git-not-on-PATH-is-FETCH_FAILED-git-did-not-start", { skip: process.platform === "win32" }, async (t) => {
+test("[M5] release-fetch/git-not-on-PATH-is-FETCH_FAILED-git-did-not-start", async (t) => {
   const root = tmp(t);
   const home = path.join(root, "home");
   mkdirSync(home);

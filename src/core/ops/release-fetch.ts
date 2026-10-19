@@ -11,6 +11,7 @@ import { CtxError } from "../contracts/errors.ts";
 import type { AgentId } from "../contracts/types.ts";
 import { resolveConfigDir } from "../project/config-dir.ts";
 import { buildChildEnv } from "../sandbox/env.ts";
+import { findRuntime } from "../sandbox/runtimes.ts";
 import { runProcess, type RunResult } from "../sandbox/spawn.ts";
 
 export interface ReleaseFetchResult {
@@ -25,8 +26,8 @@ function failed(r: RunResult): CtxError {
   return new CtxError("FETCH_FAILED", { code: GIT_EXIT_LABEL + status + UPGRADE_AREA_KEY_SEP + r.stderr.toString().trim() });
 }
 
-async function git(args: readonly string[], cwd: string, env: Record<string, string>, signal: AbortSignal): Promise<string> {
-  const r = await runProcess([GIT_BIN, ...args], { cwd, env, signal, timeoutMs: UPGRADE_GIT_TIMEOUT_MS });
+async function git(bin: string, args: readonly string[], cwd: string, env: Record<string, string>, signal: AbortSignal): Promise<string> {
+  const r = await runProcess([bin, ...args], { cwd, env, signal, timeoutMs: UPGRADE_GIT_TIMEOUT_MS });
   if (r.exitCode !== 0 || r.killed !== null) throw failed(r);
   return r.stdout.toString().trim();
 }
@@ -41,10 +42,14 @@ export async function fetchRelease(agent: AgentId, url: string, env: NodeJS.Proc
   mkdirSync(agentDir, { recursive: true });
   const fetchDir = join(agentDir, UPGRADE_FETCH_DIR_PREFIX + process.pid);
   rmSync(fetchDir, { recursive: true, force: true });
+  // DEVIATIONS D-M7-W2-1: git is resolved by the one PATH/PATHEXT walk (findRuntime) on the caller's PATH,
+  // so Windows spawns git.exe directly instead of handing a bare "git" to sh as a script (exit 126).
+  const gitBin = findRuntime(GIT_BIN, env);
+  if (gitBin === null) throw new CtxError("FETCH_FAILED", { code: GIT_NOT_STARTED });
   const childEnv = buildChildEnv(env, GIT_NO_PROMPT_ENV);
   try {
-    await git([...GIT_CLONE_ARGS, RELEASE_BRANCH, url, fetchDir], agentDir, childEnv, signal);
-    const sha = await git(GIT_HEAD_SHA_ARGS, fetchDir, childEnv, signal);
+    await git(gitBin, [...GIT_CLONE_ARGS, RELEASE_BRANCH, url, fetchDir], agentDir, childEnv, signal);
+    const sha = await git(gitBin, GIT_HEAD_SHA_ARGS, fetchDir, childEnv, signal);
     const dir = join(agentDir, sha);
     if (existsSync(dir)) rmSync(fetchDir, { recursive: true, force: true });
     else renameSync(fetchDir, dir);
