@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -107,5 +107,34 @@ test("an empty tree with an empty SHA256SUMS passes", (t) => {
 test("hex must be the lower-case digest build/hash.mjs writes (D-M5-U3-1)", (t) => {
   const dir = tree(t, { "server.mjs": "x" });
   writeFileSync(path.join(dir, "SHA256SUMS"), `${sha("x").toUpperCase()}  server.mjs\n`);
+  assertMismatch(() => verifySums(dir));
+});
+
+// review-M5 open note, D-M6-V1-1: the walk takes only regular files and dirs; a symlink is a mismatch,
+// even when the target's bytes match the listed hash.
+test("a symlink to a file whose bytes match still throws (D-M6-V1-1)", (t) => {
+  const dir = tree(t, FILES);
+  const outside = tmp(t);
+  writeFileSync(path.join(outside, "server.mjs"), FILES["server.mjs"]);
+  unlinkSync(path.join(dir, "server.mjs"));
+  symlinkSync(path.join(outside, "server.mjs"), path.join(dir, "server.mjs"));
+  writeSums(dir, FILES);
+  assertMismatch(() => verifySums(dir));
+});
+
+test("a symlink to a dir throws (D-M6-V1-1)", (t) => {
+  const dir = tree(t, FILES);
+  const outside = tree(t, { "c.json": "{}" });
+  rmSync(path.join(dir, "a", "b"), { recursive: true });
+  symlinkSync(outside, path.join(dir, "a", "b"));
+  writeSums(dir, FILES);
+  assertMismatch(() => verifySums(dir));
+});
+
+test("a symlinked SHA256SUMS throws (D-M6-V1-1)", (t) => {
+  const dir = tree(t, FILES);
+  const outside = tmp(t);
+  writeSums(outside, FILES);
+  symlinkSync(path.join(outside, "SHA256SUMS"), path.join(dir, "SHA256SUMS"));
   assertMismatch(() => verifySums(dir));
 });
