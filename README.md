@@ -51,19 +51,35 @@ Each guide also covers update, rollback, uninstall and troubleshooting for that 
 
 Do these steps in one sitting, in this order:
 
-1. Install v2 with your agent's guide (table above).
+1. Install v2 with your agent's guide (table below).
 2. Run `/ctx-upgrade`. It finds the v1 files and removes them. Then restart the agent.
 3. Only then run `npm uninstall -g context-mode`.
 
 Do not uninstall the npm package first. The v1 hooks for Copilot CLI, VS Code, Codex, Gemini and Kiro call the global `context-mode` binary. They fail until `/ctx-upgrade` runs.
 
+A row shows a command only after a live install test on that agent passes. No agent has passed it yet.
+
+| Agent | Command | Guide |
+|---|---|---|
+| Claude Code | see guide | [docs/install/claude-code.md](docs/install/claude-code.md#upgrade-from-v1) |
+| Codex | see guide | [docs/install/codex.md](docs/install/codex.md#upgrade-from-v1) |
+| Copilot CLI | see guide | [docs/install/copilot-cli.md](docs/install/copilot-cli.md#upgrade-from-v1) |
+| Gemini CLI | see guide | [docs/install/gemini.md](docs/install/gemini.md#upgrade-from-v1) |
+| Kiro | see guide | [docs/install/kiro.md](docs/install/kiro.md#upgrade-from-v1) |
+| OpenCode | see guide | [docs/install/opencode.md](docs/install/opencode.md#upgrade-from-v1) |
+| Pi | see guide | [docs/install/pi.md](docs/install/pi.md#upgrade-from-v1) |
+| Qwen Code | see guide | [docs/install/qwen.md](docs/install/qwen.md#upgrade-from-v1) |
+| VS Code (Copilot) | see guide | [docs/install/vscode.md](docs/install/vscode.md#upgrade-from-v1) |
+| ZCode | see guide | [docs/install/zcode.md](docs/install/zcode.md#upgrade-from-v1) |
+
 | v1 feature | v2 | Why / what to use now |
 |---|---|---|
-| `context-mode` CLI and `statusline` | Removed | No npm in v2. Use `/ctx-stats`, `/ctx-doctor`, `/ctx-upgrade` in the agent |
+| `statusline` (`context-mode statusline`) | Removed | No npm CLI in v2. `ctx_doctor` and `ctx_stats` show the same numbers in the agent |
+| The `context-mode` CLI | Removed | No npm in v2. Use `/ctx-stats`, `/ctx-doctor`, `/ctx-upgrade` in the agent |
 | `ctx_insight` | Removed | Its numbers are in `ctx_stats` |
 | v1 fetch and batch tools | Renamed | `ctx_index` takes a `url`; `ctx_batch` runs many commands |
-| `ctx_purge` scopes | Changed | Scopes are now `session`, `worktree`, `project` |
-| Search call-rate limit | Removed | It blocked many subagents that searched at the same time (#769) |
+| `ctx_purge` scopes | Changed | Pick one scope: `session`, `source`, `project` |
+| Search call-rate limit (`flood-guard.ts`) | Removed, not replaced | It blocked many subagents that searched at the same time (#769) |
 | Large resume snapshot | 2 KB state block | Run `ctx_resume(seq:N)` on a pointer line to read the full row |
 | Event eviction | None | Old rows stay; the block picks rows by score |
 | Auto-injected rules and persona | Removed | Put standing rules in `CLAUDE.md` or your agent's rules file |
@@ -88,7 +104,7 @@ v1 memory rows are not moved into v2. To go back to v1, run the command for your
 | OpenCode | `npm install -g context-mode`, delete `mcp.context-mode` and the v2 plugin file in `plugins/`, then add `"context-mode"` to `.plugin[]` |
 | ZCode | `npm install -g context-mode`, then make the `~/.zcode/cli/hooks.json` entry again with the v1 install step |
 
-Gemini and Qwen have no scripted rollback. If the steps above fail, open an issue with your `/ctx-doctor` report.
+Gemini and Qwen have no scripted rollback. If the steps above fail, read the [Gemini](docs/install/gemini.md#rollback-to-v1) or [Qwen](docs/install/qwen.md#roll-back-to-v1) guide, then open an [issue](https://github.com/mksglu/context-mode/issues/new?template=bug.yml) with your `/ctx-doctor` report.
 
 ## Tools
 
