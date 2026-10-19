@@ -533,6 +533,7 @@ export const V1_SCRIPT_EXT = ".mjs"; // hooks/codex/*.mjs
 export const V1_BIN_COMMAND = SERVER_KEY; // v1 global npm bin; v2 never runs it ("no npm for users")
 export const VSCODE_MCP_SERVERS_KEY = "servers"; // .vscode/mcp.json {servers:{<name>:{command,args}}}
 export const ZCODE_EVENTS_KEY = "events"; // ~/.zcode/cli/config.json hooks.events.<Event>[]
+export const PI_ROLE = "custom"; // #1263: Pi injected text is never role "user" (D-M5-A1-1)
 export const PI_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR"; // Pi agent-dir override (#1035); caller passes it to detectV1 as scope.piAgentDir
 export const PI_PACKAGE_SOURCE_KEY = "source"; // Pi packages[] entry: a string or {source,...}
 export const V1_PATH_SEPS = Object.freeze(["/", "\\"] as const); // hooks/codex/ in a command, POSIX or Windows

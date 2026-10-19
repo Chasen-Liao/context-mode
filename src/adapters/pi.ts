@@ -1,6 +1,7 @@
 // impl/10 §10; DEVIATIONS D-M5-A1-1. Pi is in-process (ADR-0001 §3): the plugin entry calls handleHook with a raw
 // object whose `type` is the call-site event name (`pi.on(<type>, ...)`), plus the handler argument fields.
 // decode/encode exist so handleHook stays one code path for every agent (ADR-0001 Decision 3).
+import { PI_ROLE } from "../core/contracts/constants.ts";
 import type { CanonicalEventName, CanonicalHookEvent, Decision, HookOutput, ToolResultInfo } from "../core/contracts/types.ts";
 
 export const TOOL_NAME_PREFIX = ""; // impl/10 §1.3: Pi registers ctx_* under their bare names
@@ -17,7 +18,6 @@ const PI_EVENTS: Readonly<Record<string, EventRow>> = {
   tool_result: { event: "PostToolUse" },
 };
 
-const PI_ROLE = "custom"; // #1263: injected text is never role "user"
 
 /** Pi's encoded output: the native HookOutput plus the custom-role message the entry injects (#1263, #1180). */
 export interface PiHookOutput extends HookOutput {
