@@ -8,6 +8,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 import { spawnBundle } from "../harness/mcp-client.mjs";
 import { normalize } from "../harness/normalize.mjs";
@@ -20,6 +21,7 @@ const INIT = { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { na
 function fixture(t) {
   const home = mkdtempSync(path.join(tmpdir(), "cm-gp11-home-"));
   const repo = mkdtempSync(path.join(tmpdir(), "cm-gp11-repo-"));
+  execFileSync("git", ["init", "-q"], { cwd: repo }); // D-M5-R1-2: resolveProject needs a git repo (as GP10)
   const clients = [];
   t.after(() => {
     for (const c of clients) c.kill();
@@ -27,7 +29,7 @@ function fixture(t) {
     rmSync(repo, { recursive: true, force: true });
   });
   const spawn = async () => {
-    const c = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: repo });
+    const c = spawnBundle(SERVER_BUNDLE, { ...process.env, HOME: home, USERPROFILE: home, TMPDIR: home, CLAUDE_PROJECT_DIR: repo });
     clients.push(c);
     await c.request("initialize", INIT);
     return c;
@@ -43,7 +45,11 @@ test("[M5] GP11/doctor-table-golden: ctx_doctor renders a Markdown table of D1-D
   const c = await spawn();
   const reply = await call(c, "ctx_doctor", {});
   await c.close();
-  checkGolden("GP11", "doctor-table-golden", normalize({ reply }, { home, proj: repo }));
+  // D-M5-R1-2: D5 timing and D4 host state vary per run, so the golden holds the table shape only:
+  // the header lines and the Check column, in order.
+  const lines = text(reply).split("\n");
+  const shape = { header: lines.slice(0, 2), checks: lines.slice(2).map((l) => l.split(" | ")[0].slice(2)) };
+  checkGolden("GP11", "doctor-table-golden", normalize(shape, { home, proj: repo }));
 });
 
 test("[M5] GP11/stale-schema-and-integrity-check-distinct: D8 reports which of the two failed", async (t) => {
