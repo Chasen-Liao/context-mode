@@ -117,9 +117,10 @@ test("GP6/hint-names-platform-tool: Codex resume hint names mcp__context_mode__c
   assert.ok(parsed(out).additionalContext.includes("mcp__context_mode__ctx_resume"));
 });
 
-test("SessionStart compact on claude-code (compactSummary host): fixed pointer line", async () => {
+test("SessionStart compact on claude-code (compactSummary none, D-M7-CL-1): the renderState block, not the pointer", async () => {
   const out = await handleHook("claude-code", cc({ hook_event_name: "SessionStart", source: "compact" }), env);
-  assert.equal(parsed(out).additionalContext, COMPACT_POINTER_LINE);
+  const text = parsed(out).additionalContext;
+  assert.ok(text.startsWith("<context_mode_state ") && text !== COMPACT_POINTER_LINE, text);
 });
 
 test("SessionStart compact on codex (compactSummary none): the renderState block, not the pointer (M4, D-M4-H2-4)", async () => {
