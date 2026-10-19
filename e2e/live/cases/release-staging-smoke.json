@@ -1,0 +1,7 @@
+{
+  "id": "release-staging-smoke",
+  "kind": "local",
+  "covers": ["scripts/release/publish.mjs", "scripts/release/smoke.mjs"],
+  "run": ["node", "e2e/checks/release-staging-smoke.mjs"],
+  "expect": { "jsonField": "ok", "equals": true }
+}
