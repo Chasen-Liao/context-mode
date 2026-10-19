@@ -15,7 +15,7 @@
 //                    node e2e/cases/run.mjs --milestone Mn                   (DEVIATIONS D-M0-2, D-M0-F1-1)
 //   3 prompt-lint    node docs/v2/prompt/lint.mjs drafts docs/v2/prompt/drafts.md   (< M2)
 //                    node docs/v2/prompt/lint.mjs --out release-out                 (>= M2)
-//   4 check-removed  node build/check-removed.mjs                            (>= M6, D-M0-1)
+//   4 check-removed  node build/check-removed.mjs                            (>= M7, D-M6-arch-2)
 //   5 live           node e2e/live/run.mjs --base <merge-base HEAD origin/v2-design>
 // Each layer prints exactly one stdout line: "PASS|FAIL|SKIP <layer> <detail>". Layers after a
 // FAIL are not run; they print "SKIP <layer> not run: <failed layer> failed" so the output keeps
@@ -33,8 +33,8 @@ const MILESTONES = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7"];
 // (impl/14 §8 step 3); D-M1-13 names the layer but not its place.
 // ci-checks sits before gp-cases so the local gate runs every check ci.yml runs (D-M4-GS4-1).
 const LAYERS = ["keep-pass", "v2-unit", "ci-checks", "gp-cases", "prompt-lint", "check-removed", "live"];
-// First milestone at which each layer runs (DEVIATIONS D-M0-1). Before it the layer is SKIP.
-const LAYER_START = { "keep-pass": 0, "v2-unit": 1, "ci-checks": 0, "gp-cases": 0, "prompt-lint": 0, "check-removed": 6, live: 0 };
+// First milestone at which each layer runs (DEVIATIONS D-M0-1; check-removed D-M6-arch-2). Before it the layer is SKIP.
+const LAYER_START = { "keep-pass": 0, "v2-unit": 1, "ci-checks": 0, "gp-cases": 0, "prompt-lint": 0, "check-removed": 7, live: 0 };
 const PROMPT_LINT_BUNDLE_FROM = 2; // M2: lint the built bundle instead of drafts.md (impl/13 §7)
 const LIVE_BASE_REF = "origin/v2-design";
 const CHILD_MAX_BUFFER = 256 * 1024 * 1024;
@@ -224,7 +224,7 @@ function promptLint(ms) {
   return { status: "PASS", detail: `bundle mode (--out release-out): ${oneLine(r.stdout)}` };
 }
 
-// ---- layer 4: check-removed (impl/15 §2, DEVIATIONS D-M0-1) ----
+// ---- layer 4: check-removed (impl/15 §2, DEVIATIONS D-M0-1, D-M6-arch-2) ----
 function checkRemoved() {
   const gone = missing(["build/check-removed.mjs"]);
   if (gone) return gone;
