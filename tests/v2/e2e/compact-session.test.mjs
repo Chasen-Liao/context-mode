@@ -16,10 +16,21 @@ function stub(t) {
   writeFileSync(bin, `#!/usr/bin/env node
 const fs = require("node:fs");
 let buf = "";
-process.stdin.on("data", (d) => { buf += d; });
+const lines = [];
+// one result event per user line: the driver sends the next turn only after the previous result
+process.stdin.on("data", (d) => {
+  buf += d;
+  let i;
+  while ((i = buf.indexOf("\\n")) >= 0) {
+    const line = buf.slice(0, i); buf = buf.slice(i + 1);
+    if (!line) continue;
+    lines.push(line);
+    if (JSON.parse(line).message.content[0].text === "/compact") console.log(JSON.stringify({ type: "system", subtype: "compact_boundary" }));
+    console.log(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok " + lines.length, total_cost_usd: 0.01 * lines.length }));
+  }
+});
 process.stdin.on("end", () => {
-  fs.writeFileSync(${JSON.stringify(rec)}, JSON.stringify({ argv: process.argv.slice(2), envKeys: Object.keys(process.env).sort(), stdin: buf.split("\\n").filter(Boolean) }));
-  console.log(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", total_cost_usd: 0 }));
+  fs.writeFileSync(${JSON.stringify(rec)}, JSON.stringify({ argv: process.argv.slice(2), envKeys: Object.keys(process.env).sort(), stdin: lines }));
 });
 `);
   chmodSync(bin, 0o755);
@@ -45,7 +56,9 @@ test("env: only PATH HOME USER TMPDIR", { skip: !posix }, async (t) => {
   for (const k of envKeys) assert.ok(["PATH", "HOME", "USER", "TMPDIR", "PWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING"].includes(k) || k.startsWith("LC_") === false, k);
   assert.ok(!envKeys.includes("ANTHROPIC_API_KEY"));
   for (const k of ["PATH", "HOME", "USER", "TMPDIR"]) assert.ok(envKeys.includes(k), k);
-  assert.equal(envKeys.filter((k) => !["PATH", "HOME", "USER", "TMPDIR"].includes(k)).length, 0);
+  // macOS CoreFoundation adds __CF_USER_TEXT_ENCODING to every process; the driver passes only the 4 keys
+  const osAdded = ["PWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING"];
+  assert.deepEqual(envKeys.filter((k) => !["PATH", "HOME", "USER", "TMPDIR", ...osAdded].includes(k)), []);
 });
 
 test("a /compact turn comes after the earlier turns and before the next request", { skip: !posix }, async (t) => {
@@ -58,4 +71,14 @@ test("a /compact turn comes after the earlier turns and before the next request"
   assert.ok(at("/compact") > at("second turn"));
   assert.ok(at("needs the path") > at("/compact"));
   for (const l of stdin) assert.equal(JSON.parse(l).type, "user");
+});
+
+test("result: compact boundary seen, final text and cost from the last turn", { skip: !posix }, async (t) => {
+  const s = stub(t);
+  const r = await runSession({ bin: s.bin, turns: ["one", "two"], nextRequest: "three", budgetUsd: "0.25", cwd: s.dir });
+  assert.equal(r.compacted, true);
+  assert.equal(r.isError, false);
+  assert.equal(r.finalText, "ok 4");
+  assert.equal(r.costUsd, 0.04);
+  assert.deepEqual(r.toolCalls, []);
 });
