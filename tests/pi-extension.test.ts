@@ -944,37 +944,92 @@ describe("Pi Extension", () => {
   });
 
   // ═══════════════════════════════════════════════════════════
-  // Slice 8: before_provider_response (Pi-2)
+  // Slice 8: message_end → provider_response (Pi-2, rewired)
+  // Pi 1.3.0 has no before_provider_response; metadata lives on
+  // AssistantMessage delivered via message_end / turn_end.
   // ═══════════════════════════════════════════════════════════
 
-  describe("Slice 8: before_provider_response handler", () => {
-    it("registers a before_provider_response handler", async () => {
+  describe("Slice 8: message_end provider_response handler", () => {
+    it("registers a message_end handler (not the nonexistent before_provider_response)", async () => {
       await registerPiExtension(api);
-      expect(api._handlers["before_provider_response"]).toBeDefined();
-      expect(api._handlers["before_provider_response"].length).toBeGreaterThan(0);
+      expect(api._handlers["message_end"]).toBeDefined();
+      expect(api._handlers["message_end"].length).toBeGreaterThan(0);
+      expect(api._handlers["before_provider_response"]).toBeUndefined();
     });
 
-    it("invokes the handler without throwing on metadata payloads", async () => {
+    it("persists provider_response from an assistant message_end payload", async () => {
       await registerPiExtension(api);
-      await api._trigger("session_start", {
-        session_id: "provider-1",
-        project_dir: tempDir,
-      });
+      const sessionFile = join(tempDir, "provider-msg-end.jsonl");
+      await api._trigger(
+        "session_start",
+        { type: "session_start", reason: "startup" },
+        { sessionManager: { getSessionFile: () => sessionFile } },
+      );
 
       await expect(
-        api._trigger("before_provider_response", {
-          model: "pi-1",
-          provider: "pi",
-          latencyMs: 42,
-          usage: { prompt: 10, completion: 20 },
+        api._trigger("message_end", {
+          type: "message_end",
+          message: {
+            role: "assistant",
+            provider: "openrouter",
+            model: "nvidia/nemotron-3-super-120b-a12b:free",
+            usage: { input: 10, output: 20, cacheRead: 0, cacheWrite: 0 },
+          },
         }),
       ).resolves.not.toThrow();
+
+      const { resolveSessionDbPath } = await import("../src/session/db.js");
+      const sessionsDir = join(
+        process.env.HOME!,
+        ".pi",
+        "context-mode",
+        "sessions",
+      );
+      const dbPath = resolveSessionDbPath({
+        projectDir: process.env.PI_PROJECT_DIR!,
+        sessionsDir,
+      });
+      const sessionId = createHash("sha256")
+        .update(sessionFile)
+        .digest("hex")
+        .slice(0, 16);
+      const db = new SessionDB({ dbPath });
+      try {
+        const events = db.getEvents(sessionId);
+        const providerEvents = events.filter((e) => e.type === "provider_response");
+        expect(providerEvents.length).toBeGreaterThan(0);
+        const parsed = JSON.parse(providerEvents[0]!.data);
+        expect(parsed.provider).toBe("openrouter");
+        expect(parsed.model).toBe("nvidia/nemotron-3-super-120b-a12b:free");
+        expect(parsed.tokens).toEqual({
+          input: 10,
+          output: 20,
+          cacheRead: 0,
+          cacheWrite: 0,
+        });
+      } finally {
+        db.close();
+      }
     });
 
-    it("handles empty payload gracefully", async () => {
+    it("skips non-assistant message_end and empty payloads without throwing", async () => {
       await registerPiExtension(api);
+      await api._trigger(
+        "session_start",
+        { type: "session_start", reason: "startup" },
+        {
+          sessionManager: {
+            getSessionFile: () => join(tempDir, "provider-empty.jsonl"),
+          },
+        },
+      );
+
+      await expect(api._trigger("message_end", {})).resolves.not.toThrow();
       await expect(
-        api._trigger("before_provider_response", {}),
+        api._trigger("message_end", {
+          type: "message_end",
+          message: { role: "user", content: "hi" },
+        }),
       ).resolves.not.toThrow();
     });
   });

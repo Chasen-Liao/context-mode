@@ -8,7 +8,7 @@
  * Entry point: `export default function(pi: ExtensionAPI) { ... }`
  *
  * Lifecycle: session_start, tool_call, tool_result, before_agent_start,
- * session_before_compact, session_compact, session_shutdown.
+ * message_end, turn_end, session_before_compact, session_compact, session_shutdown.
  */
 
 import { createHash } from "node:crypto";
@@ -137,9 +137,14 @@ let _sessionId = "";
 
 // MCP bridge handle. The bridge spawns server.bundle.mjs once and
 // registers each MCP tool through pi.registerTool() so the Pi LLM can
-// actually call ctx_execute / ctx_search / etc. (#426). Pi 0.73.x has
-// no native MCP support, so without this bridge the tools are
-// invisible to the LLM and the routing block is dead weight.
+// actually call ctx_execute / ctx_search / etc. (#426).
+//
+// Pi has built-in MCP since 0.99.0 (@earendil-works/pi-coding-agent), but
+// context-mode still uses this bridge so its tools are registered via
+// pi.registerTool() in the extension process (same process as the
+// session hooks) rather than only as a separate MCP server. Do not
+// remove the bridge without an alternate registerTool path — native
+// MCP alone does not replace the in-extension tool wiring.
 let _mcpBridge: BridgeHandle | null = null;
 
 /**
@@ -752,19 +757,45 @@ export default function piExtension(pi: any): void {
     }
   });
 
-  // ── 4b. before_provider_response — capture response metadata ───
-  // Pi-2: Register the missing event so providers can record latency,
-  // model, and token usage when Pi exposes them. Best-effort only;
-  // the handler must never throw or modify the response.
+  // ── 4b. message_end — capture provider response metadata ───
+  //
+  // Pi 1.3.0 has no `before_provider_response` event (that name was never
+  // part of ExtensionAPI). Real provider-related events are:
+  //   before_provider_request, before_provider_headers,
+  //   after_provider_response ({ status, headers } only),
+  //   provider_stream_event ({ provider, api, model, data } — per chunk).
+  //
+  // Model / provider / usage land on AssistantMessage after the stream
+  // completes. `message_end` delivers that message once; `turn_end` also
+  // carries it but is already used for structured agent_usage (4c).
+  // Prefer message_end so provider_response stays a separate lifecycle
+  // write. Latency is not exposed on any of these events in 1.3.0 —
+  // latencyMs is omitted when unknown (same skip-if-empty contract).
+  //
+  // Refs: @earendil-works/pi-coding-agent dist/core/extensions/types.d.ts
+  //   AfterProviderResponseEvent / ProviderStreamEvent / MessageEndEvent;
+  //   @earendil-works/pi-ai AssistantMessage { provider, model, usage }.
 
-  pi.on("before_provider_response", (event: any) => {
+  pi.on("message_end", (event: any) => {
     try {
       if (!_sessionId) return;
-      const meta = {
-        model: event?.model ?? event?.providerModel,
-        provider: event?.provider,
-        latencyMs: event?.latencyMs ?? event?.latency,
-        tokens: event?.usage ?? event?.tokens,
+      const message = event?.message ?? event;
+      // Only assistant messages are provider responses.
+      if (!message || typeof message !== "object") return;
+      if (typeof message.role === "string" && message.role !== "assistant") {
+        return;
+      }
+      const meta: {
+        model?: unknown;
+        provider?: unknown;
+        latencyMs?: unknown;
+        tokens?: unknown;
+      } = {
+        model: message.model ?? message.providerModel,
+        provider: message.provider,
+        // Pi 1.3.0 does not surface latency on message_end / after_provider_response.
+        latencyMs: message.latencyMs ?? message.latency,
+        tokens: message.usage ?? message.tokens,
       };
       // Skip when Pi gives us nothing useful — avoids noise in the DB.
       if (
@@ -788,7 +819,7 @@ export default function piExtension(pi: any): void {
         "PostToolUse", _attribution,
       );
     } catch {
-      // best effort — never break provider response
+      // best effort — never break message handling
     }
   });
 
