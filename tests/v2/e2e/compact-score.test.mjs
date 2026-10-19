@@ -27,9 +27,9 @@ test("call rate counts only runs where the fact is missing from the summary", ()
 });
 
 test("arm a correct 8/10 passes, 7/10 fails", () => {
-  const ok = base(); ok.a = mix(8, 10);
+  const ok = base(); ok.a = mix(8, 10); ok.c = mix(8, 10); // a >= c (DECISIONS-r9 T-CMP)
   assert.equal(verdict(ok).pass, true);
-  const bad = base(); bad.a = mix(7, 10);
+  const bad = base(); bad.a = mix(7, 10); bad.c = mix(7, 10);
   assert.equal(verdict(bad).pass, false);
 });
 
