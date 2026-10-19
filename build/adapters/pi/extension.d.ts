@@ -8,7 +8,8 @@
  * Entry point: `export default function(pi: ExtensionAPI) { ... }`
  *
  * Lifecycle: session_start, tool_call, tool_result, before_agent_start,
- * message_end, turn_end, session_before_compact, session_compact, session_shutdown.
+ * context, message_end, turn_end, session_before_compact, session_compact,
+ * session_shutdown.
  */
 /**
  * Strip heredoc + single-quoted + double-quoted content from a shell command
