@@ -245,3 +245,4 @@ None.
 ## Changes
 
 - 2026-10-16 (DECISIONS-r9, S8): added §6 naming each v1 env var's v2 fate (E2 `CONTEXT_MODE_REQUIRE_SECURITY` kept as `REQUIRE_SECURITY_ENV`, E3 `CONTEXT_MODE_BASH_NUDGE_MIN_COMMAND_BYTES` ignored); renumbered old §6 Assumptions to §7 and fixed its one cross-reference.
+- 2026-10-19 (M7-S1): sign-off run recorded in TECH-SPEC §1.1. `check-removed.mjs` FAIL (22 paths), live T-CMP FAIL, R1/R2 PENDING owner. M7 stays open in `.impl/progress.json`.
