@@ -126,3 +126,36 @@ test("[M5] doctor-config/D5b-double-fire-detected", (t) => {
   }
   assert.equal(checkDoubleFire("codex", repo).status, "PASS");
 });
+
+// GP11 pi-discovery-dirs-doctor (#1168), pi-doctor-real-paths (#1266); DEVIATIONS D-M7-G2-1.
+const piSettings = (dir, packages) => put(path.join(dir, "settings.json"), { packages });
+const PI_GIT = "git:github.com/mksglu/context-mode@release";
+
+test("[M7] doctor-config/D3-pi-reports-default-agent-dir-path (#1266)", (t) => {
+  const home = tmp(t);
+  const dir = path.join(home, ".pi", "agent");
+  piSettings(dir, [PI_GIT]);
+  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home }, home);
+  assert.equal(d3.status, "PASS", d3.detail);
+  assert.ok(d3.detail.includes(path.join(dir, "settings.json")), d3.detail);
+});
+
+test("[M7] doctor-config/D3-pi-PI_CODING_AGENT_DIR-wins, legacy path never named (#1168 #1035)", (t) => {
+  const home = tmp(t);
+  const custom = tmp(t);
+  piSettings(custom, [PI_GIT]);
+  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home, PI_CODING_AGENT_DIR: custom }, home);
+  assert.equal(d3.status, "PASS", d3.detail);
+  assert.ok(d3.detail.includes(path.join(custom, "settings.json")), d3.detail);
+  assert.ok(!d3.detail.includes(path.join(home, ".pi")), d3.detail);
+});
+
+test("[M7] doctor-config/D3-pi-missing-package-FAIL-names-the-file-read", (t) => {
+  const home = tmp(t);
+  const custom = tmp(t);
+  const d3 = checkHostConfig(getAdapter("pi"), { HOME: home, PI_CODING_AGENT_DIR: custom }, home);
+  assert.equal(d3.status, "FAIL");
+  assert.ok(d3.detail.startsWith("wrong: MCP entry"), d3.detail);
+  assert.ok(d3.detail.includes(path.join(custom, "settings.json")), d3.detail);
+  assert.equal(d3.fixCommand, "run ctx_upgrade");
+});
