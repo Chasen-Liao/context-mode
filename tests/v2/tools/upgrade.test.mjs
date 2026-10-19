@@ -70,7 +70,11 @@ test("[M5] upgrade/rollback-on-write-failure-restores-original-file", async (t) 
 test("[M5] upgrade/uninstall-mode-requires-confirmDelete (Q16)", async (t) => {
   const home = tmp(t);
   mkdirSync(path.join(home, ".claude"), { recursive: true });
-  await assert.rejects(() => ctxUpgrade({ mode: "uninstall" }, { env: { HOME: home }, agent: "claude-code" }));
+  // impl/07 §6 Uninstall step 4-5 (D-M5-U7-4): confirmDelete absent is not an error; the three areas run and
+  // user data is kept, with one row saying so.
+  const reply = await ctxUpgrade({ mode: "uninstall" }, { env: { HOME: home }, agent: "claude-code" });
+  const text = typeof reply === "string" ? reply : reply.text;
+  assert.ok(text.includes("user data kept (confirmDelete not set)"), text);
 });
 
 test("[M5] upgrade/opencode-merge-sibling-plugins-survive (#1160)", async (t) => {
