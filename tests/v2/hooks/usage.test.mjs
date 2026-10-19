@@ -120,3 +120,18 @@ test("[M5] usage/no-project-fails-open-with-no-row", async () => {
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(costRows("s-usage-4").length, 0);
 });
+
+// D-M5-P2-4, impl/12 §4.6 step 2: the OpenCode `context` call (SessionStart) reads and clears the
+// pending-compact marker inside handleHook; the plugin never opens context.db.
+test("[M5] usage/opencode-context-takes-pending-compact-once", async () => {
+  const repo = newRepo();
+  const sid = "s-usage-5";
+  const ctx = () => handleHook("opencode", { type: "context", sessionID: sid, directory: repo, turn: 1 }, env);
+  const pre = await handleHook("opencode", { type: "compaction", sessionID: sid, directory: repo, turn: 1 }, env);
+  assert.deepEqual(pre, { stdout: "", exitCode: 0 });
+  const first = await ctx();
+  assert.equal(first.exitCode, 0);
+  assert.notEqual(first.stdout, "");
+  const second = await ctx(); // marker taken: no compact state a second time
+  assert.notEqual(second.stdout, first.stdout);
+});
