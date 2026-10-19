@@ -8,8 +8,8 @@
 //   `node --test tests/v2/` resolves the src/ import (DEVIATIONS D-M2-arch-6).
 //
 // Rows land with their entry (DEVIATIONS D-M0-8): server, hook (M0); run and its
-// search.mjs twin (M3, impl/04 §4, D-M2-4, D-M3-X1-2). pi.ts / opencode.ts add
-// their rows with their own milestone. Step 4 (manifests, build/manifests.ts) runs from M3
+// search.mjs twin (M3, impl/04 §4, D-M2-4, D-M3-X1-2); pi (M5, D-M5-arch-1). opencode.ts
+// adds its row with its own step (D-M5-P2-1). Step 4 (manifests, build/manifests.ts) runs from M3
 // (DEVIATIONS D-M3-arch-4). Step 5 copies the hook round-trip fixture (D-M5-arch-4).
 // Steps 6-8 of §2.2 (command skills, `claude plugin validate`, SHA256SUMS) are added
 // with their own files (build/hash.mjs) in later steps.
@@ -46,6 +46,7 @@ const BUNDLES = Object.freeze([
   { name: "hook", entry: "src/entries/hook.ts", out: "hook.mjs" },
   { name: "run", entry: "src/entries/run.ts", out: "run.mjs" },
   { name: "search", entry: "src/entries/run.ts", out: "search.mjs" },
+  { name: "pi", entry: "src/entries/pi.ts", out: "pi/index.js" }, // impl/13 §2.2 step 2 (D-M5-arch-1)
 ]);
 
 // Same options for every row (impl/13 §2.2 step 2, "same").
