@@ -60,7 +60,7 @@ test("ci.yml: push branches include v2-design and impl/**, no pull_request (ADR-
 
 test("ci.yml: windows-only T-F5 step runs the check (DECISIONS-r9 F5)", () => {
   const l = lines(read(".github/workflows/ci.yml"));
-  const i = l.indexOf("run: node e2e/checks/windows-grandchild-kill.mjs");
+  const i = l.indexOf("- run: node e2e/checks/windows-grandchild-kill.mjs");
   assert.ok(i > 0);
   const step = l.slice(Math.max(0, i - 4), i + 4).join("\n");
   assert.ok(step.includes("if: runner.os == 'Windows'"), step);
