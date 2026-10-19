@@ -44,6 +44,9 @@ function walk(dir) {
 }
 
 function resolveSpecifier(file, spec) {
+  // D-M5-F1-1: a template-literal specifier with ${...} names no static path (same as a bare
+  // specifier); only a static specifier can be checked against src/.
+  if (spec.includes("${")) return null;
   if (spec.startsWith("file:")) return fileURLToPath(spec);
   if (spec.startsWith(".")) return path.resolve(path.dirname(file), spec);
   if (path.isAbsolute(spec)) return spec;
