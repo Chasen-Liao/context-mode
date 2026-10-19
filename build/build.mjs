@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // build/build.mjs — esbuild build (docs/v2/impl/13-build-release.md §2).
-// Usage: node build/build.mjs [--out <dir>] [--sha <commit>]   (default release-out/)
+// Usage: node build/build.mjs [--out <dir>] [--sha <commit>] [--version <x.y.z>]   (default release-out/)
+//   --version is plan.mjs's release version, written into every manifest `version`; without it the
+//   manifests keep 0.0.0-dev (D-M6-arch-3, D-M6-B2-1).
 //   --sha sets BUNDLE_SHA in every bundle through the one esbuild define BUNDLE_SHA_DEFINE
 //   (DEVIATIONS D-M5-arch-5, D-M5-B1-1); without it BUNDLE_SHA stays undefined (dev/test build).
 //        node build/build.mjs --generated-only
@@ -11,8 +13,8 @@
 // search.mjs twin (M3, impl/04 §4, D-M2-4, D-M3-X1-2); pi (M5, D-M5-arch-1). opencode.ts
 // adds its row with its own step (D-M5-P2-1). Step 4 (manifests, build/manifests.ts) runs from M3
 // (DEVIATIONS D-M3-arch-4). Step 5 copies the hook round-trip fixture (D-M5-arch-4).
-// Steps 6-8 of §2.2 (command skills, `claude plugin validate`, SHA256SUMS) are added
-// with their own files (build/hash.mjs) in later steps.
+// Step 6 copies the 3 command skills; step 7 (`claude plugin validate`) runs in release.yml's build
+// job, not here (D-M6-arch-3); step 8 writes SHA256SUMS last (build/hash.mjs).
 //
 // Failure: one stderr line `build failed: <reason>` and exit 1 (impl/13 §1).
 import { readFileSync, writeFileSync, rmSync, mkdirSync, readdirSync, copyFileSync, existsSync } from "node:fs";
@@ -27,6 +29,7 @@ import {
   BUNDLE_SHA_DEFINE,
 } from "../src/core/contracts/constants.ts";
 import { generateManifests } from "./manifests.ts";
+import { writeHashes } from "./hash.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_OUT = "release-out";
@@ -38,6 +41,14 @@ const FIXTURE_OUT = path.join("fixtures", "hook-roundtrip.json");
 // D-M5-B1-1: --sha is a full git commit sha, the form `git ls-remote` prints (D1 compares them).
 const SHA_LENGTH = 40;
 const SHA_ALPHABET = "0123456789abcdef";
+// D-M6-B2-1: --version is three dot-separated decimal numbers (the form plan.mjs computes).
+const VERSION_PARTS = 3;
+const VERSION_SEP = ".";
+const DIGITS = "0123456789";
+// §2.2 step 6 / impl/13 §5: the 3 command skills, copied verbatim (D-M6-arch-6: only these ship).
+const SKILLS_DIR = "skills";
+const SKILL_FILE = "SKILL.md";
+const COMMAND_SKILLS = Object.freeze(["ctx-stats", "ctx-doctor", "ctx-upgrade"]);
 
 // impl/13 §2.2 step 2 table, rows whose entry exists (D-M0-8). Output paths are relative to outDir.
 // run.mjs and search.mjs are one entry; the file name picks the job (D-M3-X1-2).
@@ -68,6 +79,7 @@ function parseArgs(argv) {
   let out = DEFAULT_OUT;
   let generatedOnly = false;
   let sha;
+  let version;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--out" && i + 1 < argv.length) {
       out = argv[++i];
@@ -76,13 +88,19 @@ function parseArgs(argv) {
       if (sha.length !== SHA_LENGTH || [...sha].some((c) => !SHA_ALPHABET.includes(c))) {
         throw new BuildError(`--sha ${sha} is not a ${SHA_LENGTH}-char lowercase hex commit sha`);
       }
+    } else if (argv[i] === "--version" && i + 1 < argv.length) {
+      version = argv[++i];
+      const parts = version.split(VERSION_SEP);
+      if (parts.length !== VERSION_PARTS || parts.some((p) => p === "" || [...p].some((c) => !DIGITS.includes(c)))) {
+        throw new BuildError(`--version ${version} is not an x.y.z release version`);
+      }
     } else if (argv[i] === "--generated-only") {
       generatedOnly = true;
     } else {
       throw new BuildError(`unknown argument ${argv[i]}`);
     }
   }
-  return { outDir: path.resolve(REPO_ROOT, out), generatedOnly, sha };
+  return { outDir: path.resolve(REPO_ROOT, out), generatedOnly, sha, version };
 }
 
 function readPrompt(rel) {
@@ -172,7 +190,21 @@ function copyFixture(outDir) {
   }
 }
 
-async function main(outDir, sha) {
+// §2.2 step 6: verbatim copy of skills/<name>/SKILL.md for the 3 command skills (impl/13 §5).
+function copySkills(outDir) {
+  for (const name of COMMAND_SKILLS) {
+    const rel = path.join(SKILLS_DIR, name, SKILL_FILE);
+    const dest = path.join(outDir, rel);
+    mkdirSync(path.dirname(dest), { recursive: true });
+    try {
+      copyFileSync(path.join(REPO_ROOT, rel), dest);
+    } catch {
+      throw new BuildError(`missing ${rel}`);
+    }
+  }
+}
+
+async function main(outDir, sha, version) {
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
   // D-M5-arch-5: the one define; a dev/test build sets none, so BUNDLE_SHA stays undefined.
@@ -186,15 +218,17 @@ async function main(outDir, sha) {
   } finally {
     if (!keep) rmSync(GENERATED, { force: true });
   }
-  generateManifests(outDir); // §2.2 step 4: manifests + hook configs from adapters/table.ts (impl/13 §3)
+  generateManifests(outDir, version); // §2.2 step 4: manifests + hook configs from adapters/table.ts (impl/13 §3)
   copyFixture(outDir); // §2.2 step 5
+  copySkills(outDir); // §2.2 step 6
   assertOutTree(outDir);
+  writeHashes(outDir); // §2.2 step 8: last, so SHA256SUMS covers the full tree
 }
 
 try {
-  const { outDir, generatedOnly, sha } = parseArgs(process.argv.slice(2));
+  const { outDir, generatedOnly, sha, version } = parseArgs(process.argv.slice(2));
   if (generatedOnly) writeGeneratedPrompt();
-  else await main(outDir, sha);
+  else await main(outDir, sha, version);
 } catch (err) {
   const reason = err instanceof BuildError ? err.message : String(err && err.message ? err.message : err);
   process.stderr.write(`build failed: ${reason.split("\n").join(" ")}\n`);

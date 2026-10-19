@@ -1,6 +1,7 @@
 // build/manifests.ts — manifest + hook config generation (docs/v2/impl/13-build-release.md §3; impl/10 §1.5;
 // DECISIONS-r9 R1, R4; DEVIATIONS D-M3-arch-4, D-M3-A7-1..5). Build-time only: reads adapters/table.ts rows and
-// writes files; never shipped as code. M6 adds the release-only parts (version from plan.mjs, hashes).
+// writes files; never shipped as code. M6 adds the release-only part: `version` from plan.mjs via build.mjs --version
+// (D-M6-arch-3, D-M6-B2-1); hashes are build/hash.mjs.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ADAPTERS } from "../src/adapters/table.ts";
@@ -102,23 +103,23 @@ const HOOK_SHAPES: Readonly<Record<AgentId, ((row: AdapterRow) => JsonObject) | 
 
 const hookFile = (row: AdapterRow): string => HOOKS_DIR + "/" + row.id + ".json";
 
-function mcpManifest(row: AdapterRow): JsonObject {
+function mcpManifest(row: AdapterRow, version: string): JsonObject {
   return {
     name: SERVER_KEY,
-    version: DEV_VERSION,
+    version,
     mcpServers: { [SERVER_KEY]: { command: NODE_COMMAND, args: [bundleArg(row, SERVER_BUNDLE), AGENT_FLAG, row.id] } },
   };
 }
 
 // impl/13 §3.1 step 2 table, keyed by installMode. Returns [relative path, content] or null (no manifest file).
-function manifestFor(row: AdapterRow): [string, JsonObject] | null {
+function manifestFor(row: AdapterRow, version: string): [string, JsonObject] | null {
   switch (row.installMode) {
     case "marketplace":
-      return [".claude-plugin/plugin.json", { ...mcpManifest(row), hooks: "./" + hookFile(row) }]; // D-M3-A7-3
+      return [".claude-plugin/plugin.json", { ...mcpManifest(row, version), hooks: "./" + hookFile(row) }]; // D-M3-A7-3
     case "extension":
-      return [row.id + "-extension.json", mcpManifest(row)];
+      return [row.id + "-extension.json", mcpManifest(row, version)];
     case "plugin":
-      return ["copilot/plugin.json", mcpManifest(row)];
+      return ["copilot/plugin.json", mcpManifest(row, version)];
     case "config-mcp": // codex: ctx_upgrade writes config.toml (A2, tools-ops)
     case "mcp-entry":
     case "hooks+mcp":
@@ -144,11 +145,12 @@ function writeJson(outDir: string, rel: string, value: JsonObject): void {
   writeFileSync(file, JSON.stringify(sortKeys(value), null, 2) + "\n");
 }
 
-// `rows` defaults to ADAPTERS; a second argument exists only so tests can feed a bad row (DEVIATIONS D-M3-A7-4).
-export function generateManifests(outDir: string, rows: readonly AdapterRow[] = ADAPTERS): void {
+// `version` is plan.mjs's release version (build.mjs --version); no flag keeps DEV_VERSION (D-M6-arch-3, D-M6-B2-1).
+// `rows` defaults to ADAPTERS; it exists only so tests can feed a bad row (DEVIATIONS D-M3-A7-4).
+export function generateManifests(outDir: string, version: string = DEV_VERSION, rows: readonly AdapterRow[] = ADAPTERS): void {
   const files: [string, JsonObject][] = [];
   for (const row of rows) {
-    const manifest = manifestFor(row);
+    const manifest = manifestFor(row, version);
     if (manifest !== null) files.push(manifest);
     const shape = HOOK_SHAPES[row.id];
     if (shape !== null) files.push([hookFile(row), shape(row)]);

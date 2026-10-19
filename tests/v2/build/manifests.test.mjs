@@ -133,5 +133,5 @@ test("hook files follow each host shape of impl/10 §1.5", (t) => {
 test("an unknown installMode is a build-time hard stop (step 4)", (t) => {
   const dir = scratch(t);
   const bad = { ...getAdapter("qwen"), installMode: "floppy" };
-  assert.throws(() => generateManifests(dir, [...ADAPTERS, bad]), { message: "manifest: unknown installMode floppy" });
+  assert.throws(() => generateManifests(dir, undefined, [...ADAPTERS, bad]), { message: "manifest: unknown installMode floppy" });
 });
