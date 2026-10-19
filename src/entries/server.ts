@@ -2,11 +2,15 @@
 // inlined (src/prompt/_generated.ts, impl/13 §2.2 step 3). M1 wires the store (DEVIATIONS D-M1-10,
 // D-M1-11, D-M1-T10-1); adapters (M3) and the tool modules (M2-M5) come with their own milestones.
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { McpServer, type ServerContext, type StandardSchemaWithJSON } from "@modelcontextprotocol/server";
 import { serveStdio, type StdioServerHandle } from "@modelcontextprotocol/server/stdio";
 import { AGENT_IDS, type AgentId } from "../core/contracts/agents.ts";
-import { INTERNAL_ERROR_LINE, NODE_MIN, SERVER_KEY, TOOLS_TTL_MS } from "../core/contracts/constants.ts";
+import {
+  INTERNAL_ERROR_LINE, NODE_MIN, OWNER_STOP_EXT, OWNERS_DIR_NAME, PROJECTS_DIR_NAME, SERVER_KEY, TOOLS_TTL_MS,
+  UPGRADE_STOP_DELAY_MS,
+} from "../core/contracts/constants.ts";
 import { CtxError } from "../core/contracts/errors.ts";
 import type { DbHandle, ProjectContext, ToolContext, ToolReply } from "../core/contracts/types.ts";
 import { appendEvent } from "../core/journal/append.ts";
@@ -119,6 +123,16 @@ export async function startServer(argv: string[], env: NodeJS.ProcessEnv): Promi
     return db;
   }
 
+  // impl/07 uninstall step 1 (D-M5-U7-3): <DATA_ROOT>/projects/<projectKey>/owners/<serverId>.stop.
+  function stopMarker(configDir: string, projectKey: string): string {
+    return join(configDir, PROJECTS_DIR_NAME, projectKey, OWNERS_DIR_NAME, serverId + OWNER_STOP_EXT);
+  }
+  // Only a project this server owns can carry its marker (uninstall marks live owners only).
+  function stopRequested(): boolean {
+    const configDir = resolveConfigDir(process.env);
+    return held.some((db) => existsSync(stopMarker(configDir, db.projectKey)));
+  }
+
   // impl/00 §5.2 step 5, ADR-0009 §0: one journal row per own call (D-M1-10).
   async function journal(project: ProjectContext, ctx: ToolContext, name: string, reply: ToolReply): Promise<void> {
     const db = await ownDb(project);
@@ -169,6 +183,13 @@ export async function startServer(argv: string[], env: NodeJS.ProcessEnv): Promi
         reply = await tool.handler(input, ctx);
       } catch (err) {
         reply = errorReply(err);
+      }
+      // impl/07 uninstall step 1, D-M5-R1-1: a call that left this server's own stop marker (ctx_upgrade
+      // mode "uninstall") writes no journal row (the project data is going away) and ends the process
+      // UPGRADE_STOP_DELAY_MS after the reply is written.
+      if (stopRequested()) {
+        setTimeout(stopSelf, UPGRADE_STOP_DELAY_MS);
+        return { content: [{ type: "text" as const, text: reply.text }], isError: reply.isError };
       }
       // D-M1-T10-1: degraded mode has no node:sqlite, and an unresolved project has no DB, so
       // neither writes a row (a handler that needs the project already surfaced NO_PROJECT).
@@ -223,21 +244,27 @@ export async function startServer(argv: string[], env: NodeJS.ProcessEnv): Promi
 
   // §5 step 9, then step 10 (stdio last). No other timer (§5 step 9c).
   let handle: StdioServerHandle | undefined;
-  installExitGuard({
-    // §5 step 9a, impl/02 §7.2: removeOwnerPid, then closeDb, each best-effort (never blocks shutdown).
-    onShutdown: () => {
-      for (const db of held) {
-        try {
-          removeOwnerPid(resolveConfigDir(process.env), db.projectKey, serverId);
-        } catch (err) {
-          console.error(err);
-        }
-        closeDb(db); // never throws (impl/02 §6.3)
+  // §5 step 9a, impl/02 §7.2: removeOwnerPid, then closeDb, each best-effort (never blocks shutdown).
+  // D-M5-R1-1: the server also removes its own stop marker, so owners/ holds no file of a dead server.
+  function shutdown(): void {
+    for (const db of held) {
+      try {
+        const configDir = resolveConfigDir(process.env);
+        removeOwnerPid(configDir, db.projectKey, serverId);
+        rmSync(stopMarker(configDir, db.projectKey), { force: true });
+      } catch (err) {
+        console.error(err);
       }
-      handle?.close().catch((err: unknown) => console.error(err));
-    },
-    isTTY: process.stdin.isTTY === true,
-  });
+      closeDb(db); // never throws (impl/02 §6.3)
+    }
+    handle?.close().catch((err: unknown) => console.error(err));
+  }
+  // D-M5-R1-1: the uninstall stop takes the same path as stdin EOF (impl/11 §4 steps 2-3).
+  function stopSelf(): void {
+    shutdown();
+    process.kill(process.pid, "SIGTERM");
+  }
+  installExitGuard({ onShutdown: shutdown, isTTY: process.stdin.isTTY === true });
   handle = serveStdio(createServer);
 
   // §5 step 11: the promise is the server's lifetime.
