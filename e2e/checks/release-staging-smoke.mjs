@@ -1,78 +1,57 @@
-#!/usr/bin/env node
-// e2e/checks/release-staging-smoke.mjs — local check for live case release-staging-smoke
-// (TECH-SPEC §12 M6 gate, impl/13 §11.1-11.2, DEVIATIONS D-M6-arch-5). Builds release-out, stages it
-// with scripts/release/publish.mjs --stage into a local bare repo under /private/tmp/cm-v2-impl-verify,
-// then runs scripts/release/smoke.mjs against file://<bare> ref release-staging for each agent.
-// PASS and SKIPPED (gemini CLI absent) both count; nothing leaves the machine.
-// Does not import src/. Prints one JSON line, never throws.
+// e2e check: release-staging smoke install (TECH-SPEC §12 M6 gate, DEVIATIONS D-M6-arch-5, D-M6-P3-4).
+// Builds the release tree, stages it as branch release-staging in a local bare repo under --root, then runs
+// scripts/release/smoke.mjs for claude-code, codex and gemini against file://<bare>. Prints {"ok":bool,"rows":[...]}.
+// ok = claude-code PASS, codex PASS, gemini PASS or SKIPPED. Spawns scripts only; imports nothing from src/.
 import { spawnSync } from "node:child_process";
-import { closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readSync, realpathSync, rmSync } from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const VERIFY_ROOT = "/private/tmp/cm-v2-impl-verify";
-const AGENTS = ["claude-code", "codex", "gemini"];
-const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
-const GIT_ID = ["-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "init.defaultBranch=main"];
-const ENV = { ...process.env, GIT_AUTHOR_NAME: "e2e", GIT_AUTHOR_EMAIL: "e2e@example.invalid", GIT_COMMITTER_NAME: "e2e", GIT_COMMITTER_EMAIL: "e2e@example.invalid" };
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+const i = process.argv.indexOf("--root");
+const base = i > 0 ? process.argv[i + 1] : fs.realpathSync.native(process.env.TMPDIR ?? "/tmp");
+fs.mkdirSync(base, { recursive: true });
+const work = fs.mkdtempSync(path.join(base, "release-staging-smoke-"));
+const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: "smoke", GIT_AUTHOR_EMAIL: "smoke@localhost", GIT_COMMITTER_NAME: "smoke", GIT_COMMITTER_EMAIL: "smoke@localhost" };
+const sh = (cmd, args, opt = {}) => spawnSync(cmd, args, { encoding: "utf8", env: GIT_ENV, ...opt });
 
-// The real Claude Code binary's folder (skips the claude-worktree / vibetree shims), same rule as
-// e2e/live/run.mjs: Mach-O or ELF magic. smoke.mjs runs "claude" from PATH, so that folder goes first.
+// real Claude Code binary first on PATH (skips worktree shims): Mach-O or ELF magic, as e2e/live/run.mjs does
 function realClaudeDir() {
-  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+  for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
     const c = path.join(dir, "claude");
-    if (!existsSync(c)) continue;
-    const r = realpathSync(c);
-    const b = Buffer.alloc(4); const fd = openSync(r, "r"); readSync(fd, b, 0, 4, 0); closeSync(fd);
-    if (["cffaedfe", "cefaedfe", "7f454c46"].includes(b.toString("hex"))) return path.dirname(r);
+    if (!fs.existsSync(c)) continue;
+    const b = Buffer.alloc(4); const fd = fs.openSync(fs.realpathSync(c), "r"); fs.readSync(fd, b, 0, 4, 0); fs.closeSync(fd);
+    if (["cffaedfe", "cefaedfe", "7f454c46"].includes(b.toString("hex"))) return path.dirname(fs.realpathSync(c));
   }
   return null;
 }
-const CLAUDE_DIR = realClaudeDir();
-if (CLAUDE_DIR) ENV.PATH = CLAUDE_DIR + path.delimiter + ENV.PATH;
 
-function step(cwd, cmd, args) {
-  const r = spawnSync(cmd, args, { cwd, env: ENV, encoding: "utf8", timeout: 600000 });
-  return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err: (r.stderr || String(r.error ?? "")).trim() };
-}
-
-function main() {
-  for (const f of ["scripts/release/publish.mjs", "scripts/release/smoke.mjs", "build/build.mjs", "build/hash.mjs"]) {
-    if (!existsSync(path.join(REPO_ROOT, f))) return { ok: false, reason: `missing ${f}` };
+const rows = [];
+let ok = false;
+try {
+  const out = path.join(work, "release-out");
+  const b = sh(process.execPath, [path.join(ROOT, "build", "build.mjs"), "--out", out], { cwd: ROOT });
+  if (b.status !== 0) throw new Error(`build.mjs exit ${b.status}: ${(b.stderr ?? "").split("\n")[0]}`);
+  const bare = path.join(work, "remote.git");
+  for (const args of [["init", "-q", "--bare", bare], ["-C", out, "init", "-q", "-b", "release-staging"], ["-C", out, "add", "-A"],
+    ["-C", out, "commit", "-q", "-m", "release v0.0.0-smoke"], ["-C", out, "push", "-q", bare, "release-staging"]]) {
+    const r = sh("git", args);
+    if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr.split("\n")[0]}`);
   }
-  mkdirSync(VERIFY_ROOT, { recursive: true });
-  const root = mkdtempSync(path.join(VERIFY_ROOT, "staging-smoke-"));
-  try {
-    const bare = path.join(root, "remote.git");
-    const work = path.join(root, "work");
-    let s = step(root, "git", [...GIT_ID, "init", "-q", "--bare", bare]);
-    if (!s.ok) return { ok: false, reason: `git init --bare: ${s.err}` };
-    s = step(root, "git", [...GIT_ID, "init", "-q", work]);
-    if (!s.ok) return { ok: false, reason: `git init: ${s.err}` };
-    const out = path.join(root, "release-out");
-    s = step(REPO_ROOT, process.execPath, ["build/build.mjs", "--out", out, "--sha", SOURCE_COMMIT]);
-    if (!s.ok) return { ok: false, reason: `build/build.mjs: ${s.err.split("\n")[0]}` };
-    // release.yml build job order: build.mjs, then hash.mjs (impl/13 §9); idempotent if build.mjs already wrote it.
-    s = step(REPO_ROOT, process.execPath, ["build/hash.mjs", "--out", out]);
-    if (!s.ok) return { ok: false, reason: `build/hash.mjs: ${s.err.split("\n")[0]}` };
-    cpSync(out, path.join(work, "release-out"), { recursive: true });
-    s = step(work, process.execPath, [path.join(REPO_ROOT, "scripts/release/publish.mjs"), "--stage", "--version", "2.0.0", "--source-commit", SOURCE_COMMIT, "--remote", bare]);
-    if (!s.ok) return { ok: false, reason: `publish.mjs --stage: ${s.err}` };
-    const url = pathToFileURL(bare).href;
-    const agents = {};
-    for (const agent of AGENTS) {
-      const r = step(REPO_ROOT, process.execPath, ["scripts/release/smoke.mjs", "--ref", "release-staging", "--agent", agent, "--repo", url]);
-      const line = (r.out || r.err).split("\n")[0];
-      agents[agent] = r.ok ? (line.includes("SKIPPED") ? "SKIPPED" : "PASS") : `FAIL: ${line}`;
-    }
-    const ok = Object.values(agents).every((v) => v === "PASS" || v === "SKIPPED");
-    return { ok, staged: true, agents };
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  const claudeDir = realClaudeDir();
+  const PATH = [claudeDir, process.env.PATH].filter(Boolean).join(path.delimiter);
+  for (const agent of ["claude-code", "codex", "gemini"]) {
+    const r = sh(process.execPath, [path.join(ROOT, "scripts", "release", "smoke.mjs"), "--ref", "release-staging", "--agent", agent,
+      "--repo", pathToFileURL(bare).href], { cwd: ROOT, env: { ...process.env, PATH } });
+    const line = (r.stdout + r.stderr).split("\n")[0];
+    const result = r.status === 0 ? (line.startsWith(`${agent}: SKIPPED`) ? "SKIPPED" : "PASS") : "FAIL";
+    rows.push({ agent, result, line });
   }
+  const by = Object.fromEntries(rows.map((r) => [r.agent, r.result]));
+  ok = by["claude-code"] === "PASS" && by.codex === "PASS" && by.gemini !== "FAIL";
+} catch (e) {
+  rows.push({ agent: "setup", result: "FAIL", line: String(e.message) });
+} finally {
+  fs.rmSync(work, { recursive: true, force: true });
 }
-
-let result;
-try { result = main(); } catch (e) { result = { ok: false, reason: String(e?.message ?? e) }; }
-console.log(JSON.stringify(result));
+process.stdout.write(JSON.stringify({ ok, rows }) + "\n");
