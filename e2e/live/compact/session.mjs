@@ -27,7 +27,7 @@ function userLine(text) {
  * @param {{ bin: string, turns: string[], nextRequest: string, budgetUsd: string, cwd: string,
  *   model?: string, effort?: string, args?: string[] }} o
  *   `args`: extra argv for the case (tools, MCP config); default `--strict-mcp-config --tools ""`.
- * @returns {Promise<{ toolCalls: {turn: number, name: string, input: unknown}[], finalText: string,
+ * @returns {Promise<{ toolCalls: {turn: number, id: string, name: string, input: unknown}[], toolResults: {turn: number, id: string, isError: boolean, bytes: number, text: string}[], finalText: string,
  *   costUsd: number, compacted: boolean, isError: boolean, exitCode: number|null, stderr: string }>}
  */
 export function runSession(o) {
@@ -37,7 +37,7 @@ export function runSession(o) {
     "--no-session-persistence", "--setting-sources", "project", ...args];
   const sends = [...o.turns, "/compact", o.nextRequest];
   const child = spawn(o.bin, argv, { cwd: o.cwd, env: childEnv(), stdio: ["pipe", "pipe", "pipe"] });
-  const out = { toolCalls: [], finalText: "", costUsd: 0, compacted: false, isError: false, exitCode: null, stderr: "" };
+  const out = { toolCalls: [], toolResults: [], finalText: "", costUsd: 0, compacted: false, isError: false, exitCode: null, stderr: "" };
   let turn = 0;
   let timer = null;
 
@@ -52,7 +52,15 @@ export function runSession(o) {
     if (ev.type === "system" && ev.subtype === "compact_boundary") out.compacted = true;
     if (ev.type === "assistant") {
       for (const c of ev.message?.content ?? []) {
-        if (c.type === "tool_use") out.toolCalls.push({ turn, name: c.name, input: c.input });
+        if (c.type === "tool_use") out.toolCalls.push({ turn, id: c.id, name: c.name, input: c.input });
+      }
+    }
+    if (ev.type === "user") {
+      // Bytes the model got back from each tool call: the returned side of the T-CMP measure.
+      for (const c of ev.message?.content ?? []) {
+        if (c.type !== "tool_result") continue;
+        const text = typeof c.content === "string" ? c.content : (c.content ?? []).map((x) => x.text ?? "").join("");
+        out.toolResults.push({ turn, id: c.tool_use_id, isError: c.is_error === true, bytes: Buffer.byteLength(text), text });
       }
     }
     if (ev.type === "result") {
