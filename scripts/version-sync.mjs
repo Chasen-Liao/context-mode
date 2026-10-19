@@ -15,7 +15,6 @@ import { fileURLToPath } from "node:url";
 export const TARGETS = [
   ".claude-plugin/plugin.json",
   ".claude-plugin/marketplace.json",
-  ".cursor-plugin/plugin.json",
   ".codex-plugin/plugin.json",
   // .codex-plugin/marketplace.json is intentionally absent — Codex CLI
   // reads marketplaces from .agents/plugins/marketplace.json (or
@@ -28,10 +27,6 @@ export const TARGETS = [
   // `interface`, and `plugins[]`), so it doesn't need version-syncing.
   // Per-plugin `version` lives in .codex-plugin/plugin.json which is
   // already in this list.
-  ".openclaw-plugin/openclaw.plugin.json",
-  ".openclaw-plugin/package.json",
-  "openclaw.plugin.json",
-  ".pi/extensions/context-mode/package.json",
   // Antigravity CLI (agy) plugin bundle manifest — agy installs it via
   // `agy plugin install configs/antigravity-cli`. Without this entry it would
   // freeze at its pinned version on the next bump (cf. the .cursor-plugin
