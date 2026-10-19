@@ -146,7 +146,7 @@ try {
   rmSync(root, { recursive: true, force: true });
 }
 const v = snapshot(true);
-const sessions = ARM_IDS.reduce((n, id) => n + byArm[id].length, 0);
+const sessions = ARMS_SEL.reduce((n, id) => n + byArm[id].length, 0);
 console.log(JSON.stringify({ id: v.id, ok: v.pass, sessions, costUsd: Number(cost.toFixed(4)), resultFile: OUT, checks: v.checks.map(({ name, pass }) => ({ name, pass })), info: v.info }));
 console.error(table(v));
 console.error(`result file: ${OUT}`);
