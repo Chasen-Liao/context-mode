@@ -6,7 +6,7 @@
 // PASS and SKIPPED (gemini CLI absent) both count; nothing leaves the machine.
 // Does not import src/. Prints one JSON line, never throws.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { closeSync, cpSync, existsSync, mkdirSync, mkdtempSync, openSync, readSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -17,13 +17,28 @@ const SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const GIT_ID = ["-c", "user.name=e2e", "-c", "user.email=e2e@example.invalid", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "init.defaultBranch=main"];
 const ENV = { ...process.env, GIT_AUTHOR_NAME: "e2e", GIT_AUTHOR_EMAIL: "e2e@example.invalid", GIT_COMMITTER_NAME: "e2e", GIT_COMMITTER_EMAIL: "e2e@example.invalid" };
 
+// The real Claude Code binary's folder (skips the claude-worktree / vibetree shims), same rule as
+// e2e/live/run.mjs: Mach-O or ELF magic. smoke.mjs runs "claude" from PATH, so that folder goes first.
+function realClaudeDir() {
+  for (const dir of (process.env.PATH || "").split(path.delimiter)) {
+    const c = path.join(dir, "claude");
+    if (!existsSync(c)) continue;
+    const r = realpathSync(c);
+    const b = Buffer.alloc(4); const fd = openSync(r, "r"); readSync(fd, b, 0, 4, 0); closeSync(fd);
+    if (["cffaedfe", "cefaedfe", "7f454c46"].includes(b.toString("hex"))) return path.dirname(r);
+  }
+  return null;
+}
+const CLAUDE_DIR = realClaudeDir();
+if (CLAUDE_DIR) ENV.PATH = CLAUDE_DIR + path.delimiter + ENV.PATH;
+
 function step(cwd, cmd, args) {
   const r = spawnSync(cmd, args, { cwd, env: ENV, encoding: "utf8", timeout: 600000 });
   return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err: (r.stderr || String(r.error ?? "")).trim() };
 }
 
 function main() {
-  for (const f of ["scripts/release/publish.mjs", "scripts/release/smoke.mjs", "build/build.mjs"]) {
+  for (const f of ["scripts/release/publish.mjs", "scripts/release/smoke.mjs", "build/build.mjs", "build/hash.mjs"]) {
     if (!existsSync(path.join(REPO_ROOT, f))) return { ok: false, reason: `missing ${f}` };
   }
   mkdirSync(VERIFY_ROOT, { recursive: true });
@@ -38,6 +53,9 @@ function main() {
     const out = path.join(root, "release-out");
     s = step(REPO_ROOT, process.execPath, ["build/build.mjs", "--out", out, "--sha", SOURCE_COMMIT]);
     if (!s.ok) return { ok: false, reason: `build/build.mjs: ${s.err.split("\n")[0]}` };
+    // release.yml build job order: build.mjs, then hash.mjs (impl/13 §9); idempotent if build.mjs already wrote it.
+    s = step(REPO_ROOT, process.execPath, ["build/hash.mjs", "--out", out]);
+    if (!s.ok) return { ok: false, reason: `build/hash.mjs: ${s.err.split("\n")[0]}` };
     cpSync(out, path.join(work, "release-out"), { recursive: true });
     s = step(work, process.execPath, [path.join(REPO_ROOT, "scripts/release/publish.mjs"), "--stage", "--version", "2.0.0", "--source-commit", SOURCE_COMMIT, "--remote", bare]);
     if (!s.ok) return { ok: false, reason: `publish.mjs --stage: ${s.err}` };
