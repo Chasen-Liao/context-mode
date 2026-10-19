@@ -8,10 +8,11 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const HASH = path.join(REPO, "build", "hash.mjs");
+const HASH_URL = pathToFileURL(HASH).href;
 
 const sha = (s) => createHash("sha256").update(s).digest("hex");
 
@@ -37,7 +38,7 @@ const EXPECTED = [
 ].map(([p, c]) => `${sha(c)}  ${p}\n`).join("");
 
 test("[M6] build/hash: writeHashes writes sorted POSIX `<hex>  <path>` lines, no trailing blank line", async (t) => {
-  const { writeHashes } = await import(HASH);
+  const { writeHashes } = await import(HASH_URL);
   const out = tree(t);
   assert.equal(writeHashes(out), undefined);
   const sums = readFileSync(path.join(out, "SHA256SUMS"), "utf8");
@@ -46,7 +47,7 @@ test("[M6] build/hash: writeHashes writes sorted POSIX `<hex>  <path>` lines, no
 });
 
 test("[M6] build/hash: SHA256SUMS never lists itself; a rerun is byte-identical", async (t) => {
-  const { writeHashes } = await import(HASH);
+  const { writeHashes } = await import(HASH_URL);
   const out = tree(t);
   writeFileSync(path.join(out, "SHA256SUMS"), "stale\n");
   writeHashes(out);
