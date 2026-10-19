@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -67,8 +67,12 @@ function fixture(t, { stubs = [], serverName = "context-mode" } = {}) {
   }
   const tmp = path.join(root, "tmp");
   mkdirSync(tmp);
-  const gitBin = path.dirname(spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout.trim());
-  const PATH = [bin, path.dirname(spawnSync("which", ["git"], { encoding: "utf8" }).stdout.trim()), gitBin].join(path.delimiter);
+  // The dir on this process's PATH that holds git (git.exe on Windows). No `which`: Windows has none,
+  // and Git for Windows' libexec/git-core binary needs DLLs from another dir (M7-W5).
+  const gitDir = (process.env.PATH ?? "").split(path.delimiter)
+    .find((d) => d !== "" && ["git", "git.exe"].some((n) => existsSync(path.join(d, n))));
+  assert.ok(gitDir, "git on PATH");
+  const PATH = [bin, gitDir].join(path.delimiter);
   return { root, repo: pathToFileURL(bare).href, tmp, PATH };
 }
 
